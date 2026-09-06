@@ -198,7 +198,25 @@ class TestPlusAucunProxySurUnCANNRetenu(unittest.TestCase):
     prouver que le chemin fidele se DECLENCHE : le nom passe par l'agregat
     d'A6 (`DL_CANN`), et un decalage de nommage suffirait a le rater -- c'est
     deja arrive (audit V4 reco 7, << le chemin ne se declenche JAMAIS en
-    pratique >>)."""
+    pratique >>).
+
+    ⚠️⚠️ CE CONTROLE SAUTE DEPUIS LE 06/09/2026, ET LA RAISON COMPTE PLUS QUE
+    LE SAUT. Le correctif d'`A6-2` a change le modele retenu sur cette
+    fixture : `DL_CANN` -> `GLM_POISSON`. *Et le CANN y gagnait PARCE QU'IL
+    ETAIT LE MINIMUM d'`overfit_ratio` du catalogue* -- ce que l'ancienne note
+    de stabilite, decroissante en `r`, recompensait par un 1,0 parfait. **La
+    precondition de ce test etait donc produite par le defaut lui-meme.**
+
+    ⚠️ ON NE TUNE PAS LA FIXTURE POUR LA RESTAURER : ce serait remettre en
+    place une consequence du bug pour garder un test vivant. Le saut est
+    explicite et se lit dans la sortie ; il n'est pas silencieux.
+
+    ⛔ CE QUE CELA LAISSE OUVERT, ET QUI APPARTIENT AU LOT SUIVANT : plus
+    aucune fixture du depot ne retient un CANN. Le constat `A4-4` -- le CANN
+    du walk-forward regle son arret anticipe sur le pli d'evaluation -- ne
+    peut donc pas etre exerce de bout en bout. *Le lot 5 doit CONSTRUIRE un
+    portefeuille ou un CANN gagne au merite, pas par un defaut de notation.*
+    """
 
     def test_RC6_le_modele_recalibre_est_un_CANN_et_la_fidelite_est_VRAIE(self):
         from direction_non_vie.tarification.test_pipeline_agents import (

@@ -360,40 +360,85 @@ class TestScoreSurAssietteReduite(unittest.TestCase):
                       "le modele a disparu du classement au lieu d'y figurer "
                       'sans note de stabilite')
 
-    def test_AD5c_un_litteral_BORNE_la_normalisation(self):
-        """La contre-epreuve : c'est bien le LITTERAL qui deplacait les
-        autres, pas l'absence."""
+    def test_AD5c_un_litteral_ne_DEPLACE_PLUS_les_autres(self):
+        """⚠️⚠️ CE TEST A CHANGE DE SENS LE 06/09/2026, ET C'EST LA PREUVE QUE
+        `A6-2` EST FERME. Il prouvait l'INVERSE : que poser un litteral
+        `overfit_ratio = 1.0` DEPLACAIT le score de stabilite des AUTRES
+        modeles, parce que la note valait `1 - (r - min)/(max - min)` et que
+        le litteral devenait le `min` du catalogue.
+
+        La note est desormais une distance a 1 sur une echelle ABSOLUE : la
+        stabilite d'un modele ne depend plus d'aucun autre. *Le danger que ce
+        controle documentait n'existe plus ; il fige donc son absence.*
+
+        ⚠️ ET LA RAISON POUR LAQUELLE `ratio_sur_apprentissage` REFUSE UN
+        LITTERAL N'A PAS DISPARU -- elle a EMPIRE. Sous une distance a 1, un
+        ratio fabrique a 1,0 est le score PARFAIT, par construction et sans
+        condition. C'est le constat `A4-3`, corrige dans le meme lot.
+        """
         avec_litteral = {m['modele']: m['score_stabilite']
                          for m in _scorer(_catalogue(m0={'overfit_ratio': 1.0}))}
         non_mesure = {m['modele']: m['score_stabilite']
                       for m in _scorer(_catalogue(m0={'overfit_ratio': None}))}
-        self.assertNotEqual(avec_litteral['ML_GBM'], non_mesure['ML_GBM'],
-                            'le plant ne demontre rien : le littéral ne change '
-                            'pas le score des autres')
+        for autre in ('ML_GBM', 'ML_XGBOOST'):
+            with self.subTest(modele=autre):
+                self.assertEqual(
+                    avec_litteral[autre], non_mesure[autre],
+                    f'le score de {autre} depend encore de ce qu un AUTRE '
+                    f'modele porte comme ratio')
+        # et le litteral vaut bien, pour CELUI qui le porte, le score parfait
+        self.assertAlmostEqual(avec_litteral['GLM_POISSON'], 1.0, places=9,
+                               msg='un ratio fabrique a 1,0 doit valoir le '
+                                   'score PARFAIT : c est pourquoi A4 rend None')
 
-    def test_AD5b_un_ratio_absurde_aurait_ecrase_la_normalisation(self):
-        """La contre-epreuve, avec le nombre REELLEMENT mesure : -9 387,61.
+    def test_AD5b_un_ratio_absurde_n_ECRASE_PLUS_la_normalisation(self):
+        """⚠️⚠️ MEME RETOURNEMENT, avec le nombre REELLEMENT mesure : -9 387,61.
 
-        Ce test ne fait pas passer le correctif, il MONTRE ce qu'il evite --
-        si un tel ratio revenait dans le catalogue, la stabilite de tous les
-        autres modeles s'effondrerait, et celle du fautif serait parfaite."""
-        pollue = _scorer(_catalogue(m0={'overfit_ratio': -9387.61}))
-        par_nom = {m['modele']: m for m in pollue}
-        self.assertAlmostEqual(par_nom['GLM_POISSON']['score_stabilite'], 1.0,
-                               places=3)
-        self.assertLess(par_nom['ML_GBM']['score_stabilite'], 0.01)
-        # ... et c'est bien pourquoi `ratio_sur_apprentissage` REFUSE de le
-        # produire : aucun agent ne peut plus faire entrer ce nombre.
+        Ce controle montrait ce que la normalisation relative faisait subir au
+        catalogue : le fautif recevait la note PARFAITE et tous les autres
+        s'effondraient sous 0,01. Mesure du 06/09 sur dix LoB : l'ecart de
+        note entre `r = 1` et `r = 2` valait 0,08 sur un catalogue allant a
+        13,06 contre 0,61 sur un catalogue allant a 2,60 -- sept fois moins,
+        pour la meme stabilite.
+
+        Sur une echelle absolue, un ratio absurde ne touche plus personne : il
+        se note lui-meme a zero, et c'est tout.
+        """
+        sain = {m['modele']: m['score_stabilite'] for m in _scorer(_catalogue())}
+        pollue = {m['modele']: m['score_stabilite']
+                  for m in _scorer(_catalogue(m0={'overfit_ratio': -9387.61}))}
+        for autre in ('ML_GBM', 'ML_XGBOOST'):
+            with self.subTest(modele=autre):
+                self.assertEqual(
+                    sain[autre], pollue[autre],
+                    f'la note de {autre} s effondre encore a cause du ratio '
+                    f'absurde d un AUTRE modele')
+        self.assertAlmostEqual(pollue['GLM_POISSON'], 0.0, places=9,
+                               msg='un ratio absurde doit se noter lui-meme a '
+                                   'zero')
+        # ... et `ratio_sur_apprentissage` REFUSE toujours de le produire :
+        # un non-sens se declare, il ne se borne pas.
         self.assertIsNone(ratio_sur_apprentissage(0.0094, -0.0201))
 
-    def test_AD4b_tout_mesure_donne_le_MEME_score_qu_avant_le_lot(self):
+    def test_AD4b_le_facteur_de_reassiette_vaut_1_quand_rien_ne_manque(self):
         """⚠️ La renormalisation ne doit rien changer quand rien ne manque :
         le facteur vaut exactement 1,0. Sans ce test, le correctif pourrait
-        deplacer un prix en croyant ne rien faire."""
+        deplacer un prix en croyant ne rien faire.
+
+        ⚠️⚠️ L'ATTENDU NE RECOPIE PLUS AUCUNE FORMULE. Il codait `0.30 * 1.0`
+        pour la stabilite -- vrai seulement tant que ce modele etait le
+        MINIMUM du catalogue, donc dependant de la formule de `A6-2`. Il se
+        derive desormais des notes PUBLIEES par l'agent : le controle porte
+        sur le FACTEUR, et sur lui seul.
+        """
         scores = _scorer(_catalogue())
-        attendu = (0.40 * (0.19 / 0.19) + 0.30 * 1.0 + 0.20 * 1.0
-                   + 0.10 * (0.71 / 0.71))
-        self.assertAlmostEqual(scores[0]['score_global'], round(attendu, 4),
+        modele = scores[0]
+        attendu = (0.40 * modele['score_gini']
+                   + 0.30 * modele['score_stabilite']
+                   + 0.20 * modele['score_interpretabilite']
+                   + 0.10 * modele['score_rmse'])
+        self.assertEqual(modele['criteres_non_mesures'], ())
+        self.assertAlmostEqual(modele['score_global'], round(attendu, 4),
                                places=4)
 
 

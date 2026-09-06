@@ -155,6 +155,38 @@ from direction_non_vie.tarification.contrat_sortie import (
 #: désormais là où la décision se prend, avec les autres bandes A/E.* Il est
 #: réexporté ici pour tous ses lecteurs existants.
 
+#: ⚠️⚠️ LE RATIO DE SUR-APPRENTISSAGE QUI ANNULE LA NOTE DE STABILITÉ —
+#: constat `A6-2`. Le critère notait `1 - (r - min)/(max - min)`, DÉCROISSANT
+#: en `r` : un `r < 1` — c'est-à-dire un Gini de TEST supérieur à celui
+#: d'ENTRAÎNEMENT, une anomalie — recevait la note MAXIMALE. Mesuré sur dix
+#: LoB × deux tailles : **7 runs sur 20 retenaient un modèle à `r < 1` noté
+#: 1,0**, et le critère pèse 30 % du score qui désigne le modèle de production.
+#:
+#: ⚠️ La fonction contredisait sa propre justification, qui dit mot pour mot
+#: qu'un modèle à `overfit_ratio = 1,5` est moins bon qu'un modèle à `1,02` :
+#: c'est une PROXIMITÉ À 1 qui était décrite, et une décroissance qui était
+#: codée.
+#:
+#: ⚠️⚠️ ET LA NORMALISATION RELATIVE ÉTAIT UN SECOND DÉFAUT, MESURÉ. Elle
+#: faisait dépendre la note d'un modèle de la présence d'un AUTRE modèle
+#: aberrant : l'écart de note entre `r = 1,0` et `r = 2,0` valait **0,08** sur
+#: un catalogue allant jusqu'à 13,06, et **0,61** sur un catalogue allant à
+#: 2,60 — sept fois plus, pour la même stabilité. Toute la discrimination
+#: venait alors de deux MARCHES (×0,7 au-delà de 1,15 et ×0,5 au-delà de
+#: 1,30) : deux modèles à `r = 1,1499` et `r = 1,1501` étaient séparés de
+#: **30 %** de leur note, quand `r = 1,5` et `r = 3,0` ne l'étaient que de
+#: 11 %. *Le critère était discontinu là où il devait être lisse, et lisse là
+#: où il devait trancher.*
+#:
+#: La note vaut donc `max(0, 1 - |ln r| / ln 3)` : symétrique en RATIO (un
+#: ratio se retourne en inverse, jamais en soustraction), ABSOLUE (plus aucune
+#: dépendance au catalogue), CONTINUE (plus aucune marche), et `r = 1` rend
+#: toujours 1,0 — le contrat publié « ≈1,0000 = meilleur du profil » tient.
+#: ⚠️ **Le 3 est un ARBITRAGE, pas une démonstration** : il dit qu'un modèle
+#: dont le Gini d'entraînement vaut le TRIPLE de celui de test — ou l'inverse
+#: — perd toute sa note de stabilité. Arbitré par Selasse le 06/09/2026.
+STABILITE_RATIO_NUL = math.log(3)
+
 SPLIT_ALEATOIRE = 'aléatoire_80_20'
 SPLIT_WALK_FORWARD = 'walk_forward_temporel_avec_recalibration'
 
@@ -1401,6 +1433,14 @@ class AgentA6Comparaison:
         car un modèle instable produit des primes erratiques
         d'une année sur l'autre.
 
+        ⚠️⚠️ CETTE JUSTIFICATION ÉTAIT JUSTE, ET LE CODE DISAIT L'INVERSE —
+        constat `A6-2`, corrigé le 06/09/2026. Elle décrit une PROXIMITÉ À 1
+        (1,02 est meilleur que 1,5) ; la note codée était `1 - (r - min) /
+        (max - min)`, DÉCROISSANTE en `r`, qui aurait préféré un ratio de 0,10
+        à ce 1,02. Elle vaut désormais `max(0, 1 - |ln r| / ln 3)` — voir
+        `STABILITE_RATIO_NUL`. *Le texte portait l'intention juste depuis le
+        début ; c'est la formule qui ne la tenait pas.*
+
         ⚠️⚠️ UNE STABILITÉ NON MESURÉE NE SE REMPLACE PAS PAR UNE VALEUR — LE
         CRITÈRE SORT DU SCORE DE CE MODÈLE, et les trois autres poids sont
         RENORMALISÉS pour lui. Toute valeur de repli serait un verdict : `1.0`
@@ -1424,13 +1464,9 @@ class AgentA6Comparaison:
                     if m.get('gini_test') is not None]
         rmses    = [m['rmse_test']     for m in catalogue
                     if m.get('rmse_test') is not None]
-        overfits = [m['overfit_ratio'] for m in catalogue
-                    if m.get('overfit_ratio') is not None]
 
         max_gini = max(ginis) if ginis and max(ginis) > 0 else 1
         min_rmse = min(rmses) if rmses and min(rmses) > 0 else None
-        min_of   = min(overfits) if overfits else None
-        max_of   = max(overfits) if overfits else None
 
         for modele in catalogue:
             # Score Gini normalisé [0,1].
@@ -1446,19 +1482,13 @@ class AgentA6Comparaison:
             #   classement ne sont pas la même décision.*
             s_gini = modele['gini_test'] / max_gini
 
-            # Score stabilité [0,1] — inversé (moins d'overfit = mieux)
+            # Score stabilité [0,1] — DISTANCE À 1, sur une échelle ABSOLUE.
             _of = modele.get('overfit_ratio')
-            if _of is None or min_of is None:
+            if _of is None:
                 s_stab = None          # NON MESURÉE — le critère sortira du score
-            elif max_of > min_of:
-                s_stab = 1 - (_of - min_of) / (max_of - min_of)
             else:
-                s_stab = 1.0
-            # Pénalité si overfit_ratio > 1.15
-            if s_stab is not None and _of > 1.15:
-                s_stab *= 0.7
-            if s_stab is not None and _of > 1.30:
-                s_stab *= 0.5
+                s_stab = max(0.0, 1 - abs(math.log(max(_of, 1e-9)))
+                             / STABILITE_RATIO_NUL)
 
             # Score interprétabilité (déjà normalisé)
             s_inter = modele['interpretabilite']
@@ -3661,6 +3691,25 @@ class AgentA6Comparaison:
         else:
             in_top3, score_retenu, rang = False, 0, 99
 
+        # ⚠️⚠️ CE SEUIL N'A PAS ÉTÉ RECALIBRÉ APRÈS `A6-2`, ET C'EST UNE
+        # DÉCISION — arbitrée par Selasse le 06/09/2026, pas un oubli.
+        #
+        # La correction d'`A6-2` a fait BAISSER structurellement tous les
+        # scores globaux : sous l'ancienne note de stabilité, le meilleur
+        # modèle du catalogue valait 1,0 PAR CONSTRUCTION — il était le
+        # minimum — alors qu'il ne l'obtient désormais que s'il est réellement
+        # stable. Mesuré sur le dossier de gel : le score du modèle retenu
+        # passe de 0,7389 à 0,6602 et ce contrôle bascule VERT → AMBRE, sans
+        # que le modèle retenu change (`GLM_POISSON`, `r = 2,726`).
+        #
+        # ⚠️ CE BASCULEMENT EST ACCEPTÉ TEL QUEL. Le VERT d'avant était
+        # IMMÉRITÉ : il était obtenu parce que le critère notait RELATIVEMENT
+        # — le modèle était le moins mauvais d'un catalogue entièrement
+        # sur-appris, pas bon. Un Gini d'entraînement presque TRIPLE de celui
+        # de test mérite « à surveiller ».
+        #   *Recalibrer ce seuil dans la foulée effacerait exactement
+        #   l'information que la correction vient de faire apparaître.*
+        # S'il doit être revu, ce sera une décision séparée et consciente.
         if in_top3 and score_retenu >= 0.70:
             c3_statut = "VERT"
             c3_msg    = f"{nom_prod} rang #{rang} · Score = {score_retenu:.4f} ≥ 0.70 ✅"

@@ -2985,14 +2985,23 @@ def gini_texte(valeur, decimales: int = 4) -> str:
 def ratio_sur_apprentissage(gini_train, gini_test):
     """Le sur-apprentissage MESURÉ : Gini(entraînement) / Gini(test), ou None.
 
-    SOURCE UNIQUE DE LA FORMULE, et c'est tout l'enjeu. A6 NORMALISE ce ratio
-    entre les modèles (``s_stab = 1 - (r - min) / (max - min)``) : deux agents
-    qui le calculeraient différemment feraient comparer des grandeurs qui ne
-    sont pas la même. Le GLM, lui, publiait ``1.0`` SANS l'avoir mesuré, ce qui
-    lui donnait mécaniquement le minimum du catalogue, donc la meilleure note
-    de stabilité — 30 % du score de sélection, offerts (mesuré le 03/09/2026 :
-    le vrai ratio vaut 1,08 pour le Poisson, 1,28 pour le Tweedie et 1,75 pour
-    le Gamma).
+    SOURCE UNIQUE DE LA FORMULE, et c'est tout l'enjeu. A6 en tire la note de
+    stabilité, qui pèse 30 % du score désignant le modèle de production : deux
+    agents qui calculeraient ce ratio différemment feraient comparer des
+    grandeurs qui ne sont pas la même. Le GLM, lui, publiait ``1.0`` SANS
+    l'avoir mesuré (mesuré le 03/09/2026 : le vrai ratio vaut 1,08 pour le
+    Poisson, 1,28 pour le Tweedie et 1,75 pour le Gamma).
+
+    ⚠️⚠️ CE QUE A6 EN FAIT A CHANGÉ LE 06/09/2026 — constat ``A6-2``. La note
+    valait ``1 - (r - min) / (max - min)``, DÉCROISSANTE en ``r`` : un ratio
+    INFÉRIEUR à 1 — le Gini de test dépassant celui d'entraînement, une
+    anomalie — recevait la note MAXIMALE. Elle vaut désormais
+    ``max(0, 1 - |ln r| / ln 3)`` : une distance à 1, symétrique en ratio,
+    sur une échelle ABSOLUE. *Deux conséquences pour qui lit cette fonction* :
+    un ratio proche de 1 est le meilleur, et non le plus petit ; et un ratio
+    fabriqué à 1,0 y recevrait le score PARFAIT — c'est pourquoi cette
+    fonction rend ``None`` plutôt qu'un littéral, et pourquoi A4 en fait
+    autant sur un Gini d'entraînement négatif ou nul (constat ``A4-3``).
 
     Rend ``None`` — jamais 1.0, jamais 0 — dès qu'un des deux Ginis n'existe
     pas ou n'est pas fini : une stabilité non mesurée se déclare, elle ne se

@@ -144,6 +144,26 @@ logger = logging.getLogger('actuaria.a5')
 # désormais universel et explicite. Plan absent → erreur propre (voir run()),
 # jamais de repli.
 
+# ── LES DEUX BORNES DE L'HYPOTHÈSE H2 ─────────────────────────────────────────
+#: ⚠️⚠️ H2 MESURAIT L'INVERSE DU RESTE DU DÉPÔT — constat `A5-1`. Ce fichier
+#: calculait DEUX FOIS la même grandeur, dans les deux sens : la ligne 1581
+#: publie `overfit_ratio = ratio_sur_apprentissage(train, test)` au classement,
+#: lu par A6 ; H2 calculait `gini_test / max(gini_train, 0.001)`. Sur un modèle
+#: à `train = 0,20` et `test = 0,18`, H2 affichait **0,900 « pas de
+#: surapprentissage »** et le classement publiait **1,111** — deux nombres
+#: réciproques, même libellé, même agent, même page de rapport.
+#:
+#: ⚠️⚠️ ET LE RETOURNEMENT SEUL NE CORRIGEAIT RIEN. Mesuré sur 40 couples DL
+#: réels : inverser le seuil (0,88 → 1/0,88) laisse **40/40 statuts
+#: identiques**. Le vrai défaut est que le seuil est UNILATÉRAL — un Gini de
+#: test TRIPLE de celui d'entraînement (`ratio_of = 3,0`) sortait **VERT**,
+#: avant comme après. La bande est donc à DEUX CÔTÉS, et elle réutilise les
+#: bornes existantes comme limites basses : `0,88 ≤ r ≤ 1/0,88` est exactement
+#: `|ln r| ≤ ln(1/0,88)`, une symétrie en RATIO sans aucun logarithme à écrire.
+#: Mesure : 1 statut sur 40 se déplace (VERT → AMBRE).
+SEUIL_H2_VERT = 0.88
+SEUIL_H2_AMBRE = 0.75
+
 # ── COLONNES À EXCLURE ────────────────────────────────────────────────────────
 COLS_A_EXCLURE = [
     'id_contrat', 'id_assure', 'id_salarie', 'id_beneficiaire', 'id_adherent',
@@ -2379,30 +2399,67 @@ class AgentA5DeepLearning:
             _tete_h2 = 'cann' if gini_cann is not None else 'tabnet'
         gini_test_h2 = metriques.get(_tete_h2, {}).get('gini_test')
         gini_train  = metriques.get(_tete_h2, {}).get('gini_train')
-        ratio_of    = (gini_test_h2 / max(gini_train, 0.001)
-                       if gini_test_h2 is not None and gini_train is not None
-                       else None)
+        # ⚠️⚠️ LA MÊME GRANDEUR QUE LE RESTE DU DÉPÔT — voir `SEUIL_H2_VERT`.
+        # `ratio_sur_apprentissage` est la SOURCE UNIQUE de ce ratio, et c'est
+        # elle que la ligne 1581 publie au classement : H2 lit désormais le
+        # même nombre, dans le même sens.
+        # ⚠️ UN GINI DE TEST <= 0 RESTE UN ROUGE — arbitré par Selasse le
+        # 06/09/2026. Le socle refuse de diviser par lui et rendrait `None` ;
+        # ici ce serait une régression : *un Gini de test négatif ou nul dit
+        # que le modèle ne discrimine pas sur son jeu d'évaluation, c'est un
+        # signal actuariel fort, et il doit rester une ALERTE plutôt que de
+        # disparaître dans une case « non mesurable ».*
+        ratio_of = (ratio_sur_apprentissage(gini_train, gini_test_h2)
+                    if gini_train is not None and gini_test_h2 is not None
+                    and gini_test_h2 > 0 else None)
 
-        if ratio_of is None:
+        if gini_train is None or gini_test_h2 is None:
             h2_statut = "AMBRE"
-            h2_msg = ("Ratio Gini test/train NON MESURABLE : au moins un des deux "
+            h2_msg = ("Ratio Gini train/test NON MESURABLE : au moins un des deux "
                       "Ginis n'existe pas (aucun sinistre observé sur le jeu "
                       "concerné) → hypothèse H2 non évaluable ⚠️")
             h2_conseil = ("Constituer un jeu de test qui contient des sinistres "
                           "(découpage temporel avec exposition suffisante) avant de "
                           "conclure sur le sur-apprentissage")
-        elif ratio_of >= 0.88:
-            h2_statut = "VERT"
-            h2_msg    = f"Gini test/train = {ratio_of:.3f} ≥ 0.88 → Pas de surapprentissage ✅"
-            h2_conseil= "Le modèle DL généralise correctement sur données non vues"
-        elif ratio_of >= 0.75:
+        elif gini_test_h2 <= 0:
+            h2_statut = "ROUGE"
+            h2_msg    = (f"Gini de TEST = {gini_texte(gini_test_h2)} ≤ 0 → le "
+                         f"modèle ne discrimine pas sur son jeu d'évaluation ❌")
+            h2_conseil= ("Le rapport entraînement/test n'a pas de sens ici : "
+                         "reprendre le découpage ou l'architecture avant de "
+                         "conclure sur le sur-apprentissage")
+        elif ratio_of is None:
             h2_statut = "AMBRE"
-            h2_msg    = f"Gini test/train = {ratio_of:.3f} ∈ [0.75, 0.88] → Surapprentissage léger ⚠️"
+            h2_msg = ("Ratio Gini train/test NON MESURABLE (valeur non finie) "
+                      "→ hypothèse H2 non évaluable ⚠️")
+            h2_conseil = ("Vérifier les Ginis publiés par la calibration avant "
+                          "de conclure sur le sur-apprentissage")
+        elif SEUIL_H2_VERT <= ratio_of <= 1 / SEUIL_H2_VERT:
+            h2_statut = "VERT"
+            h2_msg    = (f"Gini train/test = {ratio_of:.3f} ∈ "
+                         f"[{SEUIL_H2_VERT:.2f} ; {1 / SEUIL_H2_VERT:.3f}] → "
+                         f"Pas de surapprentissage ✅")
+            h2_conseil= "Le modèle DL généralise correctement sur données non vues"
+        elif SEUIL_H2_AMBRE <= ratio_of <= 1 / SEUIL_H2_AMBRE:
+            h2_statut = "AMBRE"
+            h2_msg    = (f"Gini train/test = {ratio_of:.3f} hors de "
+                         f"[{SEUIL_H2_VERT:.2f} ; {1 / SEUIL_H2_VERT:.3f}] → "
+                         f"écart entraînement/test léger ⚠️")
             h2_conseil= "Augmenter le dropout · Réduire la taille du réseau · Ajouter régularisation L2"
         else:
             h2_statut = "ROUGE"
-            h2_msg    = f"Gini test/train = {ratio_of:.3f} < 0.75 → Surapprentissage ❌"
-            h2_conseil= "Modèle trop complexe pour les données — simplifier l'architecture"
+            # ⚠️ LES DEUX CÔTÉS SE DISENT, ET ILS NE DISENT PAS LA MÊME CHOSE :
+            # au-dessus c'est du sur-apprentissage, en dessous c'est une
+            # anomalie (le test dépasse l'entraînement). Un message unique
+            # ferait lire un sur-apprentissage là où il n'y en a pas.
+            h2_msg    = (f"Gini train/test = {ratio_of:.3f} → "
+                         + ("Surapprentissage ❌" if ratio_of > 1 else
+                            "Le Gini de TEST dépasse largement celui "
+                            "d'entraînement — anomalie à instruire ❌"))
+            h2_conseil= ("Modèle trop complexe pour les données — simplifier "
+                         "l'architecture" if ratio_of > 1 else
+                         "Vérifier le découpage train/test et la taille du "
+                         "jeu d'évaluation avant de conclure")
 
         # H3 — Apport du DL vs GLM de référence.
         # ⚠️⚠️ `0.10` N'EST PAS UN « DÉFAUT NEUTRE », C'EST UN GINI D'ALLURE
@@ -2494,7 +2551,10 @@ class AgentA5DeepLearning:
                 "statut":      h2_statut,
                 "message":     h2_msg,
                 "conseil":     h2_conseil,
-                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} Surapprentissage — Gini test/train = {gini_texte(ratio_of, 3)}",
+                # ⚠️ LE LIBELLÉ SUIT LA GRANDEUR. Il annonçait « test/train »
+                # quand le nombre publié est désormais `train/test` : un texte
+                # qui accompagne un comportement se relit quand il change.
+                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} Surapprentissage — Gini train/test = {gini_texte(ratio_of, 3)}",
             },
             "h3_apport_dl": {
                 "gini_dl":     (None if gini_dl_max is None else round(gini_dl_max, 4)),
@@ -2760,18 +2820,40 @@ class AgentA5DeepLearning:
                     font=dict(color=couleur_h2_txt, size=11)
                 ),
                 number=dict(font=dict(color=couleur_h2_txt, size=28), valueformat=".3f"),
+                # ⚠️⚠️ LA JAUGE EST UNE SECONDE SURFACE QUI REND LA MÊME
+                # GRANDEUR, AVEC SES PROPRES SEUILS EN DUR — et elle serait
+                # devenue FAUSSE en silence. Ses bandes disaient
+                # « [0,88 ; 1,5] = vert » sur `test/train` ; sur `train/test`,
+                # un ratio de 1,40 — du vrai sur-apprentissage — s'y serait
+                # affiché en VERT. *Le correctif qui n'atteint pas la surface
+                # jumelle transforme une correction en défaut.*
+                # Les bandes suivent désormais la MÊME règle à deux côtés que
+                # le statut, et depuis les MÊMES constantes.
                 gauge=dict(
-                    axis=dict(range=[0, 1.5], tickfont=dict(color=GRIS, size=8),
-                             tickvals=[0, 0.75, 0.88, 1.0, 1.3, 1.5],
-                             ticktext=["0", "0.75", "0.88", "1.0", "1.3", "1.5"]),
+                    axis=dict(range=[0, 2.0], tickfont=dict(color=GRIS, size=8),
+                             tickvals=[0, SEUIL_H2_AMBRE, SEUIL_H2_VERT, 1.0,
+                                       1 / SEUIL_H2_VERT, 1 / SEUIL_H2_AMBRE,
+                                       2.0],
+                             ticktext=["0", f"{SEUIL_H2_AMBRE:.2f}",
+                                       f"{SEUIL_H2_VERT:.2f}", "1.0",
+                                       f"{1 / SEUIL_H2_VERT:.2f}",
+                                       f"{1 / SEUIL_H2_AMBRE:.2f}", "2.0"]),
                     bar=dict(color=couleur_h2, thickness=0.25),
                     bgcolor=NAVY_L, borderwidth=0,
                     steps=[
-                        dict(range=[0, 0.75],   color="rgba(231,76,60,0.12)"),
-                        dict(range=[0.75, 0.88], color="rgba(243,156,18,0.12)"),
-                        dict(range=[0.88, 1.5],  color="rgba(46,204,113,0.12)"),
+                        {'range': [0, SEUIL_H2_AMBRE],
+                         'color': "rgba(231,76,60,0.12)"},
+                        {'range': [SEUIL_H2_AMBRE, SEUIL_H2_VERT],
+                         'color': "rgba(243,156,18,0.12)"},
+                        {'range': [SEUIL_H2_VERT, 1 / SEUIL_H2_VERT],
+                         'color': "rgba(46,204,113,0.12)"},
+                        {'range': [1 / SEUIL_H2_VERT, 1 / SEUIL_H2_AMBRE],
+                         'color': "rgba(243,156,18,0.12)"},
+                        {'range': [1 / SEUIL_H2_AMBRE, 2.0],
+                         'color': "rgba(231,76,60,0.12)"},
                     ],
-                    threshold=dict(line=dict(color=VERT, width=3), thickness=0.8, value=0.88),
+                    threshold=dict(line=dict(color=VERT, width=3),
+                                   thickness=0.8, value=1.0),
                 ),
             ))
             fig3.update_layout(

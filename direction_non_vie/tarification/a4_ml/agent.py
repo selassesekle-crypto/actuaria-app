@@ -1936,16 +1936,30 @@ class AgentA4ML:
         # sur données synthétiques simples), on retourne 1.0 (neutre) pour éviter
         # un ratio nul trompeur. Un ratio nul ne signifie pas l'absence d'overfitting
         # — il signifie que le modèle n'a pas appris sur train non plus.
-        # ⛔ NOMMÉ, NON TRAITÉ (03/09/2026) : ce `1.0` « neutre » n'est pas
-        # neutre chez A6. La normalisation y fait `1 - (r - min)/(max - min)` :
-        # un ratio de 1.0 est en pratique le MINIMUM du catalogue, donc la
-        # MEILLEURE note de stabilité — 30 % du score de sélection. Un modèle
-        # qui n'a rien appris sur le train recevrait la meilleure note de
-        # stabilité. Signalé à Selasse, hors du périmètre de ce lot.
+        # ✅ TRAITÉ LE 06/09/2026 — constat `A4-3`. Ce `1.0` « neutre » n'a
+        # jamais été neutre chez A6, et la correction d'`A6-2` le rendait
+        # STRICTEMENT PIRE : la note de stabilité y mesure désormais la
+        # DISTANCE À 1, donc un `r` fabriqué à 1,0 aurait reçu le score
+        # PARFAIT, par construction et sans condition. Là où l'ancienne
+        # normalisation ne lui donnait la meilleure note que si 1,0 se
+        # trouvait être le minimum du catalogue — circonstanciel — la nouvelle
+        # la lui garantit.
+        #   *Un modèle qui n'a rien appris sur son entraînement aurait été
+        #   déclaré parfaitement stable, à coup sûr.*
+        # ⚠️ Il rend donc `None`, comme partout ailleurs dans le dépôt : la
+        # stabilité SORT du score de ce modèle, les trois autres poids sont
+        # renormalisés, et le modèle publie `criteres_non_mesures` — que
+        # `_calculer_statut_rag` lit pour plafonner le statut si c'est lui qui
+        # est retenu. *Une absence de mesure se déclare, elle ne se fabrique
+        # pas.*
+        # ⚠️ Les deux branches restent SÉPARÉES bien qu'elles rendent la même
+        # valeur : le motif diffère, et un lecteur doit pouvoir distinguer
+        # « un Gini n'a pas été mesuré » de « le modèle ne discrimine pas sur
+        # son propre jeu d'entraînement ».
         if gini_train is None or gini_test is None:
             overfit = None  # NON EVALUABLE : un Gini n'est pas mesure
         elif gini_train <= 0:
-            overfit = 1.0   # Neutre — modèle non discriminant sur train
+            overfit = None  # NON EVALUABLE : rien appris sur le train
         else:
             overfit = ratio_sur_apprentissage(gini_train, gini_test)
 
