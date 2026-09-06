@@ -439,13 +439,13 @@ def gini_lorenz(y_true, y_pred) -> float:
     preuve d'audit hors périmètre : **aucun n'atteint ces cas** (mesuré).
 
     Mesuré par AST le 01/09/2026, **méthode publiée avec le chiffre** : sur les
-    fonctions de production dont le nom porte `gini`, **8 sont comptées** par
+    fonctions de production dont le nom porte `gini`, **7 sont comptées** par
     le critère large (leur corps emploie `cumsum`, `trapz` ou le mot Lorenz —
     le nom de la fonction en fait partie) et 2 ne calculent rien (une réserve,
-    un verdict). ⚠️ **Mais seulement 2 CALCULENT vraiment** — critère étroit,
-    ajouté le 05/09/2026 : le corps SANS SA DOCSTRING emploie `cumsum`. Les 2 :
-    `core.validation_tarif.gini_lorenz` (**le canonique**) et `conformite`
-    (`_gini_trie_par`).
+    un verdict). ⚠️ **Mais UNE SEULE CALCULE vraiment** — critère étroit,
+    ajouté le 05/09/2026 : le corps SANS SA DOCSTRING emploie `cumsum`.
+    ⚠️ **Une seule implémentation dans tout le dépôt** — celle du socle,
+    `core.validation_tarif.gini_lorenz`.
 
     ⚠️⚠️ **ELLES ÉTAIENT SIX, ET ELLES N'ÉTAIENT PAS D'ACCORD** — lots 3 et 4.
     `a3`, `a4`, `a5` puis `a6` **délèguent** désormais au socle, dont le calcul
@@ -459,9 +459,16 @@ def gini_lorenz(y_true, y_pred) -> float:
     un modèle sans pouvoir discriminant, 400 réplications, il rendait +0,0101
     à n=100 et +0,0017 à n=600 là où la vraie valeur est zéro. Corrigé.
 
-    La seule qui reste porte sa raison, écrite dans son code et vérifiée par
-    `GU-6` : `conformite._gini_trie_par` trie par une COVARIABLE et non par
-    une prédiction, et décide des verdicts du contrôle anti-fuite.
+    ⚠️⚠️ **ET LA DERNIÈRE EST TOMBÉE LE 06/09/2026** (lot 5).
+    `conformite._gini_trie_par` triait par une COVARIABLE pour le contrôle
+    anti-fuite : les ex aequo y sont massifs (une variable catégorielle met
+    des groupes entiers à égalité), et **le VERDICT basculait selon l'ordre du
+    fichier** — trois fuites calibrées près du seuil, détectées 4 fois sur 40,
+    29 sur 40, 36 sur 40 selon le rangement. Déléguée, c'est 0/40 ou 40/40.
+    *Sur un garde-fou de protection des données personnelles, le même
+    portefeuille rangé autrement était déclaré avec ou sans fuite.*
+
+    **Il ne reste donc qu'UNE implémentation de Gini dans tout le dépôt.**
 
     ⚠️⚠️ **ET LA MESURE ÉTROITE A CORRIGÉ LA PROSE DE CE MODULE.** Elle
     annonçait « `charts` la sienne pour la figure ». **Faux** :

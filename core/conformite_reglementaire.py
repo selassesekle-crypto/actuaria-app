@@ -94,6 +94,11 @@ from typing import List, Optional
 # une troisieme convention dans le depot serait une divergence de plus.
 from core.format_fr import nombre
 
+# ⚠️ LE Gini DU SOCLE — une seule formule pour tout le dépôt (lots 3, 4, 5).
+# Il TRAITE LES EX AEQUO, ce qui rend le calcul invariant par permutation des
+# lignes : c'est ce que le contrôle anti-fuite ci-dessous exige.
+from core.validation_tarif import gini_lorenz as _gini_socle
+
 logger = logging.getLogger('actuaria.tarif.conformite')
 
 # ── Colonnes/racines interdites — INCONDITIONNEL ──────────────────────────────
@@ -2042,11 +2047,17 @@ def detecter_fuites_par_effet(
     if motif_controle_effet_impossible(df, col_cible) is not None:
         return (fuites, signaux_experience) if retourner_alertes else fuites
     try:
-        import numpy as np
+        # ⚠️ `import numpy as np` A ÉTÉ RETIRÉ AU LOT 5 : les seuls usages de
+        # `np` dans cette fonction étaient ceux de `_gini_trie_par`, parti
+        # dans `core.validation_tarif`. *Un import qui survit à son usage
+        # devient une piste fausse pour qui cherche où le calcul se fait.*
         y = df[col_cible].astype(float)
         rang_y = y.rank()
         y_arr = y.to_numpy(dtype=float)
-        _trapz = getattr(np, 'trapezoid', None) or getattr(np, 'trapz')
+        # ⚠️ `_trapz` A ÉTÉ RETIRÉ AU LOT 5 : son seul usage de cette fonction
+        # était la courbe de Lorenz de `_gini_trie_par`, partie dans
+        # `core.validation_tarif`. *Un helper qui survit à son usage devient
+        # une piste fausse pour qui cherche où la formule est calculée.*
 
         def _gini_trie_par(x_arr):
             # Gini de la cible lorsqu'on trie les contrats par la variable x.
@@ -2059,16 +2070,35 @@ def detecter_fuites_par_effet(
             # y compte DAVANTAGE qu'ailleurs. Raison de plus pour le mesurer
             # dans son propre lot plutôt que de le changer en passant :
             # *changer la formule d'un garde-fou change ce qu'il attrape.*
-            # ⚠️ Elle rend `0.0` là où le socle déclare l'absence : ce contrat
-            # d'absence est celui de son appelant, et il n'a pas été relu.
-            ordre = np.argsort(-x_arr)
-            y_ord = y_arr[ordre]
-            total = float(y_ord.sum())
-            if total <= 0:
-                return 0.0
-            cum_y = np.cumsum(y_ord) / total
-            cum_pop = np.arange(1, len(y_ord) + 1) / len(y_ord)
-            return float(2.0 * _trapz(cum_y, cum_pop) - 1.0)
+            # ⚠️⚠️ ELLE DÉLÈGUE AU SOCLE DEPUIS LE 06/09/2026, ET C'ÉTAIT
+            # NÉCESSAIRE. Son corps triait par `np.argsort(-x_arr)` **sans
+            # traiter les ex aequo** — or trier par une covariable
+            # CATÉGORIELLE met des groupes entiers à égalité, et l'ordre à
+            # l'intérieur d'un palier venait alors du FICHIER.
+            #   Mesuré sur `auto` (cible à 4 valeurs distinctes = 100 % d'ex
+            #   aequo) : `g_norm` d'une variable à 4 modalités variait de
+            #   **0,0489** sur 8 permutations des mêmes lignes ; et sur trois
+            #   fuites calibrées près du seuil, **le VERDICT lui-même
+            #   basculait** — 4/40, 29/40 et 36/40 détections selon l'ordre.
+            #   *Sur un garde-fou de protection des données personnelles, le
+            #   même portefeuille rangé autrement était déclaré avec ou sans
+            #   fuite.* Le socle traite les paliers : 0/40 ou 40/40, jamais
+            #   entre les deux. Voir `test_antifuite_ordre_lignes`.
+            # ⚠️ Le contrat d'absence reste CELUI DE CET APPELANT : il rend
+            # `0.0` là où le socle déclare `None`, parce que `g_norm` en aval
+            # est un rapport et non une mesure publiée.
+            #   ⚠️⚠️ ET CETTE CONVERSION EST INATTEIGNABLE AUJOURD'HUI —
+            #   MESURÉ, pas supposé. Le socle ne rend `None` que sur moins de
+            #   deux lignes, des longueurs incohérentes, ou une cible de somme
+            #   nulle ; or `motif_controle_effet_impossible` intercepte en
+            #   amont la cible absente ET la cible de VARIANCE NULLE, ce qui
+            #   couvre le seul cas réaliste (une cible entièrement à zéro).
+            #   Un plant qui retire cette conversion reste MUET, et c'est
+            #   attendu. Elle est gardée comme défense de frontière — pas
+            #   comme un garde-fou : *une déclaration inatteignable présentée
+            #   comme un contrôle atteste sans surveiller.*
+            valeur = _gini_socle(y_arr, x_arr)
+            return 0.0 if valeur is None else float(valeur)
 
         # Plafond : le Gini obtenu en triant par la cible ELLE-MÊME. C'est le
         # pouvoir discriminant MAXIMAL atteignable sur ces données — et c'est ce

@@ -84,16 +84,18 @@ from core.validation_tarif import gini_lorenz
 #:     de **+1/n** systematiquement. Corrige : la formule vient du socle.
 #: *Une fonction peut porter une vraie methode ET un vrai defaut ; les
 #: separer demande de mesurer, pas de lire.*
-_NON_DELEGUEES = {
-    'core/conformite_reglementaire.py': (
-        '_gini_trie_par',
-        # ⚠️ Il trie par une COVARIABLE, pas par une prediction : c'est un
-        # autre estimateur, et il decide des verdicts du controle anti-fuite.
-        # Les ex aequo y sont massifs (une variable categorielle), donc le
-        # traitement y compte DAVANTAGE -- raison de plus pour le mesurer
-        # dans son propre lot plutot que de le changer en passant.
-        'covariable'),
-}
+#: ⚠️⚠️ `conformite._gini_trie_par` EST SORTIE DE CETTE LISTE LE 06/09/2026
+#: (lot 5) -- **elle etait la derniere**. Elle y figurait parce qu'elle trie
+#: par une COVARIABLE et decide des verdicts anti-fuite : il fallait la
+#: mesurer dans son propre lot. C'est fait. Mesure : sur trois fuites
+#: calibrees pres du seuil, le VERDICT basculait selon l'ordre des lignes du
+#: fichier (4/40, 29/40, 36/40 detections). Delegue, il est 0/40 ou 40/40.
+#:
+#: ⚠️ CETTE LISTE EST DESORMAIS VIDE, ET C'EST LE FAIT DU CHANTIER : il ne
+#: reste **qu'une seule implementation de Gini dans tout le depot**, celle du
+#: socle. `GU-6` continue de tourner a vide -- il reprendra du service le jour
+#: ou quelqu'un rajoutera une exception, et exigera alors son motif.
+_NON_DELEGUEES = {}
 
 
 def _sans_ex_aequo(n=600, graine=5):
