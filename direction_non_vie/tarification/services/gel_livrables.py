@@ -282,6 +282,38 @@ def livrables_d_un_resultat(resultat: Mapping[str, Any],
     return livrables
 
 
+def livrables_de_la_chaine(
+        resultats: Mapping[str, Any]) -> dict[str, bytes | None]:
+    """Les livrables de TOUT un run, chacun préfixé par la source qui le porte.
+
+    ⚠️⚠️ CETTE FONCTION EXISTE PARCE QUE L'ASSIETTE ÉTAIT LE DÉFAUT, PAS
+    L'OUTIL. `livrables_d_un_resultat` sait déjà énumérer n'importe quel
+    résultat d'agent ; **il n'était appelé que sur A3**. Le module comparait
+    donc un classeur là où la chaîne en produit quatorze, et les surfaces où
+    vivent les défauts publiés — A4, A5, A6, les deux rapports — n'entraient
+    dans aucune mesure. *Un instrument juste, braqué sur un dixième de son
+    sujet, certifie ce qu'il n'a pas regardé.*
+
+    ⚠️ ELLE ÉNUMÈRE LES SOURCES QU'ON LUI DONNE, elle n'en tient aucune liste.
+    Un agent A7 branché demain sur cette chaîne entre dans la mesure en étant
+    passé en argument, sans que cette fonction change — même principe que
+    l'énumération des clés `_bytes` un cran plus bas. *Une liste d'agents
+    tenue ici serait la deuxième occasion de rétrécir l'assiette en silence.*
+
+    ⚠️ Une source qui ne porte aucun livrable ne disparaît pas : elle ne
+    contribue simplement aucune clé, et c'est à l'appelant de déclarer ce
+    qu'il attendait — voir `GEL-12`, qui exige une surface RÉELLE par source
+    plutôt que de compter ce qui est arrivé.
+    """
+    livrables: dict[str, bytes | None] = {}
+    for source in sorted(resultats):
+        resultat = resultats[source]
+        if isinstance(resultat, Mapping):
+            livrables.update(
+                livrables_d_un_resultat(resultat, prefixe=f'{source} '))
+    return livrables
+
+
 @dataclass
 class Empreinte:
     """Le contenu comparable d'un jeu de livrables, et ce qui ne l'est pas."""

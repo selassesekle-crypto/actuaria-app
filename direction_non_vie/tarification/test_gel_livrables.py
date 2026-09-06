@@ -42,6 +42,25 @@ Ce que cette sentinelle exige :
           entre dans la mesure sans toucher au code ;
   GEL-10  aucune taille en octets n'entre dans l'empreinte ;
   GEL-11  la chaine est reellement DETERMINISTE : A3 deux fois, meme empreinte.
+  GEL-12  l'assiette couvre TOUTE la chaine -- chaque source porte une surface
+          REELLE, et l'assiette mesuree se declare dans le message ;
+  GEL-13  l'instrument ROUGIT quand un chiffre publie change, dans TOUTES les
+          surfaces qui le portent -- et reste muet quand rien ne change.
+
+⚠️⚠️ POURQUOI GEL-12 ET GEL-13 EXISTENT -- constat `TR-2`, mesure du
+06/09/2026. Le module etait juste et son assiette effective etait **l'Excel
+d'A3, et rien d'autre** : son seul consommateur etait `GEL-11`, qui fait
+tourner A1->A2->A3. Mesure de la chaine reelle : **14 livrables non vides**
+sur huit sources (A1..A6 + les deux rapports). *Les quatre constats publies de
+l'audit vivent tous dans des surfaces que le gel ne regardait pas.*
+
+⚠️⚠️ ET LE DETERMINISME A ETE MESURE AVANT D'ETENDRE QUOI QUE CE SOIT, parce
+que sans lui l'outil MENT : deux runs complets, meme processus, **0 ecart sur
+les 14 surfaces** -- A4 entraine pourtant six modeles ML et A5 deux reseaux
+torch. Un << 0 >> pouvant aussi etre un instrument qui ne mesure rien, il a
+ete INSTRUIT : la date d'arrete rend 16 ecarts sur 5 surfaces, un
+`score_global` decale de 0,0137 en rend 7, le nom du modele retenu 7. C'est ce
+que `GEL-13` fige.
 
 Tout en `unittest.TestCase` : la gate lance `unittest discover`.
 """
@@ -456,6 +475,226 @@ class TestDeterminismeReel(unittest.TestCase):
             50, 'le classeur mesure est presque vide')
         ecarts = G.comparer(premier, second)
         self.assertEqual(ecarts, [], G.rapport_ecarts(ecarts, premier, second))
+
+
+# =============================================================================
+#  GEL-12, GEL-13 — L'ASSIETTE COUVRE-T-ELLE LA CHAINE, ET REPOND-ELLE ?
+# =============================================================================
+
+#: Les sources attendues dans l'assiette. ⚠️ Cette liste ne CONSTRUIT rien :
+#: `livrables_de_la_chaine` enumere ce qu'on lui donne. Elle dit ce que le
+#: chantier EXIGE de couvrir, pour qu'une source qui cesserait de produire
+#: fasse rougir au lieu de retrecir l'assiette en silence.
+_SOURCES_ATTENDUES = ('a1', 'a2', 'a3', 'a4', 'a5', 'a6',
+                      'rapport_modeles', 'rapport_equipe')
+
+
+def _volume(contenu) -> int:
+    """Le nombre de valeurs comparables d'une surface, quel que soit sa forme."""
+    if isinstance(contenu, dict):
+        return sum(_volume(v) for v in contenu.values())
+    if isinstance(contenu, (list, tuple)):
+        return sum(_volume(v) for v in contenu)
+    return 1
+
+
+class TestAssietteDeLaChaine(unittest.TestCase):
+    """⚠️⚠️ CE QUE LE GEL NE REGARDE PAS, IL LE CERTIFIE SANS L'AVOIR VU.
+
+    La chaine tourne UNE fois pour toute la classe : c'est la partie chere
+    (~55 s), et les deux controles la partagent.
+    """
+
+    _empreinte = None
+    _motif_a5 = ''
+
+    @classmethod
+    def setUpClass(cls):
+        warnings.filterwarnings('ignore')
+        import numpy as np
+
+        from core.qualite_donnees import preambule_qualite
+        from direction_non_vie.tarification import test_pipeline_agents as T
+        from direction_non_vie.tarification.a1_ingestion.agent import (
+            AgentA1Ingestion,
+        )
+        from direction_non_vie.tarification.a2_preprocessing.agent import (
+            AgentA2Preprocessing,
+        )
+        from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
+        from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+        )
+
+        np.random.seed(7)
+        plan = T._PLAN_AUTO
+        donnees = T._portefeuille_auto(1200)
+        # ⚠️ SANS COLONNE TEMPORELLE, A6 NE FAIT PAS DE WALK-FORWARD et son
+        # chapitre de backtesting se vide : l'assiette mesuree serait plus
+        # etroite que celle d'un vrai dossier.
+        donnees['annee_souscription'] = np.random.default_rng(7).choice(
+            [2021, 2022, 2023, 2024, 2025], len(donnees))
+        base = {'audit_path': '/tmp', 'verbose': False}
+
+        r1 = AgentA1Ingestion(**base).run(branche='non_vie',
+                                          sous_branche='auto',
+                                          dataframe=donnees, plan=plan)
+        qualite = preambule_qualite(r1.get('dataframe'), plan,
+                                    qualite_validee_par='Actuaire Test',
+                                    horodatage=None)
+        r2 = AgentA2Preprocessing(**base).run(
+            result_a1={**r1, 'dataframe': qualite.dataframe_propre}, plan=plan)
+        r3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp').run(
+            result_a2=r2, plan=plan, col_frequence=plan.cible_frequence,
+            col_cout=plan.cible_cout, generer_graphiques=True)
+        r4 = AgentA4ML(models_path='/tmp', audit_path='/tmp').run(
+            result_a2=r2, result_a3=r3, plan=plan, col_cible='nb_sinistres',
+            ponderer_par_exposition=True, calcul_shap=False,
+            generer_graphiques=True)
+        # ⚠️ A5 depend de `torch`, declare dans requirements-optional. Son
+        # ABSENCE se declare (`_motif_a5`) et fait SAUTER le controle de sa
+        # source ; toute autre panne doit rougir.
+        r5: dict = {}
+        try:
+            from direction_non_vie.tarification.a5_deep_learning.agent import (
+                AgentA5DeepLearning,
+            )
+            r5 = AgentA5DeepLearning(models_path='/tmp',
+                                     audit_path='/tmp').run(
+                result_a2=r2, result_a3=r3, plan=plan,
+                col_cible='nb_sinistres', generer_graphiques=True)
+        except ImportError as erreur:
+            cls._motif_a5 = f'torch absent : {erreur}'
+        r6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp').run(
+            result_a2=r2, result_a3=r3, result_a4=r4,
+            result_a5=r5 if r5.get('success') else None,
+            col_cible='nb_sinistres', plan=plan, environnement='production',
+            profil_valide_par='Actuaire Test', generer_graphiques=True,
+            generer_rapport_equipe=False)
+
+        cls._a3, cls._a4, cls._a5, cls._a6 = r3, r4, r5, r6
+        cls._amont = {'a1': r1, 'a2': r2}
+        resultats = {'a1': r1, 'a2': r2, 'a3': r3, 'a4': r4, 'a5': r5,
+                     'a6': r6,
+                     'rapport_modeles': cls._rapport_modeles(r6),
+                     'rapport_equipe': cls._rapport_equipe(r1, r2, r3, r4,
+                                                           r5, r6)}
+        cls._empreinte = G.empreinte(G.livrables_de_la_chaine(resultats))
+
+    @classmethod
+    def _rapport_modeles(cls, r6, formats=('html', 'word')):
+        from direction_non_vie.tarification.services import (
+            rapport_modeles_tarif as RM,
+        )
+        return RM.generer_rapport_tarification(
+            result_a3=cls._a3, result_a4=cls._a4, result_a6=r6,
+            result_a5=cls._a5 if cls._a5.get('success') else None,
+            ref_client='GEL', arrete='2026-06-30', audit_id='GEL-12',
+            formats=list(formats))
+
+    @classmethod
+    def _rapport_equipe(cls, r1, r2, r3, r4, r5, r6,
+                        formats=('html', 'word', 'excel')):
+        from direction_non_vie.tarification.services import (
+            rapport_equipe_tarif as RE,
+        )
+        return RE.generer_rapport_equipe_tarification(
+            {'a1': r1, 'a2': r2, 'a3': r3, 'a4': r4, 'a5': r5, 'a6': r6},
+            branche='non_vie', arrete='2026-06-30', audit_id='GEL-12',
+            formats=list(formats))
+
+    # ── GEL-12 ───────────────────────────────────────────────────────────────
+    def test_GEL12_chaque_source_de_la_chaine_porte_une_surface_REELLE(self):
+        """⚠️⚠️ COMPTER LES SURFACES NE SUFFIT PAS : trois `<livrable absent>`
+        des deux cotes sont fidelement egaux, et un gel qui les compterait
+        rendrait << 0 ecart >> en n'ayant rien regarde. On exige donc, PAR
+        SOURCE, au moins une surface au contenu REEL.
+        """
+        empreinte = self._empreinte
+        self.assertEqual(empreinte.non_lues, {},
+                         f'surfaces illisibles : {empreinte.non_lues}')
+        volumes: dict[str, dict[str, int]] = {}
+        for nom, contenu in empreinte.contenus.items():
+            if contenu == G.ABSENT:
+                continue
+            source = nom.split(' ', 1)[0]
+            volumes.setdefault(source, {})[nom] = _volume(contenu)
+
+        assiette = ' | '.join(
+            f'{source}: ' + ', '.join(f'{n.split(" ", 1)[1]}={v}'
+                                      for n, v in sorted(surfaces.items()))
+            for source, surfaces in sorted(volumes.items()))
+        for source in _SOURCES_ATTENDUES:
+            with self.subTest(source=source):
+                if source == 'a5' and self._motif_a5:
+                    self.skipTest(self._motif_a5)
+                reelles = volumes.get(source, {})
+                self.assertTrue(
+                    reelles,
+                    f"la source « {source} » ne porte AUCUNE surface reelle : "
+                    f"le gel la certifierait sans l'avoir vue.\n"
+                    f'assiette mesuree -- {assiette}')
+                self.assertGreaterEqual(
+                    max(reelles.values()), 20,
+                    f"la plus grosse surface de « {source} » ne porte que "
+                    f'{max(reelles.values())} valeurs comparables : ce n est '
+                    f'pas un livrable.\nassiette mesuree -- {assiette}')
+        total = sum(len(s) for s in volumes.values())
+        self.assertGreaterEqual(
+            total, 12,
+            f'assiette trop etroite : {total} surfaces reelles.\n{assiette}')
+        print(f'    GEL-12 assiette : {len(volumes)} sources, {total} surfaces '
+              f'reelles, 0 illisible')
+
+    # ── GEL-13 ───────────────────────────────────────────────────────────────
+    def test_GEL13_un_chiffre_publie_qui_change_ROUGIT_TOUTES_ses_surfaces(self):
+        """⚠️⚠️ UN GEL QUI NE ROUGIT PAS EST UN GEL QUI ATTESTE SANS
+        SURVEILLER. Le controle negatif (rien ne change -> 0) est declare ici
+        AVEC le controle positif : sans lui, un instrument mort passerait les
+        deux.
+
+        Rendu HTML seul : c'est le format le moins cher, et il suffit a
+        prouver que la reponse existe dans les DEUX rapports.
+        """
+        import copy
+
+        def empreinte_html(r6):
+            livrables = G.livrables_de_la_chaine({
+                'rapport_modeles': self._rapport_modeles(r6, formats=('html',)),
+                'rapport_equipe': self._rapport_equipe(
+                    self._amont['a1'], self._amont['a2'], self._a3, self._a4,
+                    self._a5, r6, formats=('html',)),
+            })
+            return G.empreinte(livrables)
+
+        reference = empreinte_html(self._a6)
+        portantes = [n for n, c in reference.contenus.items()
+                     if c != G.ABSENT]
+        self.assertEqual(
+            len(portantes), 2,
+            f'les deux rapports devaient rendre un HTML : {portantes}')
+
+        # ── controle NEGATIF, declare : rien ne change -> aucun ecart
+        muet = G.comparer(reference, empreinte_html(self._a6))
+        self.assertEqual(muet, [], G.rapport_ecarts(muet, reference, reference))
+
+        # ── controle POSITIF : le nom du modele retenu change
+        perturbe = copy.deepcopy(self._a6)
+        perturbe['modele_production']['modele'] = 'MODELE_PLANTE_XYZ'
+        ecarts = G.comparer(reference, empreinte_html(perturbe))
+        self.assertTrue(
+            ecarts,
+            'le modele de production a change et le gel est reste MUET : il '
+            'atteste sans surveiller.')
+        touchees = {e.surface for e in ecarts}
+        self.assertEqual(
+            touchees, set(portantes),
+            f'le changement n a ete vu que dans {sorted(touchees)} alors que '
+            f'{sorted(portantes)} le publient : le gel voit une surface sur '
+            f'deux, exactement le defaut qu il doit attraper.')
+        print(f'    GEL-13 muet a l identique · {len(ecarts)} ecart(s) sur '
+              f'{len(touchees)} surface(s) quand le modele retenu change')
 
 
 if __name__ == '__main__':
