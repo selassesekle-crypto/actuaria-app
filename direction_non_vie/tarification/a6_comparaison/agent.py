@@ -109,6 +109,8 @@ except ImportError:
 # genre pré-encodée (scénario V7) traversait donc intacte jusqu'à la
 # recalibration walk-forward.
 from core.charts_tarif import FOND_SOMBRE, couleur_rag, couleur_texte_rag, glyphe_rag
+# ⚠️ LE Gini DU SOCLE — une seule formule pour tout le dépôt (lot 3, puis 4).
+from core.validation_tarif import gini_lorenz as gini_socle
 from core.conformite_reglementaire import (
     agreger_controle_effet, avertissement_walk_forward,
     ArbitrageImpossible, message_arbitrage_impossible,
@@ -1583,16 +1585,35 @@ class AgentA6Comparaison:
         """
         if y_true.sum() <= 0 or y_pred.std() <= 0:
             return None
+        # ⚠️ LA NORMALISATION PAR L'EXPOSITION RESTE ICI, ET C'EST DÉLIBÉRÉ.
+        # C'est une VRAIE méthode, pas une divergence d'écriture : mesurée le
+        # 06/09/2026, elle déplace le Gini de **0,0213** sur les fenêtres
+        # réelles. `y_true` est un COMPTAGE, `y_pred` un TAUX — sans elle, un
+        # contrat à forte exposition biaise la courbe de Lorenz. Elle est donc
+        # gardée à CETTE frontière, comme `a3`/`a4`/`a5` gardent leur
+        # bornage : le socle rend la formule, l'agent garde sa méthode.
         obs = (y_true if expo is None
                else y_true / np.maximum(np.asarray(expo, dtype=float), 1e-9))
-        _trapz_fn = np.trapezoid if hasattr(np, 'trapezoid') else np.trapz
-        ordre     = np.argsort(-y_pred)
-        obs_sorted = obs[ordre]
-        lorenz    = np.cumsum(obs_sorted) / max(obs.sum(), 1e-9)
-        return round(
-            float(2 * _trapz_fn(lorenz, np.linspace(0, 1, len(lorenz))) - 1),
-            4
-        )
+        # ⚠️⚠️ LA FORMULE VIENT DU SOCLE — L'AXE DE POPULATION ÉTAIT BIAISÉ.
+        # Ce corps employait `np.linspace(0, 1, n)`, qui associe la PREMIÈRE
+        # valeur cumulée — laquelle couvre déjà 1/n de la population — à la
+        # fraction **zéro**. Le Gini en sortait systématiquement gonflé.
+        # Mesuré sur un modèle SANS pouvoir discriminant (vrai Gini = 0),
+        # moyenne de 400 réplications :
+        #     n =   100 : arange 0,0019   linspace 0,0120   biais +0,0101
+        #     n =   600 : arange 0,0019   linspace 0,0035   biais +0,0017
+        #     n = 2 000 : arange 0,0003   linspace 0,0008   biais +0,0005
+        # **Le biais vaut exactement 1/n**, il est POSITIF, et il portait sur
+        # chaque fenêtre de chaque analyse temporelle publiée.
+        #   ⚠️ Aucune décision ne bouge, et c'est mesuré PAR EXÉCUTION :
+        #   décaler ce Gini de +0,30, ou le supprimer, laisse le statut, le
+        #   modèle de production, le score et le classement INCHANGÉS. Il
+        #   alimente le rapport de backtesting ; son ABSENCE, elle, est gardée
+        #   par `_wf_resultat_ok`.
+        valeur = gini_socle(obs, y_pred)
+        # ⚠️ Le contrat publié de cette fonction reste le sien : `None` quand
+        # le socle ne peut pas mesurer, et l'arrondi à 4 décimales.
+        return None if valeur is None else round(float(valeur), 4)
 
     def _backtesting_temporel(
         self,

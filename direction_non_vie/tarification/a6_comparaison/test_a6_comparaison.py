@@ -346,16 +346,59 @@ class TestA6GiniWalkForwardSentinelles(unittest.TestCase):
     def test_sentinelle_signe_predicteur_parfait(self):
         """SENT2 — Un prédicteur PARFAIT (mêmes valeurs que l'observé, même
         ordre) doit produire un Gini walk-forward FORTEMENT POSITIF —
-        régression du bug de signe (audit V6 bug #2) sinon."""
+        régression du bug de signe (audit V6 bug #2) sinon.
+
+        ⚠️⚠️ SON SEUIL ÉTAIT 0,5, ET IL NE TENAIT QUE PAR UN BIAIS. Mesuré le
+        06/09/2026 : **le Gini théorique d'une loi exponentielle vaut
+        exactement 0,5**. Exiger « strictement plus que 0,5 » sur 300 tirages
+        est donc un pile ou face — et c'est le biais de l'ancien axe de
+        population (`linspace`, +1/n) qui le faisait gagner. Sur 200 graines :
+
+            estimateur BIAISÉ      : 60 % des tirages au-dessus de 0,5
+            estimateur non biaisé  : 46 %  — il tombe des DEUX côtés, comme il doit
+
+        L'axe corrigé (lot 4), ce test est passé à 0,4968 et a rougi. *Un
+        seuil calibré sur une valeur gonflée devient faux quand on dégonfle.*
+
+        ⚠️ **ET SON VOISIN AVAIT DÉJÀ RAISON** : `SENT3` emploie −0,4, « pas
+        −0,5 : marge de sécurité contre la variance d'échantillonnage —
+        l'essentiel du test est le SIGNE ». *L'asymétrie entre voisins est le
+        révélateur le moins cher.* Celui-ci devient symétrique.
+
+        ⚠️ Il gagne au passage un contrôle de CALIBRATION — un prédicteur
+        parfait sur une exponentielle doit rendre 0,5, pas seulement « quelque
+        chose de positif ». Mais avec quelle tolérance ? L'écart-type
+        d'échantillonnage du Gini à n=300 vaut ~0,008, donc la marge doit
+        valoir plusieurs sigma : 0,05 ici.
+
+        ⚠️⚠️ **ET CE CONTRÔLE NE VOIT PAS LE BIAIS DE 1/n — MESURÉ, ET J'AVAIS
+        ÉCRIT LE CONTRAIRE.** Un plant qui réintroduit `linspace` dans le socle
+        laisse ce test VERT : le biais vaut 0,0033, la tolérance 0,05. *Un seul
+        tirage ne peut pas détecter un biais six fois plus petit que son propre
+        bruit.* Ce qui le voit est `GU-10` de `test_gini_unique`, qui compare
+        les deux axes SUR LES MÊMES TIRAGES — le bruit commun s'y annule.
+        Ici on teste le SIGNE et l'ORDRE DE GRANDEUR ; là-bas, le biais.
+        """
         np.random.seed(1)
         y_te = np.random.exponential(100, 300)
         gini_parfait = self._gini_walk_forward(y_te, y_te.copy())
+        # ⚠️ LE SIGNE — symétrique de `SENT3`, même motif, même marge.
         self.assertGreater(
-            gini_parfait, 0.5,
+            gini_parfait, 0.4,
             f"Prédicteur parfait donne Gini={gini_parfait} — devrait être "
             f"fortement positif. Régression du bug de signe (audit V6 #2) ?"
         )
-        print(f"    SENT2 Prédicteur parfait → Gini fortement positif ✅ | {gini_parfait}")
+        # ⚠️⚠️ LA CALIBRATION — ce que le seuil de 0,5 faisait croire qu'il
+        # testait, et qu'il ne testait pas. 0,5 est le Gini EXACT de la loi
+        # exponentielle ; l'écart-type d'échantillonnage à n=300 vaut ~0,02.
+        self.assertAlmostEqual(
+            gini_parfait, 0.5, delta=0.05,
+            msg=f"Gini={gini_parfait} s'écarte de 0,5, le Gini THÉORIQUE de la "
+                f"loi exponentielle : l'estimateur n'est plus calibré — un "
+                f"biais a été réintroduit dans la courbe de Lorenz."
+        )
+        print(f"    SENT2 Prédicteur parfait → Gini fortement positif ET "
+              f"calibré sur 0,5 (théorique) ✅ | {gini_parfait}")
 
     def test_sentinelle_signe_predicteur_anticorrele(self):
         """SENT3 — Un prédicteur ANTI-CORRÉLÉ (ordre inversé) doit produire

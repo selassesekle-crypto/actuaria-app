@@ -442,19 +442,26 @@ def gini_lorenz(y_true, y_pred) -> float:
     fonctions de production dont le nom porte `gini`, **8 sont comptées** par
     le critère large (leur corps emploie `cumsum`, `trapz` ou le mot Lorenz —
     le nom de la fonction en fait partie) et 2 ne calculent rien (une réserve,
-    un verdict). ⚠️ **Mais seulement 3 CALCULENT vraiment** — critère étroit,
-    ajouté le 05/09/2026 : le corps SANS SA DOCSTRING emploie `cumsum`. Les 3 :
-    `core.validation_tarif.gini_lorenz` (**le canonique**), `a6`
-    (`_gini_lorenz`) et `conformite` (`_gini_trie_par`).
+    un verdict). ⚠️ **Mais seulement 2 CALCULENT vraiment** — critère étroit,
+    ajouté le 05/09/2026 : le corps SANS SA DOCSTRING emploie `cumsum`. Les 2 :
+    `core.validation_tarif.gini_lorenz` (**le canonique**) et `conformite`
+    (`_gini_trie_par`).
 
-    ⚠️⚠️ **ELLES ÉTAIENT SIX, ET ELLES N'ÉTAIENT PAS D'ACCORD** — lot 3.
-    `a3`, `a4` et `a5` **délèguent** désormais au socle, dont le calcul traite
-    les EX AEQUO et ne dépend plus de l'ordre des lignes. Les deux qui restent
-    portent chacune SA raison, écrite dans leur code et vérifiée par `GU-6` :
-    `a6` accumule un TAUX quand `expo` est fourni et son axe de population est
-    `linspace(0, 1, n)` — ce n'est pas le même trapèze ; `conformite` trie par
-    une COVARIABLE et non par une prédiction, et décide des verdicts du
-    contrôle anti-fuite.
+    ⚠️⚠️ **ELLES ÉTAIENT SIX, ET ELLES N'ÉTAIENT PAS D'ACCORD** — lots 3 et 4.
+    `a3`, `a4`, `a5` puis `a6` **délèguent** désormais au socle, dont le calcul
+    traite les EX AEQUO et ne dépend plus de l'ordre des lignes.
+
+    ⚠️ **`a6` PORTAIT UNE VRAIE MÉTHODE ET UN VRAI DÉFAUT, ET IL FALLAIT LES
+    SÉPARER PAR LA MESURE.** Sa normalisation par l'exposition (`y/expo` quand
+    la cible est un comptage et la prédiction un taux) est **légitime** —
+    effet mesuré **0,0213** — et elle est CONSERVÉE à sa frontière. Son axe de
+    population `linspace(0, 1, n)`, lui, était **biaisé de +1/n** : mesuré sur
+    un modèle sans pouvoir discriminant, 400 réplications, il rendait +0,0101
+    à n=100 et +0,0017 à n=600 là où la vraie valeur est zéro. Corrigé.
+
+    La seule qui reste porte sa raison, écrite dans son code et vérifiée par
+    `GU-6` : `conformite._gini_trie_par` trie par une COVARIABLE et non par
+    une prédiction, et décide des verdicts du contrôle anti-fuite.
 
     ⚠️⚠️ **ET LA MESURE ÉTROITE A CORRIGÉ LA PROSE DE CE MODULE.** Elle
     annonçait « `charts` la sienne pour la figure ». **Faux** :

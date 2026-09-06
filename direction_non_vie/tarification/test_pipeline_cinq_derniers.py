@@ -222,17 +222,17 @@ class TestC3LaPortee(unittest.TestCase):
             f"mesure en trouve {len(large)} : {sorted(large)}")
         self.assertIn('**8 sont comptées', doc)
         self.assertEqual(
-            len(implementations), 3,
-            f"la docstring annonce 3 IMPLEMENTATIONS reelles, la mesure en "
+            len(implementations), 2,
+            f"la docstring annonce 2 IMPLEMENTATIONS reelles, la mesure en "
             f"trouve {len(implementations)} : {sorted(implementations)}")
-        self.assertIn('seulement 3 CALCULENT', doc)
+        self.assertIn('seulement 2 CALCULENT', doc)
         # ⚠️⚠️ ET LA PROSE ENUMERE — TROUVE PAR UN PLANT MUET. Un plant a
         # remplace « Les 3 : » par « Les 6 : » devant une liste de trois noms :
         # **rien n'a rouge**, parce que ce controle ne lisait que le COMPTE.
         # *Une liste fausse a cote d'un compte juste se lit comme un fait.*
         # On verifie donc que chaque implementation MESUREE est NOMMEE, et que
         # le compte annonce dans la meme phrase est celui-la.
-        self.assertIn('Les 3 :', doc,
+        self.assertIn('Les 2 :', doc,
                       "la phrase qui enumere les implementations a change de "
                       "forme : le compte et la liste peuvent diverger")
         for cle in implementations:
@@ -245,7 +245,7 @@ class TestC3LaPortee(unittest.TestCase):
                     f'la prose : un lecteur ne peut pas savoir qu elle existe')
         # ⚠️ Et les trois agents delegues doivent etre HORS des
         # implementations : c'est le fait que le lot 3 a etabli.
-        for agent in ('a3_glm', 'a4_ml', 'a5_deep_learning'):
+        for agent in ('a3_glm', 'a4_ml', 'a5_deep_learning', 'a6_comparaison'):
             with self.subTest(agent=agent):
                 self.assertFalse(
                     any(f'/{agent}/agent.py::' in c for c in implementations),

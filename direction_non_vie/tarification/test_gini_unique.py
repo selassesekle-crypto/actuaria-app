@@ -74,16 +74,17 @@ from core.validation_tarif import gini_lorenz
 #: Les deux implementations qui SUBSISTENT, avec la raison de chacune.
 #: ⚠️ Ce n'est pas une liste d'exemptions de confort : chaque entree porte un
 #: motif VERIFIABLE, et `GU-6` exige que ce motif soit ecrit dans le code.
+#: ⚠️⚠️ `a6._gini_lorenz` EST SORTIE DE CETTE LISTE LE 06/09/2026 (lot 4).
+#: Elle y figurait pour DEUX raisons, et la mesure les a separees :
+#:   · l'argument `expo` est une VRAIE methode, legitime -- il accumule le
+#:     TAUX `y_true/expo` quand `y_true` est un comptage et `y_pred` un taux
+#:     (correctif V15 #3). Effet mesure : **0,0213**. Il est CONSERVE, a la
+#:     frontiere d'A6, comme `a3`/`a4`/`a5` gardent leur bornage ;
+#:   · l'axe de population `linspace(0, 1, n)` etait un VRAI DEFAUT, biaise
+#:     de **+1/n** systematiquement. Corrige : la formule vient du socle.
+#: *Une fonction peut porter une vraie methode ET un vrai defaut ; les
+#: separer demande de mesurer, pas de lire.*
 _NON_DELEGUEES = {
-    'direction_non_vie/tarification/a6_comparaison/agent.py': (
-        '_gini_lorenz',
-        # ⚠️ Deux differences REELLES, pas un oubli : il accumule le TAUX
-        # `y_true/expo` quand `expo` est fourni (correctif V15 #3), et son axe
-        # de population est `linspace(0, 1, n)` la ou le socle emploie
-        # `arange(1, n+1)/n` -- ce n'est pas le meme trapeze, meme sans ex
-        # aequo. Et la mesure d'impact du 05/09 n'a PAS traverse son chemin
-        # (le backtesting a rendu << A/E non calcule >>).
-        'expo'),
     'core/conformite_reglementaire.py': (
         '_gini_trie_par',
         # ⚠️ Il trie par une COVARIABLE, pas par une prediction : c'est un
@@ -358,6 +359,119 @@ class TestCeQuiRESTE(unittest.TestCase):
                     marqueur, complet,
                     f'{chemin}::{nom} ne porte plus le motif « {marqueur} » '
                     f'qui justifie qu elle reste distincte')
+
+    def test_GU9_a6_DELEGUE_mais_GARDE_sa_normalisation_par_l_exposition(self):
+        """⚠️⚠️ LES DEUX FACES DU LOT 4, DANS UN SEUL TEST.
+
+        `a6._gini_lorenz` portait une VRAIE methode (`expo`) et un VRAI defaut
+        (l'axe `linspace`, biaise de +1/n). La formule descend au socle ; la
+        normalisation reste. *Le socle rend la formule, l'agent garde sa
+        methode.*
+        """
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+        )
+        f = AgentA6Comparaison.__dict__['_gini_lorenz'].__func__
+        corps, complet = TestCeQuiRESTE._corps(
+            'direction_non_vie/tarification/a6_comparaison/agent.py',
+            '_gini_lorenz')
+        self.assertNotIn(
+            'cumsum', corps,
+            "`a6._gini_lorenz` recalcule une courbe de Lorenz au lieu de "
+            "deleguer : l axe biaise peut etre revenu avec elle")
+        self.assertIn('gini_socle', corps, "`a6` n appelle pas le socle")
+        self.assertIn('expo', corps,
+                      "`a6` a perdu sa normalisation par l exposition : "
+                      "c'etait une VRAIE methode, pas une divergence")
+        self.assertIn('0,0213', complet,
+                      "l effet mesure de l exposition n est plus publie a cote "
+                      "de la methode qu il justifie")
+
+        # ⚠️ ET ON LE VERIFIE PAR EXECUTION, pas seulement au texte.
+        rng = np.random.default_rng(5)
+        n = 800
+        y = rng.poisson(0.3, n).astype(float)
+        p = rng.random(n)
+        expo = rng.uniform(0.2, 1.0, n)
+        avec, sans = f(y, p, expo=expo), f(y, p, expo=None)
+        self.assertIsNotNone(avec)
+        self.assertNotAlmostEqual(
+            avec, sans, places=4,
+            msg="l exposition ne change plus rien : la normalisation a ete "
+                "perdue en cours de delegation")
+        # ⚠️ Et la valeur EST celle du socle sur l observation normalisee.
+        attendu = gini_lorenz(y / np.maximum(expo, 1e-9), p)
+        self.assertAlmostEqual(avec, round(float(attendu), 4), places=4)
+
+    def test_GU10_l_axe_de_population_n_est_plus_BIAISE(self):
+        """⚠️⚠️ LE DEFAUT, MESURE ET FERME. `linspace(0, 1, n)` associe la
+        premiere valeur cumulee -- qui couvre deja 1/n de la population -- a
+        la fraction ZERO. Sur un modele SANS pouvoir discriminant, le vrai
+        Gini est zero ; l ancien axe rendait **+1/n** en moyenne."""
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+        )
+        f = AgentA6Comparaison.__dict__['_gini_lorenz'].__func__
+        trap = getattr(np, 'trapezoid', None) or np.trapz
+
+        def ancien(y, p):
+            ys = np.asarray(y, float)[np.argsort(-np.asarray(p, float))]
+            return float(2 * trap(np.cumsum(ys) / ys.sum(),
+                                  np.linspace(0, 1, len(ys))) - 1)
+
+        rng = np.random.default_rng(3)
+        n, reps = 300, 150
+        actuels, anciens = [], []
+        for _ in range(reps):
+            y = rng.poisson(0.3, n).astype(float)
+            p = rng.random(n)
+            if y.sum() <= 0:
+                continue
+            v = f(y, p)
+            if v is None:
+                continue
+            actuels.append(v)
+            anciens.append(ancien(y, p))
+        # ⚠️⚠️ ON MESURE L'ECART, PAS LA MOYENNE ABSOLUE. Ma premiere version
+        # exigeait `|moyenne| < 1,2/n` sur 150 tirages : l'erreur-type du Gini
+        # sur un modele nul y est du meme ordre que le biais cherche, donc le
+        # test rougissait sur du BRUIT. A donnee fixee, en revanche, l'ecart
+        # entre les deux axes est DETERMINISTE -- c'est lui qui vaut 1/n, et
+        # il se mesure sans bruit. *Quand un estimateur est bruite, comparer
+        # deux estimateurs sur LES MEMES tirages retire le bruit commun.*
+        ecarts = np.asarray(anciens) - np.asarray(actuels)
+        moyen = float(ecarts.mean())
+        self.assertGreater(
+            moyen, 0.5 / n,
+            f'l ancien axe ne montre plus de biais (ecart moyen {moyen:.6f}) : '
+            f'cette fixture ne mesure plus rien')
+        self.assertLess(
+            abs(moyen - 1.0 / n), 0.35 / n,
+            f'le biais de l ancien axe vaut {moyen:.6f} au lieu de '
+            f'{1.0 / n:.6f} = 1/n : la forme du defaut a change, la prose qui '
+            f'l explique doit etre relue')
+        # ⚠️ ET LE SENS : l'ancien SUR-estimait toujours.
+        self.assertGreater(
+            float((ecarts > 0).mean()), 0.95,
+            'l ancien axe ne sur-estimait pas systematiquement : le defaut '
+            'decrit dans la prose n est pas celui que ce test mesure')
+
+    def test_GU11_le_contrat_publie_d_a6_est_INTACT(self):
+        """⚠️ La delegation porte la formule, pas le contrat : `None` quand la
+        prediction est constante, et l arrondi a 4 decimales."""
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+        )
+        f = AgentA6Comparaison.__dict__['_gini_lorenz'].__func__
+        rng = np.random.default_rng(9)
+        y = rng.poisson(0.3, 400).astype(float)
+        self.assertIsNone(f(y, np.ones(400)),
+                          'une prediction CONSTANTE ne rend plus None')
+        self.assertIsNone(f(np.zeros(400), rng.random(400)),
+                          'une cible sans sinistre ne rend plus None')
+        v = f(y, rng.random(400))
+        self.assertIsNotNone(v)
+        self.assertEqual(round(v, 4), v, "l arrondi a 4 decimales a disparu")
 
     def test_GU6b_le_compte_des_implementations_est_CELUI_MESURE(self):
         """⚠️ On re-derive le compte plutot que de croire la liste."""
