@@ -26,7 +26,7 @@ from core.conformite_reglementaire import (
 )
 from core.qualite_donnees import synthese_qualite_donnees
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
-from core.mapping_client import synthese_mapping
+from core.mapping_client import lignes_mapping, synthese_mapping
 from datetime import datetime
 from typing import Dict, List, NamedTuple, Optional, Tuple
 
@@ -777,6 +777,46 @@ def _bloc_elasticite_html(texte: str) -> str:
                       for l in texte.split("\n") if l.strip())
     return (f'<div class="raisons-plafond">\n'
             f'  <div class="raisons-titre">{TITRE_ELASTICITE}</div>\n'
+            f'    <ul>\n{puces}\n    </ul>\n'
+            f'</div>\n')
+
+
+TITRE_MAPPING_CLIENT = 'Mapping client (renommage du fichier avant tarification)'
+
+
+def mapping_publie(result_a6) -> tuple[str, ...]:
+    """Le diagnostic du mapping client, tel que le socle l'a rédigé.
+
+    ⚠️⚠️ IL N'ATTEIGNAIT QUE LE PROMPT — mesuré le 07/09/2026 sur les huit
+    surfaces d'un dossier à mapping fautif : 0 occurrence dans le Word et le
+    HTML de CE rapport, alors que l'Excel A6 et les trois formats du rapport
+    d'équipe la portaient. `_construire_contexte_tarif` verse la synthèse au
+    contexte remis au modèle, et c'est tout : le CAC lisait un modèle
+    « amputé » sans jamais lire la cause.
+      *Même asymétrie que la qualité des données avant `services/C12`, que
+      l'élasticité, et que les réserves d'A6. C'est la quatrième et dernière.*
+
+    ⚠️ LA SOURCE EST `core.lignes_mapping`, JAMAIS UNE RECONSTRUCTION. Le
+    prompt continue d'appeler `synthese_mapping` : les deux formes sortent de
+    la même liste, elles ne peuvent pas diverger.
+
+    Rend un tuple vide quand aucun mapping n'a été appliqué — le cas de la
+    plupart des dossiers, où ce rapport ne doit RIEN gagner.
+    """
+    return lignes_mapping((result_a6 or {}).get('rapport_mapping'))
+
+
+def _bloc_mapping_html(lignes: tuple) -> str:
+    """Le bloc mapping en HTML. Vide quand il n'y a rien à dire.
+
+    ⚠️ UNE PUCE PAR CONSTAT, et c'est la raison d'être de `lignes_mapping` :
+    la synthèse jointe fait jusqu'à sept phrases, qui en une seule puce
+    donneraient le « pavé » que `_bloc_qualite_html` interdit."""
+    if not lignes:
+        return ''
+    puces = '\n'.join(f'      <li>{l}</li>' for l in lignes if l)
+    return (f'<div class="raisons-plafond">\n'
+            f'  <div class="raisons-titre">{TITRE_MAPPING_CLIENT}</div>\n'
             f'    <ul>\n{puces}\n    </ul>\n'
             f'</div>\n')
 
@@ -2134,7 +2174,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
+{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
       {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
@@ -2591,6 +2631,22 @@ def export_word(
             _run(p, '⚠ ' + TITRE_ELASTICITE, bold=True, sz=10,
                  col=AR).add_break()
             for _ligne in [x.strip() for x in _el_w.split("\n") if x.strip()]:
+                _run(p, '   · ' + _ligne, sz=9, col=NR).add_break()
+
+        # ⚠️⚠️ LE MAPPING CLIENT, DANS LES DEUX FORMATS AUSSI — le dernier
+        # muet du module. Mesuré le 07/09/2026 sur un dossier a mapping
+        # fautif : 0 occurrence ici, contre l'Excel A6 et les trois formats du
+        # rapport d'equipe. Il n'atteignait que le CONTEXTE remis au modele
+        # (`_construire_contexte_tarif`), qui reste inchange : la synthese y
+        # part toujours, elle est desormais AUSSI rendue.
+        # ⚠️ Corriger un seul des deux formats aurait laisse la moitie du
+        # livrable signe publier un modele << ampute >> sans sa cause.
+        _map_w = mapping_publie(result_a6)
+        if _map_w:
+            p = doc.add_paragraph()
+            _run(p, '⚠ ' + TITRE_MAPPING_CLIENT, bold=True, sz=10,
+                 col=AR).add_break()
+            for _ligne in [x.strip() for x in _map_w if x and x.strip()]:
                 _run(p, '   · ' + _ligne, sz=9, col=NR).add_break()
 
         # ⚠️⚠️ LES RÉSERVES D'A6, DANS LES DEUX FORMATS AUSSI — et ce rapport

@@ -35,7 +35,7 @@ __all__ = [
     "MappingClient", "RapportMapping", "MappingIncoherent",
     "charger_mapping", "valider_mapping", "appliquer_mapping",
     "diagnostiquer_mapping",
-    "preparer_fichier_client", "synthese_mapping",
+    "preparer_fichier_client", "synthese_mapping", "lignes_mapping",
 ]
 
 
@@ -185,17 +185,25 @@ class RapportMapping:
                      if (self.correspondances or {}).get(k) in manquantes)
 
 
-def synthese_mapping(rapport: RapportMapping | None) -> str | None:
-    """SOURCE UNIQUE du libellé « mapping client appliqué », partagée par l'Excel
-    A6, le rapport équipe et le Word/HTML — même mécanisme que
-    synthese_qualite_donnees() et synthese_colonnes_plan_manquantes().
+def lignes_mapping(rapport: RapportMapping | None) -> tuple[str, ...]:
+    """Les phrases du mapping, UNE PAR CONSTAT, dans un ordre STABLE.
 
-    Retourne None si AUCUN mapping n'a été appliqué (chemin sans mapping = la
-    plupart des appels) : rien n'est alors affiché dans les livrables (rétro-compat).
-    Le préfixe ⚠ signale à l'appelant (Excel/équipe) qu'un point mérite AMBRE.
+    ⚠️⚠️ POURQUOI ELLE EXISTE — le dernier point du module tarification.
+    :func:`synthese_mapping` rendait `" ".join(lignes)`, c'est-à-dire UNE
+    SEULE ligne : un rendu en puces qui copierait l'idiome des blocs voisins
+    (`texte.split("\\n")`) produirait donc **une seule puce portant jusqu'à
+    HUIT phrases** (sept sur le dossier mesuré le 07/09/2026) — exactement
+    le « pavé » que `_bloc_qualite_html` interdit.
+      *Une source, deux formes.* Cette fonction porte la liste ;
+    :func:`synthese_mapping` la joint. Aucun appelant existant ne change, et
+    la chaîne rendue reste identique OCTET POUR OCTET — c'est mesuré, pas
+    supposé.
+
+    ⚠️ Rend un tuple VIDE quand il n'y a aucun mapping, jamais une ligne de
+    bruit — même contrat que :func:`reserves_arbitrage` côté rapport.
     """
     if rapport is None:
-        return None
+        return ()
     lignes = [
         f"Mapping client '{rapport.client}' → plan '{rapport.plan}' : "
         f"{rapport.n_renommees}/{rapport.n_colonnes_attendues} colonne(s) attendue(s) renommee(s)."
@@ -252,7 +260,25 @@ def synthese_mapping(rapport: RapportMapping | None) -> str | None:
             f"{len(rapport.colonnes_client_non_mappees)} colonne(s) client NON mappee(s) "
             f"(candidates a devenir facteurs) : "
             f"{', '.join(rapport.colonnes_client_non_mappees)}.")
-    return " ".join(lignes)
+    return tuple(lignes)
+
+
+def synthese_mapping(rapport: RapportMapping | None) -> str | None:
+    """SOURCE UNIQUE du libellé « mapping client appliqué », partagée par l'Excel
+    A6, le rapport équipe et le Word/HTML — même mécanisme que
+    synthese_qualite_donnees() et synthese_colonnes_plan_manquantes().
+
+    Retourne None si AUCUN mapping n'a été appliqué (chemin sans mapping = la
+    plupart des appels) : rien n'est alors affiché dans les livrables (rétro-compat).
+    Le préfixe ⚠ signale à l'appelant (Excel/équipe) qu'un point mérite AMBRE.
+
+    ⚠️ LES PHRASES VIVENT DANS :func:`lignes_mapping` ; ici on les JOINT. Un
+    lecteur qui veut des puces prend la liste, un lecteur qui veut une phrase
+    prend celle-ci — *jamais deux constructions du même texte, qui
+    divergeraient.*
+    """
+    lignes = lignes_mapping(rapport)
+    return " ".join(lignes) if lignes else None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
