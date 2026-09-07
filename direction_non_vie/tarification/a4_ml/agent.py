@@ -180,6 +180,9 @@ from core.conformite_reglementaire import (
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
     gini_texte, glm_de_reference, mesure_arrondie, mesure_texte,
     ratio_sur_apprentissage,
+    SEUIL_SURAPPRENTISSAGE_ALERTE,
+    SEUIL_SURAPPRENTISSAGE_AMBRE,
+    SEUIL_SURAPPRENTISSAGE_VERT,
 )
 # ⚠️ SOURCE UNIQUE. L'etat de l'elasticite etait defini ICI au lot L0 ;
 # il vit desormais dans `core/elasticite.py`, avec le catalogue
@@ -1246,21 +1249,55 @@ class AgentA4ML:
                             "Optuna : Gini du modèle optimisé non mesurable "
                             "(prédictions dégénérées) — modèle non retenu")
                     rmse_opt  = float(np.sqrt(np.mean((y_test - pred_opt)**2)))
-                    of_opt    = gini_opt / max(
-                        self._calculer_gini(y_train, np.maximum(m_opt.predict(X_train), 0)),
-                        1e-6
-                    )
+                    # ⚠️⚠️ CETTE ENTRÉE ÉTAIT CONSTRUITE À LA MAIN, ET ELLE
+                    # PORTAIT TROIS DÉFAUTS D'UNE SEULE CAUSE — trouvés le
+                    # 07/09/2026 en traçant `overfit_alerte` pour le constat
+                    # `A5-1`. Le code posait :
+                    #     of_opt = gini_opt / max(gini_train_opt, 1e-6)
+                    #     'overfit_ratio':  round(of_opt, 3)
+                    #     'overfit_alerte': bool(of_opt < 0.85)
+                    # soit (1) `Gini(test)/Gini(train)`, la RÉCIPROQUE de ce
+                    # que toutes les autres entrées du MÊME classement mettent
+                    # sous cette clé — donc `a6` en tirait sa note de
+                    # stabilité, 30 % du score de sélection, à l'envers ;
+                    # (2) un seuil `0.85` qui n'est même pas la réciproque
+                    # exacte de `1.15` (1/1,15 = 0,8696) ; et (3) ni `famille`
+                    # ni `recommandation`, alors que `a4:2481` lit
+                    # `c['recommandation']` SANS garde — ce qui faisait
+                    # échouer A4 en entier, par `KeyError`, dès que
+                    # `optuna_trials > 0`. **Mesuré par exécution : A4 rend
+                    # `success=False` et un classement VIDE.**
+                    #   *Une entrée écrite à la main à côté de la fabrique
+                    #   commune ne partage ni ses conventions ni ses clés ;
+                    #   et le défaut le plus visible — le plantage — masquait
+                    #   le plus grave, l'orientation.*
+                    gini_train_opt = self._calculer_gini(
+                        y_train, np.maximum(m_opt.predict(X_train), 0))
+                    of_opt = ratio_sur_apprentissage(gini_train_opt, gini_opt)
+                    alerte_opt = (None if of_opt is None
+                                  else of_opt > SEUIL_SURAPPRENTISSAGE_ALERTE)
 
                     # Remplacer l'entrée xgboost dans le classement
                     classement = [m for m in classement if m.get('modele') != 'xgboost']
                     classement.append({
                         'modele':         'xgboost_optuna',
+                        'famille':        _famille_modele_ml('xgboost_optuna'),
                         'gini_test':      round(gini_opt, 4),
-                        'gini_train':     round(gini_opt / max(of_opt, 1e-6), 4),
-                        'overfit_ratio':  round(of_opt, 3),
+                        # ⚠️ LE Gini D'ENTRAÎNEMENT EST CELUI QU'ON VIENT DE
+                        # MESURER. Il était RECONSTRUIT par `gini_opt / of_opt`
+                        # — une division dont le résultat était déjà connu, et
+                        # qui bornait son dénominateur à `1e-6`.
+                        'gini_train':     (None if gini_train_opt is None
+                                           else round(gini_train_opt, 4)),
+                        'overfit_ratio':  (None if of_opt is None
+                                           else round(of_opt, 3)),
                         'rmse_test':      round(rmse_opt, 4),
                         'mae_test':       round(float(np.mean(np.abs(y_test - pred_opt))), 4),
-                        'overfit_alerte': bool(of_opt < 0.85),
+                        'overfit_alerte': alerte_opt,
+                        'recommandation': ('⚠️ Sur-apprentissage non évaluable '
+                                           '(Gini non mesuré)' if alerte_opt is None
+                                           else '⚠️ Overfitting détecté' if alerte_opt
+                                           else '✅ Stable'),
                         'params_optuna':  best_params,
                     })
                     classement.sort(key=lambda x: (x['gini_test'] is not None,
@@ -2149,8 +2186,16 @@ class AgentA4ML:
         classement = []
 
         for nom, met in self.metriques.items():
+            # ⚠️ LE SEUIL EST NOMMÉ, ET IL VIT DANS LE SOCLE. Il était un
+            # littéral `1.15` ici, un `0.85` à l'entrée Optuna — sa réciproque
+            # APPROCHÉE, car 1/1,15 vaut 0,8696 — et deux autres bornes en
+            # littéraux dans H1, dans l'orientation INVERSE. Quatre nombres
+            # pour une seule propriété, dans deux orientations.
+            # *Deux seuils qui décident de la même chose ne peuvent pas vivre
+            # en littéraux dans deux fichiers.*
             overfit_alerte = (None if met['overfit_ratio'] is None
-                                      else met['overfit_ratio'] > 1.15)
+                              else met['overfit_ratio']
+                              > SEUIL_SURAPPRENTISSAGE_ALERTE)
 
             classement.append({
                 'modele':          nom,
@@ -2198,7 +2243,8 @@ class AgentA4ML:
                 'rmse_test':      _met_glm.get('rmse_test'),
                 'mae_test':       0,
                 'overfit_alerte': (None if _met_glm.get('overfit_ratio') is None
-                                   else _met_glm['overfit_ratio'] > 1.15),
+                                   else _met_glm['overfit_ratio']
+                                   > SEUIL_SURAPPRENTISSAGE_ALERTE),
                 'recommandation': '📊 Référence GLM',
             })
 
@@ -3279,8 +3325,11 @@ class AgentA4ML:
         Validation complète des hypothèses ML — 4 hypothèses.
 
         H1 — Absence d'overfitting
-             Ratio Gini test / Gini train ≥ 0.90 → pas d'overfitting ✅
-             Ratio < 0.80 → surapprentissage ❌
+             Ratio Gini train / Gini test ≤ 1.111 → pas d'overfitting ✅
+             Ratio > 1.25 → surapprentissage ❌
+             ⚠️ Orientation du socle (`ratio_sur_apprentissage`) depuis le
+             07/09/2026 : cette docstring annonçait `test / train`, la
+             RÉCIPROQUE. Les bornes sont les mêmes, transportées.
 
         H2 — Stabilité PSI réel (dérive train → test)
              PSI calculé sur les features réelles entre train et test.
@@ -3320,32 +3369,87 @@ class AgentA4ML:
             # ⚠️ Et `max(gini_train, 0.001)` bornait le dénominateur au lieu de
             # refuser : sur un Gini d'entraînement négatif ou nul, le ratio
             # explosait au lieu de se déclarer non mesurable.
-            ratio_of   = (gini_test / gini_train
-                          if gini_test is not None and gini_train is not None
-                          and gini_train > 0
-                          else None)
-            if ratio_of is None:
+            #
+            # ⚠️⚠️ ET IL CALCULAIT LA RÉCIPROQUE DU SOCLE — constat `A5-1`,
+            # volet nommage, corrigé le 07/09/2026. Cette ligne posait
+            # `gini_test / gini_train` quand :func:`ratio_sur_apprentissage`
+            # rend `gini_train / gini_test` et se déclare « SOURCE UNIQUE DE
+            # LA FORMULE ». C'était le DERNIER site du dépôt à diviser deux
+            # Gini à la main (relevé AST du 07/09 : 1 sur 1). Conséquence
+            # mesurée, sur trois lignes voisines du même rapport signé :
+            #     overfit=1.250                       <- train / test
+            #     Overfit ratio : 1.250               <- train / test
+            #     H1 Overfitting : AMBRE | ratio=0.8  <- test / train
+            #   *Deux écritures du même fait, sans que rien ne dise laquelle
+            #   se lit dans quel sens.*
+            #
+            # ⚠️ LA SÉVÉRITÉ NE BOUGE PAS, ET C'EST DÉLIBÉRÉ (arbitrage du
+            # 07/09, option « B-zéro »). Les seuils sont TRANSPORTÉS, pas
+            # rejoués : `test/train >= 0.90` s'écrit `train/test <= 1/0.90`.
+            # Vérifié sur 40 dossiers réels — **0 bascule**, 0 nouveau ROUGE,
+            # 0 conclusion changée — et sur une grille exhaustive des cas
+            # dégénérés : identique sur TOUTE entrée finie. La bande à deux
+            # côtés (le défaut de cause (d), lui, est réel : 18 dossiers sur
+            # 40 ont `Gini(test) > Gini(train)`) est une décision SÉPARÉE,
+            # suspendue à la mesure de dispersion d'échantillonnage de H1.
+            ratio_of = (ratio_sur_apprentissage(gini_train, gini_test)
+                        if gini_train is not None and gini_test is not None
+                        and gini_train > 0 and gini_test > 0 else None)
+
+            if gini_train is None or gini_test is None or gini_train <= 0:
                 h1_statut = "AMBRE"
-                h1_msg = ("Ratio Gini test/train NON MESURABLE : au moins un des deux "
+                h1_msg = ("Ratio Gini train/test NON MESURABLE : au moins un des deux "
                           "Ginis n'existe pas (aucun sinistre observé sur le jeu "
                           "concerné) → hypothèse H1 non évaluable ⚠️")
                 h1_conseil = ("Constituer un jeu de test qui contient des sinistres "
                               "(découpage temporel avec exposition suffisante) avant de "
                               "conclure sur le sur-apprentissage")
-            elif ratio_of >= 0.90:
-                h1_statut = "VERT"
-                h1_msg    = f"Ratio test/train = {ratio_of:.3f} ≥ 0.90 → Pas d'overfitting ✅"
-                h1_conseil= f"Le modèle {meilleur.get('modele','?')} généralise bien"
-            elif ratio_of >= 0.80:
+            elif gini_test <= 0:
+                # ⚠️ MÊME ARBITRAGE QU'EN A5-H2 (Selasse, 06/09) : le socle
+                # refuserait de diviser et rendrait « non mesurable » ; ici ce
+                # serait une régression. Un Gini de test ≤ 0 dit que le modèle
+                # ne discrimine pas sur son jeu d'évaluation — c'est un signal
+                # actuariel fort, il reste une ALERTE.
+                h1_statut = "ROUGE"
+                h1_msg    = (f"Gini de TEST = {gini_texte(gini_test)} ≤ 0 → le "
+                             f"modèle ne discrimine pas sur son jeu "
+                             f"d'évaluation ❌")
+                h1_conseil= ("Le rapport entraînement/test n'a pas de sens ici : "
+                             "reprendre le découpage ou les variables avant de "
+                             "conclure sur le sur-apprentissage")
+            elif ratio_of is None:
                 h1_statut = "AMBRE"
-                h1_msg    = f"Ratio test/train = {ratio_of:.3f} ∈ [0.80, 0.90] → Overfitting léger ⚠️"
+                h1_msg = ("Ratio Gini train/test NON MESURABLE (valeur non finie) "
+                          "→ hypothèse H1 non évaluable ⚠️")
+                h1_conseil = ("Vérifier les Ginis publiés par le classement avant "
+                              "de conclure sur le sur-apprentissage")
+            elif ratio_of <= SEUIL_SURAPPRENTISSAGE_VERT:
+                h1_statut = "VERT"
+                h1_msg    = (f"Gini train/test = {ratio_of:.3f} ≤ "
+                             f"{SEUIL_SURAPPRENTISSAGE_VERT:.3f} → "
+                             f"Pas d'overfitting ✅")
+                h1_conseil= f"Le modèle {meilleur.get('modele','?')} généralise bien"
+            elif ratio_of <= SEUIL_SURAPPRENTISSAGE_AMBRE:
+                h1_statut = "AMBRE"
+                h1_msg    = (f"Gini train/test = {ratio_of:.3f} ∈ ]"
+                             f"{SEUIL_SURAPPRENTISSAGE_VERT:.3f} ; "
+                             f"{SEUIL_SURAPPRENTISSAGE_AMBRE:.2f}] → "
+                             f"Overfitting léger ⚠️")
                 h1_conseil= "Augmenter la régularisation (lambda/alpha) · Réduire max_depth"
             else:
                 h1_statut = "ROUGE"
-                h1_msg    = f"Ratio test/train = {ratio_of:.3f} < 0.80 → Surapprentissage ❌"
+                h1_msg    = (f"Gini train/test = {ratio_of:.3f} > "
+                             f"{SEUIL_SURAPPRENTISSAGE_AMBRE:.2f} → "
+                             f"Surapprentissage ❌")
                 h1_conseil= "Réduire la complexité · Augmenter min_samples_leaf · Vérifier les données"
         else:
-            ratio_of, gini_test, gini_train = 1.0, 0.0, 0.0
+            # ⚠️⚠️ `1.0, 0.0, 0.0` ÉTAIT UN LITTÉRAL NEUTRE — cause (a), au
+            # milieu du bloc que ce lot corrigeait pour une autre raison. Sur
+            # un classement VIDE, H1 publiait `ratio = 1.0` (la stabilité
+            # PARFAITE) et deux Gini à `0.0` : trois mesures fabriquées pour
+            # un modèle qui n'existe pas. Le statut, lui, était honnête —
+            # ce qui rendait les trois chiffres d'autant plus crédibles.
+            ratio_of, gini_test, gini_train = None, None, None
             h1_statut  = "AMBRE"
             h1_msg     = "Classement vide — aucun modèle calibré"
             h1_conseil = "Vérifier la qualité des données d'entrée"
@@ -3505,7 +3609,11 @@ class AgentA4ML:
                 "statut":     h1_statut,
                 "message":    h1_msg,
                 "conseil":    h1_conseil,
-                "titre_graphique": f"{'✅' if h1_statut=='VERT' else '⚠️' if h1_statut=='AMBRE' else '❌'} Overfitting — Ratio test/train = {gini_texte(ratio_of, 3)}",
+                # ⚠️ LE LIBELLÉ SUIT LA GRANDEUR. Il disait « Ratio test/train »
+                # au-dessus d'un nombre qui vaut désormais `train/test` : une
+                # figure dont le titre décrit la réciproque de ce qu'elle
+                # montre est pire qu'une figure sans titre.
+                "titre_graphique": f"{'✅' if h1_statut=='VERT' else '⚠️' if h1_statut=='AMBRE' else '❌'} Overfitting — Gini train/test = {gini_texte(ratio_of, 3)}",
             },
             "h2_psi": {
                 # ⚠️⚠️ LA BRANCHE QUI GÈRE L'ABSENCE CONDUISAIT À DEUX SITES

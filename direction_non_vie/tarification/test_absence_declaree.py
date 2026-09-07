@@ -475,10 +475,17 @@ class TestHypothesesSansMesure(unittest.TestCase):
         self.assertNotIn("pas d'overfitting", h1.get('message', '').lower(), h1)
 
     def test_AD6b_H1_conclut_normalement_quand_les_DEUX_ginis_existent(self):
+        """⚠️ LE NOMBRE EPINGLE A CHANGE D'ORIENTATION, PAS LA PROPRIETE --
+        constat `A5-1`, 07/09/2026. H1 publiait `Gini(test)/Gini(train)` =
+        0,950 ; il publie desormais `Gini(train)/Gini(test)` = 1,053, la
+        RECIPROQUE, sur l'orientation du socle. **Le statut reste VERT sur
+        les memes deux Ginis** : ce test prouve exactement ce qu'il prouvait.
+        """
         h1 = _h1({'modele': 'ML_GBM', 'gini_test': 0.19, 'gini_train': 0.20,
                   'rmse_test': 0.74, 'overfit_ratio': 1.05})
         self.assertEqual(h1.get('statut'), 'VERT', h1)
-        self.assertIn('0.95', h1.get('message', ''), h1)
+        self.assertIn('1.053', h1.get('message', ''), h1)
+        self.assertNotIn('0.950', h1.get('message', ''), h1)
 
     def test_AD6c_un_gini_d_entrainement_NEGATIF_ne_produit_plus_de_ratio(self):
         """`max(gini_train, 0.001)` bornait le denominateur : le ratio

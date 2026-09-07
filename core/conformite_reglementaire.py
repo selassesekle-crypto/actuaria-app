@@ -1935,6 +1935,31 @@ AE_FENETRE_STRICTE = (0.95, 1.05)
 #: puis diverge.* Il est ici, avec les autres bandes ; `a6` l'importe.
 SEUIL_CV_INSTABLE = 0.10
 
+#: Les bornes du sur-apprentissage, TOUTES sur l'orientation de
+#: :func:`ratio_sur_apprentissage` — c'est-à-dire ``Gini(train) / Gini(test)``,
+#: qu'un ratio SUPÉRIEUR à 1 dénonce.
+#:
+#: ⚠️⚠️ ELLES VIVAIENT EN LITTÉRAUX, DANS DEUX ORIENTATIONS OPPOSÉES — constat
+#: ``A5-1``, volet nommage. `a4` décidait H1 sur ``Gini(test)/Gini(train) >=
+#: 0.90``, la RÉCIPROQUE de ce que rend cette fonction, laquelle se déclare
+#: pourtant « SOURCE UNIQUE DE LA FORMULE » vingt lignes plus bas. Le même
+#: rapport publiait donc, à trois lignes d'écart, ``Overfit ratio : 1.250`` et
+#: ``H1 Overfitting | ratio=0.800`` — deux écritures du MÊME fait, sans que
+#: rien ne dise laquelle se lit dans quel sens.
+#:   *Deux grandeurs réciproques ne peuvent pas porter le même libellé ; et
+#:   deux seuils qui décident de la même propriété ne peuvent pas vivre en
+#:   littéraux dans deux fichiers.*
+#:
+#: ⚠️ `VERT` et `ALERTE` NE COÏNCIDENT PAS, ET C'EST MESURÉ, PAS VOULU. H1
+#: cesse d'être vert au-delà de 1,1111 quand le tableau du classement n'alerte
+#: qu'au-delà de 1,15 : sur 40 dossiers réels, **1 tombe dans cet écart** et y
+#: reçoit « Overfitting léger » d'un côté, « OK » de l'autre. Les unifier
+#: déplacerait un statut publié : c'est une décision, pas un nettoyage — elle
+#: est nommée ici pour qu'on la prenne, au lieu de rester invisible.
+SEUIL_SURAPPRENTISSAGE_VERT = 1 / 0.90      # 1,1111 — au-delà, H1 n'est plus vert
+SEUIL_SURAPPRENTISSAGE_AMBRE = 1 / 0.80     # 1,2500 — au-delà, H1 est rouge
+SEUIL_SURAPPRENTISSAGE_ALERTE = 1.15        # le tableau du classement d'A4
+
 
 class EchecControleEffet(RuntimeError):
     """Le contrôle anti-fuite par l'effet n'a pas pu s'exécuter.
