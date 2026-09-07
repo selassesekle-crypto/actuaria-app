@@ -159,8 +159,35 @@ class TestA6Comparaison(unittest.TestCase):
         if bt.get('split') == SPLIT_WALK_FORWARD:
             wf = bt.get('walk_forward', [])
             self.assertGreater(len(wf), 0)
+            # ⚠️⚠️ CHAQUE FENÊTRE PORTE LES DEUX GINI — ajouté le 07/09/2026.
+            # Une fenêtre ne portait que `gini_recalibre`, un seul Gini, sans
+            # contrepartie d'apprentissage. L'auditeur indépendant recommande
+            # de mesurer le sur-apprentissage sur le walk-forward plutôt que
+            # sur un découpage unique : le découpage train/test mesure la
+            # généralisation à un rebrassage de la MÊME période, quand le
+            # risque d'un assureur est la généralisation à l'exercice SUIVANT.
+            #   *Rien ne lit encore `gini_train_recalibre`. Il est posé
+            #   maintenant parce qu'une série temporelle ne se reconstruit pas
+            #   après coup : le jour du remplacement, ce sera un changement de
+            #   score, pas une re-plomberie.*
+            # ⚠️ La clé doit EXISTER sur chaque fenêtre ; sa valeur peut être
+            # `None` si le Gini d'apprentissage n'est pas mesurable — une
+            # absence se déclare, elle ne se fabrique pas.
+            for _i, _w in enumerate(wf):
+                self.assertIn(
+                    'gini_train_recalibre', _w,
+                    f"la fenêtre {_i} ne porte pas son Gini d'apprentissage : "
+                    f"la série de l'écart train/test par exercice est perdue")
+            _mesures = [_w['gini_train_recalibre'] for _w in wf
+                        if _w.get('gini_train_recalibre') is not None]
+            self.assertGreater(
+                len(_mesures), 0,
+                "aucune fenêtre n'a de Gini d'apprentissage MESURÉ : la clé "
+                "existe mais elle est vide partout, ce qui ne vaut pas mieux "
+                "que son absence")
             print(f"    ST4 Walk-forward ✅ | {len(wf)} fenêtres | "
-                  f"A/E final={ae:.4f} | stabilité={bt.get('stabilite_wf','?')}")
+                  f"A/E final={ae:.4f} | stabilité={bt.get('stabilite_wf','?')} "
+                  f"| Gini train mesuré sur {len(_mesures)}/{len(wf)}")
         else:
             print(f"    ST4 Backtesting ✅ | A/E={ae:.4f} (split={bt.get('split','?')})")
 

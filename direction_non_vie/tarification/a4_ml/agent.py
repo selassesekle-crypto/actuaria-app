@@ -175,11 +175,15 @@ from core.charts_tarif import (
     glyphe_rag,
 )
 from core.conformite_reglementaire import (
+    statut_le_pire,
     BASE_GINI_UNITAIRE,
     construire_matrice_x,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
     gini_texte, glm_de_reference, mesure_arrondie, mesure_texte,
     ratio_sur_apprentissage,
+    intervalle_sur_apprentissage, surapprentissage_concluant,
+    IC_SURAPPRENTISSAGE_GRAINE, IC_SURAPPRENTISSAGE_TIRAGES,
+    STATUT_NON_CONCLUANT,
     SEUIL_SURAPPRENTISSAGE_ALERTE,
     SEUIL_SURAPPRENTISSAGE_AMBRE,
     SEUIL_SURAPPRENTISSAGE_VERT,
@@ -1601,6 +1605,20 @@ class AgentA4ML:
                     'modele_retenu': classement[0].get('modele','') if classement else '',
                     'gini_retenu': classement[0].get('gini_test') if classement else None,
                     'optuna_active': optuna_trials > 0 and OPTUNA_OK,
+                    # ⚠️⚠️ LA GRAINE ET LE NOMBRE DE TIRAGES VOYAGENT AVEC LE
+                    # DOSSIER, PAS SEULEMENT DANS LE CODE. H1 se conclut
+                    # désormais sur un intervalle BOOTSTRAP : « graine fixe »
+                    # était une propriété du code, pas du dossier archivé. Un
+                    # verdict produit par rééchantillonnage n'est
+                    # reproductible que si la graine et le nombre de tirages
+                    # sont écrits À CÔTÉ du résultat — comme `format_lu` et
+                    # `texte_origine` pour l'arrêté, comme la `provenance` de
+                    # chaque valeur réglementaire.
+                    #   *Sans eux, le jour où la graine change, personne ne
+                    #   pourra dire si un statut a bougé pour cette raison.*
+                    # Trouvé par l'auditeur indépendant, 07/09/2026.
+                    'ic_surapprentissage_tirages': IC_SURAPPRENTISSAGE_TIRAGES,
+                    'ic_surapprentissage_graine': IC_SURAPPRENTISSAGE_GRAINE,
                 },
             }
 
@@ -2045,6 +2063,20 @@ class AgentA4ML:
         else:
             overfit = ratio_sur_apprentissage(gini_train, gini_test)
 
+        # ⚠️⚠️ ET SON INTERVALLE, PARCE QU'UN RATIO PONCTUEL NE SUFFIT PAS.
+        # `overfit` est calculé sur UN découpage. Mesuré le 07/09/2026, 360
+        # tirages : à portefeuille STRICTEMENT inchangé — seul l'ordre des
+        # lignes change — le statut qu'on en tire bascule sur **37 %** des
+        # tirages. *Le module publie déjà ε avec son IC et refuse de conclure
+        # quand il enjambe zéro ; H1 était le seul endroit qui tranchait seul,
+        # sans son incertitude.*
+        # ⚠️ C'est ICI qu'il se calcule, et nulle part ailleurs : c'est le seul
+        # endroit où les prédictions existent encore. `_valider_modele_ml` ne
+        # reçoit que des scalaires — il lira l'intervalle, il ne peut pas le
+        # produire.
+        ic_overfit = intervalle_sur_apprentissage(
+            y_train, pred_train, y_test, pred_test)
+
         # RMSE pondéré par l'exposition — sur le comptage prédit (taux × expo)
         rmse_test = np.sqrt(
             np.average((y_test - pred_count_test)**2, weights=w_test)
@@ -2075,6 +2107,9 @@ class AgentA4ML:
             'gini_test':         (None if gini_test is None else round(float(gini_test), 4)),
             'base_gini':         base_gini,
             'overfit_ratio':     (None if overfit is None else round(float(overfit), 3)),
+            # ⚠️ L'incertitude VOYAGE avec la mesure. Separee d'elle, elle
+            # serait recalculee ailleurs — ou oubliee.
+            'overfit_ic':        ic_overfit,
             'rmse_train':        round(float(rmse_train), 4),
             'rmse_test':         round(float(rmse_test), 4),
             'mae_test':          round(float(mae_test), 4),
@@ -2203,6 +2238,7 @@ class AgentA4ML:
                 'gini_test':       met['gini_test'],
                 'gini_train':      met['gini_train'],
                 'overfit_ratio':   met['overfit_ratio'],
+                'overfit_ic':      met.get('overfit_ic'),
                 'rmse_test':       met['rmse_test'],
                 'mae_test':        met['mae_test'],
                 'overfit_alerte':  overfit_alerte,
@@ -2240,6 +2276,11 @@ class AgentA4ML:
                 # jamais 1.0 ni « stable ».
                 'gini_train':     _met_glm.get('gini_train'),
                 'overfit_ratio':  _met_glm.get('overfit_ratio'),
+                # ⚠️ L'IC de la reference GLM VOYAGE aussi : sans lui, H1 --
+                # qui evalue cette entree 32 fois sur 40 -- n aurait pas son
+                # incertitude, et la decision de ne plus trancher sur du bruit
+                # ne s appliquerait qu a un dossier sur cinq.
+                'overfit_ic':     _met_glm.get('overfit_ic'),
                 'rmse_test':      _met_glm.get('rmse_test'),
                 'mae_test':       0,
                 'overfit_alerte': (None if _met_glm.get('overfit_ratio') is None
@@ -3388,13 +3429,43 @@ class AgentA4ML:
             # rejoués : `test/train >= 0.90` s'écrit `train/test <= 1/0.90`.
             # Vérifié sur 40 dossiers réels — **0 bascule**, 0 nouveau ROUGE,
             # 0 conclusion changée — et sur une grille exhaustive des cas
-            # dégénérés : identique sur TOUTE entrée finie. La bande à deux
-            # côtés (le défaut de cause (d), lui, est réel : 18 dossiers sur
-            # 40 ont `Gini(test) > Gini(train)`) est une décision SÉPARÉE,
-            # suspendue à la mesure de dispersion d'échantillonnage de H1.
+            # dégénérés : identique sur TOUTE entrée finie.
+            #
+            # ⚠️⚠️ ET LA BANDE À DEUX CÔTÉS N'A PAS ÉTÉ CÂBLÉE — LA MESURE A
+            # TRANCHÉ CONTRE. Le défaut de cause (d) est réel (18 dossiers sur
+            # 40 ont `Gini(test) > Gini(train)`), mais la dispersion mesurée le
+            # 07/09/2026 — 360 tirages — a montré qu'AUCUN seuil fixe n'est
+            # calibrable : la largeur de l'intervalle varie d'un facteur ~15
+            # entre plans, et la borne du vert tombe DANS [q05 ; q95] sur 9
+            # cellules sur 9. Poser une seconde borne aurait multiplié les
+            # bascules sans gagner de signal.
+            #   *La réponse n'était pas un meilleur seuil : c'était de publier
+            #   l'incertitude et de refuser de conclure quand elle enjambe 1.*
+            # Voir plus bas la branche NON CONCLUANT.
             ratio_of = (ratio_sur_apprentissage(gini_train, gini_test)
                         if gini_train is not None and gini_test is not None
                         and gini_train > 0 and gini_test > 0 else None)
+            # ⚠️ L'INTERVALLE EST LU, PAS RECALCULÉ. Il se produit dans
+            # `_calculer_metriques`, seul endroit où les prédictions existent
+            # encore ; ici on n'a que des scalaires. Un `None` signifie qu'il
+            # n'a pas pu être établi — H1 conclut alors comme avant, sur le
+            # seul point, et le dit.
+            _h1_ic = meilleur.get('overfit_ic')
+            _h1_non_concluant = (surapprentissage_concluant(_h1_ic) is False)
+            # ⚠️⚠️ L'INTERVALLE SUIT LA CONCLUSION, PAS SEULEMENT SON ABSENCE.
+            # Mesuré le 07/09/2026 SUR LES OCTETS PUBLIÉS : sur les trois
+            # branches qui CONCLUENT — VERT, AMBRE, ROUGE — l'intervalle
+            # n'apparaissait nulle part dans le document. Les services
+            # impriment `ratio` et `message`, et seules les deux branches de
+            # non-conclusion le portaient.
+            #   *Une conclusion publiée sans son incertitude, exactement là
+            #   où elle compte le plus : la moitié « décision » livrée sans
+            #   la moitié « information », et alors les 88 % de
+            #   non-conclusion sont une perte sèche.*
+            # ⚠️ Vide quand l'intervalle n'existe pas — une absence ne se
+            # remplit pas d'une parenthèse creuse.
+            _ic_txt = ('' if _h1_ic is None
+                       else f" [IC {_h1_ic[0]:.3f} ; {_h1_ic[1]:.3f}]")
 
             if gini_train is None or gini_test is None or gini_train <= 0:
                 h1_statut = "AMBRE"
@@ -3423,22 +3494,84 @@ class AgentA4ML:
                           "→ hypothèse H1 non évaluable ⚠️")
                 h1_conseil = ("Vérifier les Ginis publiés par le classement avant "
                               "de conclure sur le sur-apprentissage")
+            elif _h1_non_concluant:
+                # ⚠️⚠️ LE CINQUIÈME CAS, REPRIS DE L'ÉLASTICITÉ. `ε` est publié
+                # avec son IC et refuse de conclure quand l'intervalle enjambe
+                # ZÉRO ; ici la valeur neutre est **1** — Gini(train) =
+                # Gini(test). Un intervalle qui l'enjambe ne dit pas dans quel
+                # sens le modèle s'écarte, et trancher dessus trancherait du
+                # bruit : mesuré le 07/09/2026, le statut de H1 bascule sur
+                # **37 %** des tirages à portefeuille STRICTEMENT inchangé.
+                #   *H1 était le seul endroit du module qui décidait seul, sur
+                #   un point, sans son incertitude.*
+                # ⚠️⚠️ LE QUATRIÈME MOT — ET IL A FALLU RÉPARER L'ÉCHELLE
+                # AVANT DE POUVOIR L'Y POSER. Ce bloc disait AMBRE, au motif
+                # qu'un jeton neuf ferait diverger tout ce qui lit ce champ.
+                # C'était vrai, et la mesure a montré où : les CINQ
+                # agrégateurs du module écrivaient
+                # `... else "VERT"` — un `NON CONCLUANT` y serait tombé et
+                # A4 aurait conclu « ✅ Modèle validé, prêt pour la
+                # production » sur 88 % des dossiers. *Le mot introduit pour
+                # cesser de mentir aurait menti plus fort qu'AMBRE, en
+                # silence et dans la direction rassurante.*
+                # Ils passent tous par `statut_le_pire`, qui ne certifie que
+                # sur des jetons connus comme verts — le mot est sûr.
+                # ⚠️ AMBRE reste faux ici : il dépense le budget d'alarme sur
+                # une NON-alarme, et à 88 % il détruit le signal des 12 % qui
+                # en méritent une. Aucune couleur d'une échelle à trois ne
+                # peut porter « je n'ai pas mesuré » — les trois sont des
+                # verdicts. C'est exactement pourquoi `mesure_texte` rend un
+                # MOT et non un nombre.
+                h1_statut = STATUT_NON_CONCLUANT
+                h1_msg    = (f"Gini train/test = {ratio_of:.3f}, intervalle "
+                             f"[{_h1_ic[0]:.3f} ; {_h1_ic[1]:.3f}] → NON "
+                             f"CONCLUANT : l'intervalle contient 1, le sens "
+                             f"de l'écart n'est pas établi ⚠️")
+                h1_conseil= ("Ne pas conclure sur le sur-apprentissage a partir "
+                             "de ce decoupage : lire la validation hors periode "
+                             "(walk-forward), qui porte la meme propriete sur "
+                             "plusieurs exercices")
+            elif _h1_ic is not None and _h1_ic[1] < 1.0:
+                # ⚠️⚠️ UN INTERVALLE ENTIÈREMENT SOUS 1 N'EST PAS UNE ABSENCE
+                # DE SUR-APPRENTISSAGE — c'est une ANOMALIE, et elle recevait
+                # « Pas d'overfitting ✅ · le modèle généralise bien ».
+                # `r < 1` de façon ÉTABLIE veut dire que le Gini de TEST
+                # dépasse celui d'ENTRAÎNEMENT : le modèle discrimine mieux
+                # sur des données qu'il n'a pas vues. Mesuré le 07/09/2026 :
+                # 1 dossier sur 40, `r = 0,748`, intervalle [0,647 ; 0,868] —
+                # 34 % d'écart, et le rapport signé le certifiait.
+                #   *Publier « pas de sur-apprentissage » sur une anomalie
+                #   établie, c'est affirmer une cause qu'on n'a pas mesurée —
+                #   `MES-1` sous une autre forme, au VERT plutôt qu'au ROUGE.*
+                # ⚠️ Le côté (d) de la grandeur se dit donc ICI, sans bande et
+                # sans seuil : c'est l'INTERVALLE qui établit l'anomalie, pas
+                # un nombre choisi.
+                h1_statut = "AMBRE"
+                h1_msg    = (f"Gini train/test = {ratio_of:.3f}, intervalle "
+                             f"[{_h1_ic[0]:.3f} ; {_h1_ic[1]:.3f}] → le modèle "
+                             f"discrimine MIEUX hors échantillon qu'en "
+                             f"apprentissage, de façon établie — anomalie à "
+                             f"instruire ⚠️")
+                h1_conseil= ("Ce n'est pas du sur-apprentissage : verifier le "
+                             "decoupage, une fuite possible vers le jeu de "
+                             "test, ou une difference de composition entre les "
+                             "deux echantillons")
             elif ratio_of <= SEUIL_SURAPPRENTISSAGE_VERT:
                 h1_statut = "VERT"
-                h1_msg    = (f"Gini train/test = {ratio_of:.3f} ≤ "
+                h1_msg    = (f"Gini train/test = {ratio_of:.3f}{_ic_txt} ≤ "
                              f"{SEUIL_SURAPPRENTISSAGE_VERT:.3f} → "
                              f"Pas d'overfitting ✅")
                 h1_conseil= f"Le modèle {meilleur.get('modele','?')} généralise bien"
             elif ratio_of <= SEUIL_SURAPPRENTISSAGE_AMBRE:
                 h1_statut = "AMBRE"
-                h1_msg    = (f"Gini train/test = {ratio_of:.3f} ∈ ]"
+                h1_msg    = (f"Gini train/test = {ratio_of:.3f}{_ic_txt} ∈ ]"
                              f"{SEUIL_SURAPPRENTISSAGE_VERT:.3f} ; "
                              f"{SEUIL_SURAPPRENTISSAGE_AMBRE:.2f}] → "
                              f"Overfitting léger ⚠️")
                 h1_conseil= "Augmenter la régularisation (lambda/alpha) · Réduire max_depth"
             else:
                 h1_statut = "ROUGE"
-                h1_msg    = (f"Gini train/test = {ratio_of:.3f} > "
+                h1_msg    = (f"Gini train/test = {ratio_of:.3f}{_ic_txt} > "
                              f"{SEUIL_SURAPPRENTISSAGE_AMBRE:.2f} → "
                              f"Surapprentissage ❌")
                 h1_conseil= "Réduire la complexité · Augmenter min_samples_leaf · Vérifier les données"
@@ -3449,7 +3582,12 @@ class AgentA4ML:
             # PARFAITE) et deux Gini à `0.0` : trois mesures fabriquées pour
             # un modèle qui n'existe pas. Le statut, lui, était honnête —
             # ce qui rendait les trois chiffres d'autant plus crédibles.
-            ratio_of, gini_test, gini_train = None, None, None
+            # ⚠️ `_h1_ic` SE POSE ICI AUSSI. Il était défini dans la seule
+            # branche `if classement:` et lu par le dictionnaire de sortie,
+            # commun aux deux : sur un classement VIDE la fonction levait
+            # `UnboundLocalError` — la panne, pas l'absence. *Une variable
+            # publiée doit exister sur TOUS les chemins qui la publient.*
+            ratio_of, gini_test, gini_train, _h1_ic = None, None, None, None
             h1_statut  = "AMBRE"
             h1_msg     = "Classement vide — aucun modèle calibré"
             h1_conseil = "Vérifier la qualité des données d'entrée"
@@ -3594,7 +3732,14 @@ class AgentA4ML:
             logger.debug(f"H4 calibration échouée : {e_cal}")
 
         statuts = [h1_statut, h2_statut, h3_statut, h4_statut]
-        statut_global = "ROUGE" if "ROUGE" in statuts else "AMBRE" if "AMBRE" in statuts else "VERT"
+        # ⚠️⚠️ LA BRANCHE TERMINALE ETAIT LE CAS LE PLUS FAVORABLE. Cette
+        # ligne rendait VERT sur TOUT jeton qui n est ni ROUGE ni AMBRE --
+        # un quatrieme mot, une faute de frappe, un None. Soit
+        # << Modele valide, pret pour la production >> dans un document
+        # signe. *Un defaut pose dans la direction rassurante.*
+        # Trouve par l auditeur independant le 07/09/2026 ; le releve AST
+        # a montre la MEME ligne dans les quatre agents.
+        statut_global = statut_le_pire(statuts)
         conclusion = {
             "VERT":  f"✅ Modèle validé — {classement[0].get('modele','?') if classement else '?'} prêt pour la production",
             "AMBRE": "⚠️ Modèle utilisable avec précautions — vérifier les points signalés",
@@ -3604,6 +3749,10 @@ class AgentA4ML:
         return {
             "h1_overfitting": {
                 "ratio":      (None if ratio_of is None else round(ratio_of, 4)),
+                # ⚠️ L'incertitude est PUBLIEE a cote de la mesure, jamais
+                # separee d'elle : c'est ce qui permet a l'actuaire de juger
+                # lui-meme, comme pour l'IC de l'elasticite.
+                "ratio_ic":   _h1_ic,
                 "gini_test":  (None if gini_test is None else round(gini_test, 4)),
                 "gini_train": (None if gini_train is None else round(gini_train, 4)),
                 "statut":     h1_statut,

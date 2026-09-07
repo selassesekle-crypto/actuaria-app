@@ -24,6 +24,7 @@ from __future__ import annotations
 from core.charts_tarif import glyphe_rag, FOND_CLAIR, couleur_rag
 import io, logging, re
 from core.conformite_reglementaire import (
+    statut_le_pire,
     gini_texte, gini_arrondi,
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
@@ -141,16 +142,27 @@ def _statut_global(statuts: List[str]) -> str:
     Learning est facultatif) n'est pas une anomalie. « NON DÉTERMINÉ », si :
     un agent qui a tourné sans se prononcer PLAFONNE le consolidé à AMBRE —
     on ne certifie pas VERT sur un silence.
+
+    ⚠️⚠️ ET LE `return 'VERT'` TERMINAL ÉTAIT LE MÊME DÉFAUT, D'UN CRAN PLUS
+    HAUT — corrigé le 07/09/2026. Cette cascade traitait explicitement
+    `STATUT_NON_DETERMINE`, mais tout AUTRE jeton inconnu — un quatrième mot,
+    une faute de frappe — tombait dans le `VERT` final. *Une échelle dont la
+    branche terminale est le cas le plus favorable est un littéral neutre
+    déguisé en logique.* La décision descend désormais dans
+    :func:`core.conformite_reglementaire.statut_le_pire`, qui ne rend `VERT`
+    que si TOUS les jetons sont connus comme verts.
+      ⚠️ Le filtrage de `STATUT_NON_FOURNI` reste ICI, et c'est délibéré :
+      c'est la seule absence LÉGITIME — un agent facultatif qu'on n'a pas
+      lancé. Elle se filtre au site, où on sait qu'elle est légitime, jamais
+      dans l'agrégateur, qui ne peut pas le savoir.
     """
     vus = [s.upper() for s in statuts if s]
     connus = [s for s in vus if s != STATUT_NON_FOURNI]
     if not connus:
         return STATUT_NON_DETERMINE
-    if 'ROUGE' in connus:
-        return 'ROUGE'
-    if 'AMBRE' in connus or STATUT_NON_DETERMINE in connus:
+    if STATUT_NON_DETERMINE in connus:
         return 'AMBRE'
-    return 'VERT'
+    return statut_le_pire(connus)
 
 
 def _collecter_statuts(results: Dict[str, Dict]) -> Dict[str, str]:

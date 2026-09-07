@@ -127,11 +127,12 @@ from core.charts_tarif import (
     glyphe_rag,
 )
 from core.conformite_reglementaire import (
+    statut_le_pire,
     BASE_GINI_COMPTAGE, BASE_GINI_COUT_MOYEN, BASE_GINI_UNITAIRE,
     construire_matrice_x,
     statut_anti_selection, synthese_anti_selection, synthese_gini_non_mesure,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
-    gini_texte, ratio_sur_apprentissage,
+    gini_texte, ratio_sur_apprentissage, intervalle_sur_apprentissage,
     meilleure_rejetee, phrase_puissance_selection,
 )
 from core.plan_tarifaire import (
@@ -1123,7 +1124,9 @@ class AgentA3GLM:
         # `np.asarray` accepte les deux natures, et n'en suppose aucune.
         gini = self._calculer_gini(df_test[col_freq].values,
                                    np.asarray(pred_test))
-        gini_train, overfit_ratio = self._stabilite_train(modele_final, gini)
+        gini_train, overfit_ratio, overfit_ic = self._stabilite_train(
+            modele_final, gini, df_test[col_freq].values,
+            np.asarray(pred_test))
 
         # RMSE sur le test
         rmse = np.sqrt(mean_squared_error(
@@ -1148,6 +1151,7 @@ class AgentA3GLM:
                                  if gini_train is not None else None),
             'overfit_ratio':    (round(overfit_ratio, 4)
                                  if overfit_ratio is not None else None),
+            'overfit_ic':       overfit_ic,
             # ⚠️ BASE MESURÉE : `predict(X_test, offset=offset_test)` incorpore
             # l'exposition — le tri se fait sur un COMPTAGE (constat `a4/C10`).
             'base_gini':        BASE_GINI_COMPTAGE,
@@ -1536,7 +1540,10 @@ class AgentA3GLM:
         gini = self._calculer_gini(
             y_sev_test.values, np.asarray(pred_test)
         ) if nb_sin_test > 0 else None
-        gini_train, overfit_ratio = self._stabilite_train(modele_final, gini)
+        gini_train, overfit_ratio, overfit_ic = self._stabilite_train(
+            modele_final, gini,
+            y_sev_test.values if nb_sin_test > 0 else None,
+            np.asarray(pred_test) if nb_sin_test > 0 else None)
 
         metriques = {
             'aic':              round(float(modele_final.aic), 2),
@@ -1564,6 +1571,7 @@ class AgentA3GLM:
                                  if gini_train is not None else None),
             'overfit_ratio':    (round(overfit_ratio, 4)
                                  if overfit_ratio is not None else None),
+            'overfit_ic':       overfit_ic,
             # ⚠️ BASE MESURÉE : `predict(X_test)` SANS offset, sur les sinistrés
             # seuls — le tri se fait sur un COÛT MOYEN.
             'base_gini':        BASE_GINI_COUT_MOYEN,
@@ -1882,8 +1890,11 @@ class AgentA3GLM:
                 f"d'une absence de pouvoir discriminant.")
             gini_tw = None
 
-        gini_train_tw, overfit_ratio_tw = self._stabilite_train(
-            modele_final, gini_tw)
+        gini_train_tw, overfit_ratio_tw, overfit_ic_tw = (
+            self._stabilite_train(
+                modele_final, gini_tw,
+                df_test[col_target_tweedie].values,
+                np.asarray(pred_test, dtype=float)))
 
         metriques = {
             'aic':              round(float(modele_final.aic), 2),
@@ -1896,6 +1907,7 @@ class AgentA3GLM:
                                  if gini_train_tw is not None else None),
             'overfit_ratio':    (round(float(overfit_ratio_tw), 4)
                                  if overfit_ratio_tw is not None else None),
+            'overfit_ic':       overfit_ic_tw,
             # ⚠️ BASE MESURÉE : `predict(X_test)` SANS offset — le tri se fait
             # sur une prédiction UNITAIRE, hors exposition.
             'base_gini':        BASE_GINI_UNITAIRE,
@@ -2115,7 +2127,8 @@ class AgentA3GLM:
     # MÉTRIQUES
     # ══════════════════════════════════════════════════════════════════════════
 
-    def _stabilite_train(self, modele, gini_test):
+    def _stabilite_train(self, modele, gini_test, y_test=None,
+                         pred_test=None):
         """Gini d'ENTRAÎNEMENT et ratio de sur-apprentissage du GLM.
 
         ⚠️⚠️ CE RATIO ÉTAIT FABRIQUÉ. A6 posait ``overfit_ratio: 1.0`` pour
@@ -2145,9 +2158,18 @@ class AgentA3GLM:
                 f"[A3] Stabilité NON MESURÉE ({type(exc).__name__}: {exc}) — "
                 f"publiée à None, jamais à 1.0 : un ratio fabriqué à 1.0 est "
                 f"le meilleur score de stabilité possible chez A6.")
-            return None, None
+            return None, None, None
         gini_train = self._calculer_gini(y_train, mu_train)
-        return gini_train, ratio_sur_apprentissage(gini_train, gini_test)
+        # ⚠️⚠️ ET SON INTERVALLE, PARCE QUE C'EST ICI QU'IL PEUT SE CALCULER.
+        # H1 d'A4 se déclare NON CONCLUANT quand l'intervalle du ratio enjambe
+        # 1 — mais sur les 40 dossiers mesurés le 07/09/2026, `classement[0]`
+        # est **32 fois sur 40** la référence GLM d'A3, qui ne passe PAS par
+        # `a4._calculer_metriques`. Sans cette ligne, la décision de ne plus
+        # trancher sur du bruit ne s'appliquerait qu'à un dossier sur cinq.
+        #   *Un correctif posé sur le chemin minoritaire est décoratif : il
+        #   faut le poser là où la grandeur est réellement produite.*
+        ic = intervalle_sur_apprentissage(y_train, mu_train, y_test, pred_test)
+        return gini_train, ratio_sur_apprentissage(gini_train, gini_test), ic
 
     def _calculer_gini(
         self,
@@ -3340,7 +3362,14 @@ class AgentA3GLM:
             h5_conseil = "Sur-dispersion forte — NegBin ou variables manquantes"
 
         statuts = [h1_statut, h2_statut, h3_statut, h4_statut, h5_statut]
-        statut_global = "ROUGE" if "ROUGE" in statuts else "AMBRE" if "AMBRE" in statuts else "VERT"
+        # ⚠️⚠️ LA BRANCHE TERMINALE ETAIT LE CAS LE PLUS FAVORABLE. Cette
+        # ligne rendait VERT sur TOUT jeton qui n est ni ROUGE ni AMBRE --
+        # un quatrieme mot, une faute de frappe, un None. Soit
+        # << Modele valide, pret pour la production >> dans un document
+        # signe. *Un defaut pose dans la direction rassurante.*
+        # Trouve par l auditeur independant le 07/09/2026 ; le releve AST
+        # a montre la MEME ligne dans les quatre agents.
+        statut_global = statut_le_pire(statuts)
         conclusion = {
             "VERT":  "✅ GLM validé — 5 hypothèses satisfaites (distribution, homoscédasticité, Gini, stabilité, déviance)",
             "AMBRE": "⚠️ GLM utilisable avec précautions — documenter les points signalés",

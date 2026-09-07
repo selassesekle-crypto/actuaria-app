@@ -112,6 +112,7 @@ from core.charts_tarif import FOND_SOMBRE, couleur_rag, couleur_texte_rag, glyph
 # ⚠️ LE Gini DU SOCLE — une seule formule pour tout le dépôt (lot 3, puis 4).
 from core.validation_tarif import gini_lorenz as gini_socle
 from core.conformite_reglementaire import (
+    statut_le_pire,
     agreger_controle_effet, avertissement_walk_forward,
     ArbitrageImpossible, message_arbitrage_impossible,
     doit_refuser_arbitrage,
@@ -2033,6 +2034,31 @@ class AgentA6Comparaison:
                     _est_freq = plan is not None and col_cible == plan.cible_frequence
                     gini_wf = self._gini_lorenz(
                         y_te, pred_te, expo=w_te if _est_freq else None)
+                    # ⚠️⚠️ ET SA CONTREPARTIE D'APPRENTISSAGE, POSÉE ICI ALORS
+                    # QUE PERSONNE NE LA LIT ENCORE. Une fenêtre ne portait que
+                    # `gini_recalibre` — un seul Gini. L'auditeur indépendant a
+                    # recommandé de mesurer le sur-apprentissage sur le
+                    # walk-forward plutôt que sur un découpage unique : le
+                    # découpage train/test mesure la généralisation à un
+                    # rebrassage de la MÊME période, quand le risque d'un
+                    # assureur est la généralisation à l'exercice SUIVANT.
+                    #   *Le jour où ce remplacement se fera, ce sera un
+                    #   changement de score et non une re-plomberie — et on
+                    #   aura la série temporelle de l'écart, que personne ne
+                    #   peut reconstruire après coup.*
+                    # Coût : une prédiction de plus par fenêtre, sur un modèle
+                    # DÉJÀ réajusté et des données d'entraînement déjà en main.
+                    try:
+                        _pred_tr = np.maximum(modele_wf.predict(X_tr), 0)
+                        gini_train_wf = self._gini_lorenz(
+                            y_tr, _pred_tr, expo=w_tr if _est_freq else None)
+                    except Exception as e_gtr:                 # noqa: BLE001
+                        # ⚠️ Une absence se déclare, elle ne se fabrique pas :
+                        # `None`, jamais un zéro ni une recopie du Gini de test.
+                        logger.debug(
+                            f"Gini d'apprentissage WF {annee_t} non mesuré : "
+                            f"{type(e_gtr).__name__}: {e_gtr}")
+                        gini_train_wf = None
                     # Accumulation lift (ajout D) — mêmes unités que le Gini.
                     _obs_lift = np.asarray(y_te, dtype=float)
                     if _est_freq_cible and w_te is not None:
@@ -2079,6 +2105,9 @@ class AgentA6Comparaison:
                 'n_sinistres_test':   int((df_te[col_cible] > 0).sum()),
                 'ae_ratio':           ae,
                 'gini_recalibre':     gini_wf,
+                # ⚠️ La contrepartie d'apprentissage VOYAGE avec elle : separee,
+                # elle serait recalculee ailleurs -- ou jamais.
+                'gini_train_recalibre': gini_train_wf,
                 'modele_recalibre':   _modele_reel_recalibre,
                 'modele_recalibre_fidele': _recalibration_est_fidele,
                 'statut':             (
@@ -3811,7 +3840,14 @@ class AgentA6Comparaison:
             c3_conseil= "Revoir la sélection — le modèle retenu n'est pas le meilleur"
 
         statuts = [c1_statut, c2_statut, c3_statut]
-        statut_global = "ROUGE" if "ROUGE" in statuts else "AMBRE" if "AMBRE" in statuts else "VERT"
+        # ⚠️⚠️ LA BRANCHE TERMINALE ETAIT LE CAS LE PLUS FAVORABLE. Cette
+        # ligne rendait VERT sur TOUT jeton qui n est ni ROUGE ni AMBRE --
+        # un quatrieme mot, une faute de frappe, un None. Soit
+        # << Modele valide, pret pour la production >> dans un document
+        # signe. *Un defaut pose dans la direction rassurante.*
+        # Trouve par l auditeur independant le 07/09/2026 ; le releve AST
+        # a montre la MEME ligne dans les quatre agents.
+        statut_global = statut_le_pire(statuts)
         conclusion = {
             # ⚠️ `nom_prod`, PAS `modele_production` : le second est le DICT du
             # modèle (`classement[0]`), et l'interpoler publiait sa

@@ -3049,6 +3049,74 @@ def source_exposition(expo_contrat, expo_appelant):
 GINI_ABSENT = 'ABSENT'
 GINI_NON_MESURE = 'NON_MESURE'
 
+#: ⚠️⚠️ LE QUATRIÈME MOT DE L'ÉCHELLE DES STATUTS — et il a fallu réparer
+#: l'échelle avant de pouvoir l'y poser.
+#:
+#: `VERT / AMBRE / ROUGE` sont trois VERDICTS SUR LE MODÈLE. Aucun ne peut
+#: porter « je n'ai pas mesuré » : c'est exactement pourquoi
+#: :func:`mesure_texte` rend un MOT et non un nombre — aucun nombre ne peut
+#: dire « non mesuré ». Le problème est le même d'un cran plus haut, et il
+#: appelle la même réponse. *Trouvé par l'auditeur indépendant le 07/09/2026.*
+#:
+#: ⚠️ IL NE SE CONFOND PAS AVEC « NON MESURABLE ». Deux causes, deux actions
+#: du client : `NON MESURABLE` dit qu'un des deux Ginis n'existe pas — il faut
+#: fournir un jeu de test qui contient des sinistres ; `NON_CONCLUANT` dit que
+#: les deux existent et que l'intervalle enjambe la valeur neutre — il faut
+#: plus de contrats. Les fondre perdrait une distinction que le dépôt possède
+#: déjà ailleurs (:mod:`core.elasticite` en porte cinq, pour cette raison).
+STATUT_NON_CONCLUANT = 'NON CONCLUANT'
+
+
+def statut_le_pire(statuts) -> str:
+    """Le pire de plusieurs statuts — et JAMAIS `VERT` sur un jeton inconnu.
+
+    ⚠️⚠️ CE QUE CETTE FONCTION REMPLACE, ET POURQUOI C'EST UN DÉFAUT DE LA
+    MÊME FAMILLE QUE `.get(clé, 0)`. Les cinq agrégateurs du module écrivaient
+    tous la même ligne :
+
+        "ROUGE" if "ROUGE" in statuts else "AMBRE" if "AMBRE" in statuts
+        else "VERT"
+
+    La branche TERMINALE est le cas le plus FAVORABLE. Tout jeton qui n'est ni
+    `ROUGE` ni `AMBRE` — un quatrième mot, une faute de frappe, une clé absente
+    devenue `None` — y tombe et ressort **VERT**, c'est-à-dire « ✅ Modèle
+    validé, prêt pour la production » dans un document signé.
+      *Une échelle dont le défaut est le cas favorable est un littéral neutre
+      déguisé en logique, et il se pose dans la direction rassurante — celle
+      qui ne se remarque pas.*
+
+    ⚠️ LA FORME JUSTE NE REND `VERT` QUE SUR DES JETONS CONNUS COMME VERT. Tout
+    le reste plafonne à `AMBRE` : c'est la règle que le rapport d'équipe
+    appliquait déjà à son propre niveau — *« un agent qui a tourné sans se
+    prononcer PLAFONNE le consolidé à AMBRE — on ne certifie pas VERT sur un
+    silence »*. Elle est ici pour tous.
+
+    ⚠️ Une liste VIDE ne vaut pas `VERT` non plus : elle rend
+    :data:`STATUT_NON_CONCLUANT`. Rien n'a été agrégé, donc rien n'est établi.
+
+    ⚠️⚠️ ET UN ÉLÉMENT `None` N'EST PAS ÉCARTÉ — le trou que ma première
+    version portait. Elle filtrait `if s`, donc `['VERT', None]` rendait
+    **VERT** : un statut manquant devenait une certification, c'est-à-dire
+    exactement le défaut que cette fonction existe pour fermer, survivant
+    dans le correctif. Un `None` ici veut dire « cette hypothèse n'a pas de
+    statut », et on ne certifie pas sur une absence.
+      *L'appelant qui a une absence LÉGITIME — un agent non lancé, par
+      exemple — la filtre AVANT d'appeler : c'est un choix qui se voit au
+      site, pas une indulgence cachée dans l'agrégateur.*
+    """
+    elements = list(statuts or [])
+    if not elements:
+        return STATUT_NON_CONCLUANT
+    vus = [str(s).strip().upper() if s is not None else None
+           for s in elements]
+    if 'ROUGE' in vus:
+        return 'ROUGE'
+    if 'AMBRE' in vus:
+        return 'AMBRE'
+    if all(s == 'VERT' for s in vus):
+        return 'VERT'
+    return 'AMBRE'
+
 
 #: Le mot unique de l'absence de mesure, dans tout livrable de tarification.
 #: ⚠️ Il vit ICI et nulle part ailleurs : deux orthographes dans deux
@@ -3133,6 +3201,112 @@ def ratio_sur_apprentissage(gini_train, gini_test):
     if gini_test <= 0:
         return None
     return gini_train / gini_test
+
+
+#: Nombre de rééchantillonnages pour l'intervalle du ratio de
+#: sur-apprentissage, et la graine qui le rend REPRODUCTIBLE.
+#:
+#: ⚠️⚠️ LA GRAINE EST FIXE, ET C'EST LA CONDITION POUR QUE LE VERDICT NE SOIT
+#: PAS TIRÉ AU SORT. Un intervalle dont les bornes changent d'une exécution à
+#: l'autre remplacerait un verdict instable par un verdict instable plus cher
+#: — le reproche exact que l'auditeur indépendant a fait à l'option « seuil
+#: relatif à la dispersion ». Ici, deux exécutions sur les mêmes données
+#: rendent le même intervalle.
+#: ⚠️⚠️ 200 ET NON 1 000 — ARBITRÉ PAR LA MESURE, CONTRE UNE RECOMMANDATION.
+#: L'auditeur indépendant demandait 1 000 tirages : « le q05 de 200 tirages est
+#: la 10e statistique d'ordre, dont la variabilité propre n'est pas
+#: négligeable, et votre règle est un test de FRANCHISSEMENT ». L'argument est
+#: juste en théorie. Mesuré sur 7 cas placés délibérément à la frontière —
+#: dont un dont la borne basse tombe à **1,0047**, soit 0,005 au-dessus du
+#: seuil — le verdict est **identique 7 fois sur 7**, et les bornes ne bougent
+#: que de ~0,006 entre 200 et 1 000.
+#: ⚠️ Et le coût, lui, n'était pas supposé bon marché : il l'est. Mesuré,
+#: 1 000 tirages coûtent **38 s par modèle à n = 2 000 et 169 s à n = 8 000**,
+#: soit 5 à 22 minutes par dossier pour les huit modèles. Le rééchantillonnage
+#: crée des ex aequo par construction, ce qui réveille le lissage des paliers
+#: du socle — la boucle qui, sur des prédictions continues, ne tourne jamais.
+#:   *Payer cinq fois plus cher pour un verdict qui ne change pas n'achète
+#:   rien ; et le remède serait de recalculer le Gini hors du socle, c'est-à-
+#:   dire le défaut que ce chantier ferme.*
+IC_SURAPPRENTISSAGE_TIRAGES = 200
+IC_SURAPPRENTISSAGE_GRAINE = 20260907
+
+
+def intervalle_sur_apprentissage(y_train, pred_train, y_test, pred_test,
+                                 tirages: int = IC_SURAPPRENTISSAGE_TIRAGES,
+                                 graine: int = IC_SURAPPRENTISSAGE_GRAINE):
+    """L'intervalle [q05 ; q95] du ratio de sur-apprentissage, ou ``None``.
+
+    ⚠️⚠️ POURQUOI IL EXISTE. `ratio_sur_apprentissage` rend UN nombre, calculé
+    sur UN découpage. Mesuré le 07/09/2026 sur 360 tirages : à portefeuille
+    STRICTEMENT inchangé — mêmes contrats, mêmes sinistres, seul l'ordre des
+    lignes change — le statut qu'on en tire bascule sur **37 %** des tirages,
+    et la borne du vert tombe DANS l'intervalle [q05 ; q95] sur 9 cellules
+    sur 9. *Un ratio ponctuel sans son incertitude est exactement ce que le
+    module a retiré ailleurs* — voir :func:`core.elasticite.estimer_elasticite`,
+    qui publie ε avec son IC et refuse de conclure quand il enjambe zéro.
+
+    ⚠️ CE QU'IL MESURE, ET CE QU'IL NE MESURE PAS. On rééchantillonne les
+    LIGNES d'évaluation à modèle FIXE : c'est la dispersion due au jeu sur
+    lequel on mesure, celle qui domine quand le test est petit. Elle
+    n'inclut PAS la variabilité de RÉ-AJUSTEMENT (refit sur un autre
+    découpage), qui demanderait de recalibrer des dizaines de fois par
+    dossier. **L'intervalle rendu est donc une borne INFÉRIEURE de la vraie
+    dispersion**, et c'est dit plutôt que tu : un H1 déclaré non concluant
+    l'est à coup sûr ; un H1 qui conclut peut encore l'être à tort.
+
+    Rend ``None`` dès qu'un des deux Ginis n'est pas mesurable sur
+    l'échantillon complet — le contrat d'absence de
+    :func:`ratio_sur_apprentissage`, dont cette fonction est le pendant.
+    """
+    import numpy as np
+
+    if any(x is None for x in (y_train, pred_train, y_test, pred_test)):
+        return None
+    y_tr = np.asarray(y_train, dtype=float)
+    p_tr = np.asarray(pred_train, dtype=float)
+    y_te = np.asarray(y_test, dtype=float)
+    p_te = np.asarray(pred_test, dtype=float)
+    if len(y_tr) < 2 or len(y_te) < 2:
+        return None
+    if ratio_sur_apprentissage(_gini_socle(y_tr, p_tr),
+                               _gini_socle(y_te, p_te)) is None:
+        return None
+
+    rng = np.random.default_rng(graine)
+    ratios = []
+    for _ in range(int(tirages)):
+        i_tr = rng.integers(0, len(y_tr), len(y_tr))
+        i_te = rng.integers(0, len(y_te), len(y_te))
+        r = ratio_sur_apprentissage(_gini_socle(y_tr[i_tr], p_tr[i_tr]),
+                                    _gini_socle(y_te[i_te], p_te[i_te]))
+        if r is not None and math.isfinite(r):
+            ratios.append(r)
+    # ⚠️ Un intervalle sur trois tirages exploitables ne vaut rien : on exige
+    # que la MAJORITÉ des rééchantillonnages ait produit un ratio, sans quoi
+    # l'absence se déclare au lieu de se borner.
+    if len(ratios) < 0.5 * int(tirages):
+        return None
+    ratios.sort()
+    bas = ratios[int(0.05 * (len(ratios) - 1))]
+    haut = ratios[int(0.95 * (len(ratios) - 1))]
+    return (round(float(bas), 4), round(float(haut), 4))
+
+
+def surapprentissage_concluant(intervalle) -> bool | None:
+    """L'intervalle permet-il de conclure ? ``None`` s'il n'existe pas.
+
+    ⚠️ LE CINQUIÈME CAS DE L'ÉLASTICITÉ, REPRIS TEL QUEL. `estimer_elasticite`
+    déclare ``concluante = False`` quand son intervalle contient ZÉRO — la
+    valeur qui signifie « aucun effet ». Ici la valeur neutre est **1** :
+    ``Gini(train) = Gini(test)``. Un intervalle qui l'enjambe ne permet pas
+    de dire dans quel sens le modèle s'écarte, et un statut tranché sur cet
+    intervalle trancherait du bruit.
+    """
+    if intervalle is None:
+        return None
+    bas, haut = intervalle
+    return not (bas <= 1.0 <= haut)
 
 
 def mesure_arrondie(valeur, decimales: int = 4):

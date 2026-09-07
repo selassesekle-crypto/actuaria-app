@@ -51,6 +51,7 @@ from core.charts_tarif import (
     glyphe_rag,
 )
 from core.conformite_reglementaire import (
+    statut_le_pire,
     BASE_GINI_COMPTAGE, BASE_GINI_UNITAIRE,
     construire_matrice_x,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
@@ -2574,7 +2575,14 @@ class AgentA5DeepLearning:
             h3_conseil= "Utiliser le GLM — DL non justifié sur ces données"
 
         statuts = [h1_statut, h2_statut, h3_statut]
-        statut_global = "ROUGE" if "ROUGE" in statuts else "AMBRE" if "AMBRE" in statuts else "VERT"
+        # ⚠️⚠️ LA BRANCHE TERMINALE ETAIT LE CAS LE PLUS FAVORABLE. Cette
+        # ligne rendait VERT sur TOUT jeton qui n est ni ROUGE ni AMBRE --
+        # un quatrieme mot, une faute de frappe, un None. Soit
+        # << Modele valide, pret pour la production >> dans un document
+        # signe. *Un defaut pose dans la direction rassurante.*
+        # Trouve par l auditeur independant le 07/09/2026 ; le releve AST
+        # a montre la MEME ligne dans les quatre agents.
+        statut_global = statut_le_pire(statuts)
         conclusion = {
             "VERT":  f"✅ Deep Learning validé — {modele_nm} prêt pour la production actuarielle",
             "AMBRE": "⚠️ Deep Learning utilisable avec précautions — vérifier les points signalés",
