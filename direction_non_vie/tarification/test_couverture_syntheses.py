@@ -164,9 +164,17 @@ class T2_LeRapportModelesPorteLesReserves(unittest.TestCase):
         """CS-5 : deux executions rendent le meme document.
 
         ⚠️ L'ordre vient de `RESERVES_A6`, pas du dictionnaire.
+
+        ⚠️⚠️ LA FIXTURE SE DERIVE DE `RESERVES_A6`, ELLE NE LA RECOPIE PLUS.
+        Elle posait TROIS reserves en dur ; l'ajout d'une quatrieme
+        (`reserve_surapprentissage`, 07/09/2026) l'a fait rougir a la gate
+        alors que la propriete testee -- l'ORDRE vient de la liste -- n'avait
+        pas bouge. *Un controle qui recopie la liste qu'il verifie casse a
+        chaque ajout et n'apprend rien ; derive, il reste juste.* C'est ce que
+        `CS-4` faisait deja, deux methodes plus haut.
         """
-        r6 = _r6(reserve_bases_gini='C', reserve_arbitrage='A',
-                 reserve_vraisemblance='B')
+        r6 = _r6(**{cle: f'VAL_{i}'
+                    for i, (cle, _) in enumerate(RM.RESERVES_A6)})
         rendues = [lib for lib, _ in RM.reserves_arbitrage(r6)]
         self.assertEqual(rendues, [lib for _, lib in RM.RESERVES_A6])
         self.assertEqual(RM.reserves_arbitrage(_r6()), ())

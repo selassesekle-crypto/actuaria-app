@@ -119,6 +119,7 @@ from core.conformite_reglementaire import (
     fusionner_ecartees_amont,
     construire_matrice_x, verdict_vraisemblance_gini,
     reserve_bases_gini_melangees,
+    reserve_surapprentissage_non_plafonnant,
     meilleur_par_base, reserve_arbitrage_contestable,
     VRAISEMBLANCE_IMPLAUSIBLE, VRAISEMBLANCE_NON_CALIBRE,
     reserve_vraisemblance_non_calibree,
@@ -686,6 +687,16 @@ class AgentA6Comparaison:
             rapport['arbitrage_contestable'] = _contestable
             if _contestable:
                 logger.warning(_contestable)
+            # ⚠️⚠️ LA DÉMOTION DE H1 SE PUBLIE, ELLE NE SE DEVINE PAS. H1 ne
+            # plafonne plus le statut (voir `_calculer_statut_rag`) ; sans
+            # cette réserve, son silence se lirait comme un feu vert par qui
+            # l'a connu bloquant. *Retirer un garde-fou sans le dire remplace
+            # un faux ROUGE par un faux VERT.*
+            _reserve_surapp = reserve_surapprentissage_non_plafonnant(
+                (result_a4 or {}).get('hypotheses'))
+            rapport['reserve_surapprentissage'] = _reserve_surapp
+            if _reserve_surapp:
+                logger.warning(_reserve_surapp)
             if _reserve_vrais:
                 logger.warning(_reserve_vrais)
 
@@ -889,6 +900,15 @@ class AgentA6Comparaison:
                 'reserve_arbitrage': rapport.get('reserve_arbitrage'),
                 'reserve_vraisemblance': rapport.get('reserve_vraisemblance'),
                 'reserve_bases_gini': rapport.get('reserve_bases_gini'),
+                # ⚠️⚠️ ELLE VOYAGE, ELLE AUSSI — ET J'AI FAILLI L'OUBLIER.
+                # `run` rend un dict CONSTRUIT, pas `rapport` : poser la clé
+                # sur `rapport` ne la publie pas. Mesuré AVANT de l'ajouter
+                # ici — la clé était ABSENTE du résultat, la réserve calculée
+                # et lue par personne. *C'est exactement le défaut `A1-1`,
+                # commis dans le correctif qui devait le nommer, et seule la
+                # mesure de la SORTIE l'a vu : le câblage avait l'air juste.*
+                'reserve_surapprentissage':
+                    rapport.get('reserve_surapprentissage'),
                 'meilleur_par_base': rapport.get('meilleur_par_base'),
                 'arbitrage_contestable': rapport.get('arbitrage_contestable'),
                 'alertes_conformite': _alertes_conformite,
@@ -1110,6 +1130,15 @@ class AgentA6Comparaison:
                 'reserve_arbitrage': rapport.get('reserve_arbitrage'),
                 'reserve_vraisemblance': rapport.get('reserve_vraisemblance'),
                 'reserve_bases_gini': rapport.get('reserve_bases_gini'),
+                # ⚠️⚠️ ELLE VOYAGE, ELLE AUSSI — ET J'AI FAILLI L'OUBLIER.
+                # `run` rend un dict CONSTRUIT, pas `rapport` : poser la clé
+                # sur `rapport` ne la publie pas. Mesuré AVANT de l'ajouter
+                # ici — la clé était ABSENTE du résultat, la réserve calculée
+                # et lue par personne. *C'est exactement le défaut `A1-1`,
+                # commis dans le correctif qui devait le nommer, et seule la
+                # mesure de la SORTIE l'a vu : le câblage avait l'air juste.*
+                'reserve_surapprentissage':
+                    rapport.get('reserve_surapprentissage'),
                 'meilleur_par_base': rapport.get('meilleur_par_base'),
                 'arbitrage_contestable': rapport.get('arbitrage_contestable'),
                 'alertes_conformite': _alertes_conformite,
@@ -2876,7 +2905,26 @@ class AgentA6Comparaison:
             (hypotheses_glm, 'h1_poisson'),
             (hypotheses_glm, 'h2_homosc'),     # réintégrée (métrique réparée : ratio de variance)
             (hypotheses_glm, 'h5_deviance'),   # ajout C — déviance résiduelle / df
-            (hypotheses_ml,  'h1_overfitting'),
+            # ⚠️⚠️ `h1_overfitting` A ÉTÉ RETIRÉ D'ICI LE 07/09/2026, ET C'EST
+            # UNE MESURE QUI L'A DÉCIDÉ. Il y figurait : son ROUGE plafonnait
+            # le statut RAG publié à AMBRE en production. Or son verdict se
+            # calcule sur un DÉCOUPAGE UNIQUE. Sur un portefeuille
+            # STRICTEMENT inchangé — mêmes contrats, mêmes sinistres, seul
+            # l'ordre des lignes change — il bascule sur **37 % des tirages**
+            # (10 % à 55 % selon le plan et la taille, 360 mesures), et la
+            # borne du VERT tombe DANS l'intervalle [q05 ; q95] sur 9
+            # cellules sur 9.
+            #   *Un plafond est une affirmation — « ce module ne peut pas
+            #   être certifié vert ». Une affirmation dont la valeur dépend
+            #   du tirage n'en est pas une.*
+            # ⚠️ Et l'asymétrie rend le retrait urgent plutôt que souhaitable :
+            # un plafond ne coûte rien quand il se tait, et coûte un re-run et
+            # une justification quand il tombe — le bruit se paie donc dans la
+            # direction ALARMANTE, celle qui use la crédibilité du garde-fou.
+            # ⛔ IL NE DISPARAÎT PAS EN SILENCE. `reserve_surapprentissage`
+            # publie H1 et le motif de sa démotion dans les surfaces signées :
+            # *un lecteur qui a connu H1 plafonnant lirait son silence comme
+            # un feu vert, et on remplacerait un faux ROUGE par un faux VERT.*
             (hypotheses_ml,  'h2_psi'),
             (hypotheses_ml,  'h4_calibration'),
         ]

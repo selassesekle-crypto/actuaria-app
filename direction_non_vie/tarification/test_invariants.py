@@ -1382,9 +1382,19 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
               f"certifié VERT, walk-forward fidèle ✅")
 
     def test_hypothese_plafonnante_rouge_bloque_le_vert(self):
-        """Correctif B — une hypothèse de modélisation PLAFONNANTE en ROUGE (ici
-        A4-H1 overfitting) plafonne à AMBRE un modèle par ailleurs impeccable.
-        Les hypothèses étaient calculées mais jamais lues par la décision."""
+        """Correctif B — une hypothèse de modélisation PLAFONNANTE en ROUGE
+        plafonne à AMBRE un modèle par ailleurs impeccable. Les hypothèses
+        étaient calculées mais jamais lues par la décision (B2).
+
+        ⚠️⚠️ L'EXEMPLE A CHANGÉ, PAS LA PROPRIÉTÉ — 07/09/2026. Ce test
+        prenait `A4-H1` comme illustration ; H1 a été RETIRÉ des plafonnantes
+        sur mesure : son verdict se calcule sur un DÉCOUPAGE UNIQUE et bascule
+        sur 37 % des tirages à portefeuille inchangé (360 tirages).
+          *La propriété que ce test protège — « une plafonnante ROUGE bloque
+          le VERT » — est intacte et reste gardée ; c'est l'exemple qui
+          n'appartient plus à la classe.* On la vérifie donc sur `h2_psi`, qui
+          mesure une dérive RÉELLE des features et ne dépend pas du découpage.
+        """
         from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
         a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False)
         bt = {'disponible': True, 'modele_recalibre_fidele': True,
@@ -1394,11 +1404,41 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
         modele = {'score_global': 0.95, 'gini_test': 0.32, 'overfit_ratio': 1.05}
         statut = a6._calculer_statut_rag(
             modele, [modele], profil_valide_par='X', environnement='production',
-            backtest=bt, hypotheses_ml={'h1_overfitting': {'statut': 'ROUGE'}})
+            backtest=bt, hypotheses_ml={'h2_psi': {'statut': 'ROUGE'}})
         self.assertNotEqual(statut, 'VERT',
-            "Une hypothèse de modélisation PLAFONNANTE en ROUGE (A4-H1) doit "
+            "Une hypothèse de modélisation PLAFONNANTE en ROUGE (A4-H2 PSI) doit "
             "empêcher le VERT — sinon le contrôle est calculé mais non câblé (B2).")
-        print(f"    B-cap A4-H1 ROUGE → {statut} (pas VERT) ✅")
+        print(f"    B-cap A4-H2 ROUGE → {statut} (pas VERT) ✅")
+
+    def test_A4H1_ROUGE_ne_plafonne_PLUS_et_c_est_la_decision(self):
+        """⚠️⚠️ LE SECOND SENS DE LA DÉCISION DU 07/09/2026, ÉPINGLÉ ICI. Le
+        test voisin garantit qu'une plafonnante ROUGE bloque ; celui-ci
+        garantit que H1 n'en est PLUS une. Sans lui, un futur lot pourrait
+        l'y remettre en croyant réparer un oubli — et rétablirait un plafond
+        qui dépend de l'ordre des lignes du fichier.
+
+        ⚠️ La démotion est PUBLIÉE, elle n'est pas silencieuse : voir
+        `test_h1_ne_plafonne_plus.py` et `reserve_surapprentissage`.
+        """
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+        )
+        a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False)
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'modele_recalibre': 'GLM_POISSON', 'gini_wf_moyen': 0.30,
+              'ae_ratio': 1.00, 'ae_moyen_wf': 1.00, 'n_fenetres_rouge': 0,
+              'stabilite_wf': '🟢 Stable'}
+        modele = {'score_global': 0.95, 'gini_test': 0.32, 'overfit_ratio': 1.05}
+        statut = a6._calculer_statut_rag(
+            modele, [modele], profil_valide_par='X', environnement='production',
+            backtest=bt, hypotheses_ml={'h1_overfitting': {'statut': 'ROUGE'},
+                                        'h2_psi': {'statut': 'VERT'},
+                                        'h4_calibration': {'statut': 'VERT'}})
+        self.assertEqual(statut, 'VERT',
+            "A4-H1 ROUGE plafonne de nouveau le statut : son verdict bascule "
+            "sur 37 % des tirages a portefeuille inchange, il ne peut pas "
+            "porter une affirmation de non-certification.")
+        print(f"    B-cap A4-H1 ROUGE → {statut} (ne plafonne plus) ✅")
 
     def test_hypotheses_saines_le_vert_reste_accessible(self):
         """Correctif B — contrôle NÉGATIF : aucune plafonnante ROUGE → VERT reste

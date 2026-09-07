@@ -702,6 +702,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
         reserve_arb  = result_a6.get('reserve_arbitrage')
         reserve_vra  = result_a6.get('reserve_vraisemblance')
         reserve_bas  = result_a6.get('reserve_bases_gini')
+        reserve_sur  = result_a6.get('reserve_surapprentissage')
         arb_contest  = result_a6.get('arbitrage_contestable')
         audit_trail  = result_a6.get('audit_trail', {})
 
@@ -814,6 +815,13 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
                  statut="AMBRE", wrap=True); r += 1
         if reserve_bas:
             _kpi(ws3, r, "⚠ Bases de Gini mélangées", reserve_bas,
+                 statut="AMBRE", wrap=True); r += 1
+        # ⚠️⚠️ LA DÉMOTION DE H1 SE LIT ICI. Elle a été retirée des hypothèses
+        # PLAFONNANTES d'A6 le 07/09/2026 — son verdict bascule sur 37 % des
+        # tirages à portefeuille inchangé. *Sans cette ligne, un lecteur qui
+        # l'a connue bloquante lirait son silence comme un feu vert.*
+        if reserve_sur:
+            _kpi(ws3, r, "⚠ Sur-apprentissage (non plafonnant)", reserve_sur,
                  statut="AMBRE", wrap=True); r += 1
         # ⚠️ Le choix automatique se dit contestable — il ne bloque rien.
         if arb_contest:

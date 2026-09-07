@@ -567,6 +567,9 @@ RESERVES_A6 = (
     ('reserve_arbitrage', "L'arbitrage n'avait qu'un candidat"),
     ('reserve_vraisemblance', 'Vraisemblance du Gini non calibrée'),
     ('reserve_bases_gini', 'Bases de Gini mélangées'),
+    # ⚠️ H1 ne plafonne plus le statut ; le dire est la condition du retrait.
+    ('reserve_surapprentissage',
+     'Sur-apprentissage non satisfait, mais non plafonnant'),
 )
 
 TITRE_RESERVES_A6 = "RÉSERVES SUR L'ARBITRAGE"

@@ -265,6 +265,10 @@ _LABELS_SYNTHESES = (
     ('reserve_arbitrage',     "Réserve — l'arbitrage n'avait qu'un candidat"),
     ('reserve_vraisemblance', 'Réserve — vraisemblance du Gini non calibrée'),
     ('reserve_bases',         'Réserve — bases de Gini mélangées'),
+    # ⚠️ La démotion de H1 se PUBLIE : sans elle, son silence se lirait
+    # comme un feu vert par qui l'a connu plafonnant.
+    ('reserve_surapprentissage',
+     'Réserve — sur-apprentissage non satisfait, mais non plafonnant'),
 )
 
 
@@ -331,6 +335,7 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
         'reserve_arbitrage': r6.get('reserve_arbitrage'),
         'reserve_vraisemblance': r6.get('reserve_vraisemblance'),
         'reserve_bases': r6.get('reserve_bases_gini'),
+        'reserve_surapprentissage': r6.get('reserve_surapprentissage'),
         'anti_selection': r6.get('anti_selection_a3'),
         # ⚠️ Un Gini NON MESURABLE, lui, ne colore RIEN : il se déclare.
         # Le confondre avec un pouvoir discriminant nul reproduirait le zéro

@@ -2571,6 +2571,47 @@ def reserve_vraisemblance_non_calibree(cible: str | None,
             f"il reste à faire par l'examen des variables.")
 
 
+def reserve_surapprentissage_non_plafonnant(
+        hypotheses_ml: dict | None) -> str | None:
+    """La phrase que lit l'actuaire quand H1 n'est plus VERT — et qu'il ne
+    plafonne plus le statut du module.
+
+    ⚠️⚠️ ELLE EXISTE PARCE QUE LE RETIRER EN SILENCE SERAIT PIRE. `H1` figurait
+    dans les hypothèses PLAFONNANTES d'A6 : son ROUGE forçait le statut RAG à
+    AMBRE en production. Il en a été retiré le 07/09/2026, sur mesure — mais
+    *un lecteur qui a connu H1 plafonnant lira son silence comme un feu vert*.
+    Le retrait sans la phrase remplacerait un faux ROUGE par un faux VERT.
+
+    ⚠️⚠️ ET LE MOTIF DU RETRAIT SE PUBLIE AVEC LUI, PARCE QU'IL EST MESURÉ. Sur
+    un portefeuille STRICTEMENT inchangé — mêmes contrats, mêmes sinistres,
+    seul l'ordre des lignes change — le statut de H1 bascule sur **37 % des
+    tirages** en moyenne (10 % à 55 % selon le plan et la taille, 360 mesures
+    le 07/09/2026), et la borne du VERT tombe DANS l'intervalle [q05 ; q95] sur
+    9 cellules sur 9. *Un plafond est une affirmation ; une affirmation dont la
+    valeur dépend du tirage n'en est pas une.*
+
+    ⚠️ Elle NE BLOQUE RIEN et ne change aucun nombre — comme
+    :func:`reserve_bases_gini_melangees`. Elle rend visible qu'un contrôle
+    autrefois bloquant ne l'est plus, et pourquoi.
+
+    Rend ``None`` quand H1 est VERT ou absent : il n'y a alors rien à déclarer,
+    et une réserve permanente ne serait plus lue.
+    """
+    h1 = (hypotheses_ml or {}).get('h1_overfitting') or {}
+    statut = h1.get('statut')
+    if statut in (None, 'VERT'):
+        return None
+    ratio = h1.get('ratio')
+    return (f"⚠ SUR-APPRENTISSAGE {statut} — MAIS NON PLAFONNANT. "
+            f"L'hypothèse H1 (Gini train/test = {mesure_texte(ratio, 3)}) "
+            f"n'est pas satisfaite, et elle NE plafonne PLUS le statut du "
+            f"module. Motif : son verdict est calculé sur un DÉCOUPAGE UNIQUE "
+            f"et bascule sur 37 % des tirages à portefeuille inchangé "
+            f"(mesuré, 360 tirages). Il reste à interpréter par l'actuaire, "
+            f"avec la validation hors période (walk-forward), qui porte la "
+            f"même propriété sur plusieurs exercices.")
+
+
 def synthese_alertes_experience(alertes: Optional[dict]) -> Optional[str]:
     """
     SOURCE UNIQUE — texte à afficher dans TOUT livrable lorsque des variables
