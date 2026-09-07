@@ -150,6 +150,19 @@ class TestSocleQuatreConstats(unittest.TestCase):
                 "n'importe PAS ce", doc,
                 "A1 importe desormais `core.mapping_client` : la phrase qui "
                 "annonce deux moteurs separes est devenue fausse")
+            # ⚠️⚠️ ET LA BRANCHE VIVE DOIT ENCORE NOMMER, sinon corriger la
+            # phrase suffirait a eteindre le constat. `socle/C2` demande que
+            # le SECOND mecanisme soit nomme -- il subsiste, avec son format
+            # et son geste propres ; ce qui a ete unifie, ce sont les REGLES.
+            # *Un garde qui n'exige plus rien apres le correctif n'a plus
+            # d'assiette.*
+            for attendu in ('_appliquer_mapping_client',
+                            'diagnostiquer_mapping'):
+                self.assertIn(
+                    attendu, doc,
+                    f"le socle ne dit plus ou vit `{attendu}` : le second "
+                    f"mecanisme et la source unique des regles doivent "
+                    f"rester nommes ici")
         else:
             self.assertIn(
                 '_appliquer_mapping_client', doc,

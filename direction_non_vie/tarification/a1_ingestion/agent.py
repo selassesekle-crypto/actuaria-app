@@ -38,6 +38,7 @@ from typing import Dict, Any, Optional, List, Tuple
 import numpy as np
 import pandas as pd
 from core.charts_tarif import glyphe_rag
+from core.mapping_client import MappingClient, diagnostiquer_mapping
 from direction_non_vie.tarification.contrat_sortie import sortie_completee
 from core.qualite_donnees import (borne_exposition,
                                   exiger_canal_sans_objet)
@@ -201,7 +202,7 @@ SYNONYMES_COLONNES = {
 # ingéré par erreur dans le pipeline de tarification Non-Vie.
 BRANCHES_SUPPORTEES = ('non_vie',)
 
-# ⚠️⚠️ LE GABARIT DE SORTIE D'A1 — SEIZE CLÉS, SUR TOUS SES CHEMINS.
+# ⚠️⚠️ LE GABARIT DE SORTIE D'A1 — DIX-SEPT CLÉS, SUR TOUS SES CHEMINS.
 # **Mesuré le 05/09/2026** : `run` avait QUATRE sorties, une complète à seize
 # clés et trois chemins d'échec à huit. Il y manquait `qualite`, `rapport`,
 # `hash_md5`, `client_id`, `audit_trail` et les trois clés de livrable — que
@@ -231,6 +232,14 @@ GABARIT_SORTIE: dict[str, Any] = {
     'word_bytes':  b'',
     'pdf_bytes':   b'',
     'audit_trail': {},
+    # ⚠️⚠️ DIX-SEPTIÈME CLÉ, AJOUTÉE AU GABARIT ET NON À LA SEULE SORTIE
+    # COMPLÈTE — constat `A1-1`, 07/09/2026. Je l'avais posée sur le seul
+    # chemin de succès : les TROIS chemins d'échec rendaient alors seize clés
+    # contre dix-sept, et `CS-1` est devenu rouge. *C'est exactement le défaut
+    # que ce gabarit existe pour empêcher, et je venais de le commettre.*
+    # A6 lit cette clé sans savoir si A1 a réussi ; son absence lui ferait
+    # lire un littéral.
+    'rapport_mapping': None,
 }
 
 FORMATS_SUPPORTES = ['.csv', '.xlsx', '.xls', '.parquet', '.json', '.txt']
@@ -441,8 +450,11 @@ class AgentA1Ingestion:
             # ── ÉTAPE 2 : MAPPING COLONNES CLIENT ────────────────────────────
             if client_id:
                 df, mapping_info = self._appliquer_mapping_client(
-                    df, client_id
+                    df, client_id, plan=plan
                 )
+                # ⚠️ LE RAPPORT VOYAGE : sans cette ligne il serait calcule et
+                # lu par personne -- le defaut que ce constat nomme.
+                rapport['rapport_mapping'] = mapping_info.get('rapport')
                 rapport['mapping_applique'] = mapping_info['applique']
                 rapport['mapping_info']     = mapping_info
                 if mapping_info['applique']:
@@ -533,6 +545,14 @@ class AgentA1Ingestion:
                 'qualite':      qualite,
                 'hash_md5':     hash_md5,
                 'rapport':      rapport,
+                # ⚠️⚠️ À LA RACINE, ET C'EST LA TROISIÈME FOIS QUE JE L'APPRENDS
+                # DANS CE CHANTIER. Je l'avais posée sur `rapport`, qui voyage
+                # bien — mais A6 lit la RACINE, comme pour `qualite` ou
+                # `statut_rag`. Mesuré par exécution de la chaîne : la cause
+                # n'atteignait rien. *Poser une clé sur un dictionnaire qui
+                # voyage ne suffit pas ; il faut la poser là où le lecteur
+                # regarde, et seule la mesure de la SORTIE le dit.*
+                'rapport_mapping': rapport.get('rapport_mapping'),
                 'commentaire':  commentaire,
                 'audit_id':     audit_id,
                 'client_id':    client_id,
@@ -655,13 +675,24 @@ class AgentA1Ingestion:
     def _appliquer_mapping_client(
         self,
         df:        pd.DataFrame,
-        client_id: str
+        client_id: str,
+        plan=None,   # PlanTarifaire signé — sans lui, AUCUN diagnostic possible
     ) -> tuple:
         """
-        Applique le mapping de colonnes pour un client donné.
+        Applique le mapping de colonnes pour un client donné, ET le diagnostique.
 
         Charge le fichier : config/{client_id}_mapping.json
         Si non trouvé → crée un mapping suggéré automatiquement
+
+        ⚠️ `plan` EST FACULTATIF, ET SON ABSENCE SE VOIT : sans plan signé, il
+        n'existe aucune référence contre laquelle juger les cibles, et
+        `mapping_info['rapport']` reste `None`. Le renommage, lui, est
+        inchangé — le diagnostic signale, il ne bloque pas.
+
+        `mapping_info` porte, en plus des clés d'origine :
+          · ``rapport``            — le :class:`RapportMapping` du socle, ou None
+          · ``echec_chargement``   — pourquoi le mapping n'a pas pu être lu,
+            ce qui distingue un fichier ILLISIBLE d'un fichier ABSENT.
 
         FORMAT DU FICHIER MAPPING :
         ────────────────────────────
@@ -677,6 +708,23 @@ class AgentA1Ingestion:
             'nb_colonnes_renommees':0,
             'colonnes_renommees':   {},
             'mapping_source':       None,
+            # ⚠️⚠️ CE MOTEUR NE VALIDAIT RIEN — constat `A1-1`. Quatre-vingts
+            # lignes, zéro contrôle : ni cible inconnue du plan, ni collision,
+            # ni plan visé. Une faute de frappe dans le JSON renomme vers une
+            # colonne que le plan n'attend pas ; A2 la déclare manquante et le
+            # modèle sort « amputé ».
+            #   ***L'effet est publié, la cause ne l'est pas*** — et l'actuaire
+            #   ne peut pas distinguer « le client n'a pas fourni la colonne »
+            #   de « mon mapping l'a mal nommée ».
+            # Le diagnostic vient du SOCLE (`diagnostiquer_mapping`), qui porte
+            # les mêmes règles que `valider_mapping` sans lever : recopier les
+            # trois contrôles ici aurait produit deux jeux de règles qui
+            # divergent — le défaut que ce chantier ferme partout.
+            'rapport': None,
+            # ⚠️ ET UN MAPPING QUI A ÉCHOUÉ N'EST PAS UN MAPPING ABSENT. Le
+            # `except` plus bas partait dans un `logger.warning` et laissait
+            # `applique` à False : indiscernable d'un client sans fichier.
+            'echec_chargement': None,
         }
 
         # Cherche le fichier mapping
@@ -693,6 +741,27 @@ class AgentA1Ingestion:
                     if k in df.columns
                 }
 
+                # ⚠️⚠️ LE DIAGNOSTIC AVANT LE RENOMMAGE, ET SUR LE MAPPING
+                # ENTIER — pas sur `mapping_applicable`. Le filtre ci-dessus
+                # écarte SILENCIEUSEMENT toute clé source absente du fichier :
+                # c'est la seconde faute de frappe possible, celle que personne
+                # n'avait nommée, et le socle la traite sous
+                # `correspondances_mortes`. La diagnostiquer sur le mapping
+                # filtré la rendrait invisible.
+                if plan is not None and mapping:
+                    try:
+                        _mc = MappingClient.depuis_plat(mapping, client_id)
+                        mapping_info['rapport'] = diagnostiquer_mapping(
+                            df, _mc, plan)
+                    except Exception as e_diag:            # noqa: BLE001
+                        # ⚠️ Le diagnostic ne doit JAMAIS empêcher l'ingestion :
+                        # il signale, il ne bloque pas. Son échec se déclare.
+                        mapping_info['echec_chargement'] = (
+                            f"diagnostic non produit "
+                            f"({type(e_diag).__name__}: {e_diag})")
+                        logger.warning(
+                            f"Diagnostic de mapping non produit : {e_diag}")
+
                 if mapping_applicable:
                     df = df.rename(columns=mapping_applicable)
                     mapping_info['applique']              = True
@@ -701,6 +770,12 @@ class AgentA1Ingestion:
                     mapping_info['mapping_source']        = str(chemin_mapping)
 
             except Exception as e:
+                # ⚠️⚠️ L'ÉCHEC SE DÉCLARE, IL NE PART PLUS DANS UN LOG. Un JSON
+                # illisible laissait `applique` à False — exactement l'état
+                # d'un client SANS fichier de mapping. *Deux causes opposées,
+                # un seul symptôme : personne ne pouvait les distinguer.*
+                mapping_info['echec_chargement'] = (
+                    f"{type(e).__name__}: {e}")
                 logger.warning(f"Erreur chargement mapping client : {e}")
         else:
             # Mapping non trouvé → détection automatique + création suggestion

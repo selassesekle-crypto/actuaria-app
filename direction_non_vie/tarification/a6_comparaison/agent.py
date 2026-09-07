@@ -671,6 +671,18 @@ class AgentA6Comparaison:
             # colonnes du même tableau ne sont pas sur le même pied.
             _reserve_bases = reserve_bases_gini_melangees(classement)
             rapport['reserve_bases_gini'] = _reserve_bases
+            # ⚠️⚠️ LE RAPPORT DE MAPPING VIENT D'A1 QUAND L'APPELANT NE LE
+            # DONNE PAS — constat `A1-1`. `pipeline_agents(rapport_mapping=…)`
+            # a ZÉRO appelant de production dans tout le dépôt : les trois
+            # surfaces publiées recevaient donc TOUJOURS `None`, et la section
+            # « Mapping client » n'apparaissait dans AUCUN document signé.
+            #   *Le socle savait valider et savait rediger ; A1 tournait et
+            #   jetait. Les deux moities d'une meme chaine ne se touchaient
+            #   pas -- et le fil manquant tenait en une ligne.*
+            # ⚠️ L'argument explicite PRIME : un appelant qui fournit son
+            # propre rapport garde la main.
+            if rapport_mapping is None:
+                rapport_mapping = (result_a1 or {}).get('rapport_mapping')
             if _reserve_bases:
                 logger.warning(_reserve_bases)
 
