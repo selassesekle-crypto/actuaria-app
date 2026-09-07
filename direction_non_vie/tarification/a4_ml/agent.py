@@ -2762,92 +2762,38 @@ class AgentA4ML:
 
         graphiques = {}
 
-        # ── GRAPHIQUE 2 : LIFT CHART (DÉCILES) ────────────────────────────────
-        try:
-            fig2 = go.Figure()
-
-            # Ligne de référence (lift = 1)
-            fig2.add_hline(
-                y                  = 1.0,
-                line_dash          = "dot",
-                line_color         = GRIS,
-                line_width         = 1.5,
-                annotation_text    = "Référence (Lift=1)",
-                annotation_position= "bottom right",
-                annotation_font    = dict(color=GRIS, size=9),
-            )
-
-            for idx, c in enumerate(classement[:4]):
-                nom  = c['modele']
-                gini = c.get('gini_test')
-
-                # Lift Chart approximé depuis le Gini
-                # Lift décile k = (% sinistres dans décile k) / (10%)
-                # Approximation analytique basée sur la courbe de Lorenz
-                deciles = list(range(1, 11))
-                if gini is not None and gini > 0.01:
-                    # Modèle discriminant : lift croissant
-                    lifts = [
-                        max(0.1, 1 + (gini * 3) * (d - 5.5) / 5.5)
-                        for d in deciles
-                    ]
-                else:
-                    lifts = [1.0] * 10
-
-                couleur = COULEURS_MODELES[idx % len(COULEURS_MODELES)]
-
-                fig2.add_trace(go.Scatter(
-                    x    = deciles,
-                    y    = lifts,
-                    mode = 'lines+markers',
-                    name = f"{nom} (Gini={gini_texte(gini, 3)})",
-                    line = dict(
-                        color    = couleur,
-                        width    = 2.5 if idx == 0 else 1.5,
-                        shape    = 'spline',
-                        smoothing= 0.6,
-                    ),
-                    marker = dict(
-                        color = couleur,
-                        size  = 8 if idx == 0 else 6,
-                        line  = dict(color=NAVY, width=1.5),
-                    ),
-                    hovertemplate = (
-                        f"<b>{nom}</b><br>"
-                        f"Décile %{{x}}<br>"
-                        "Lift : <b>%{y:.2f}</b><extra></extra>"
-                    ),
-                ))
-
-            layout2 = dict(**LAYOUT_BASE)
-            layout2.update(dict(
-                title = dict(
-                    text = "📊 Lift Chart — Performance par décile de risque",
-                    font = dict(color=BLANC, size=13), x=0.01,
-                ),
-                xaxis = dict(
-                    title    = dict(text="Décile (1=moins risqué → 10=plus risqué)",
-                                    font=dict(color=GRIS, size=10)),
-                    tickvals = list(range(1, 11)),
-                    showgrid = True,
-                    gridcolor= "rgba(255,255,255,0.05)",
-                    tickfont = dict(color=GRIS, size=10),
-                ),
-                yaxis = dict(
-                    title    = dict(text="Lift (sinistralité relative)",
-                                    font=dict(color=GRIS, size=10)),
-                    showgrid = True,
-                    gridcolor= "rgba(255,255,255,0.05)",
-                    tickfont = dict(color=GRIS, size=10),
-                    zeroline = True,
-                    zerolinecolor = GRIS,
-                ),
-            ))
-            fig2.update_layout(**layout2)
-            graphiques['lift_chart'] = fig2
-
-        except Exception as e:
-            logger.warning(f"Graphique Lift Chart échoué : {e}")
+        # ── GRAPHIQUE 2 : LIFT CHART — RETIRÉ le 07/09/2026 ───────────────────
+        # ⚠️⚠️ CONSTAT `A4-2`. Cette figure n'était pas MESURÉE, elle était
+        # DESSINÉE. Son code posait :
+        #
+        #     lifts = [max(0.1, 1 + (gini * 3) * (d - 5.5) / 5.5) for d in ...]
+        #
+        # c'est-à-dire une fonction AFFINE du rang du décile — une DROITE.
+        # Mesuré : les différences secondes valent exactement 0 à `gini` = 0,10
+        # et 0,25 ; à 0,45 le plancher `max(0.1, ...)` la coude, et c'est le
+        # seul écart à la droite. Le commentaire l'appelait « approximation
+        # analytique basée sur la courbe de Lorenz » : *une courbe de Lorenz ne
+        # donne pas une droite, et rien ici ne regardait le portefeuille.*
+        #
+        # ⚠️⚠️ ET SON MOTIF D'EXCLUSION ÉTAIT FAUX, C'ÉTAIT LE VRAI CONSTAT.
+        # `FIGURES_ECARTEES['lift_chart']` disait « doublon —
+        # chart_lift_decile, même mesure ». Ce n'était PAS la même mesure : la
+        # figure publiée est alimentée par `lift_deciles_wf`, calculé dans
+        # `a6._backtesting_temporel` — la moyenne OBSERVÉE par décile de risque
+        # prédit, issue du walk-forward.
+        # ⚠️ LA RÉFÉRENCE EST LE NOM DE LA FONCTION, PAS UN NUMÉRO DE LIGNE.
+        # Ma première rédaction écrivait `a6:2177`, repris du rapport d'audit :
+        # ce numéro était DÉJÀ FAUX au moment où je l'écrivais — la ligne 2177
+        # porte une boucle sur les tranches d'âge, le calcul vit à 2229.
+        # *Une prose vérifiable attache sa clé à la donnée, jamais à sa
+        # position : la position bouge au premier lot suivant.*
+        #   *Le seul rempart entre une courbe fabriquée et le rapport signé
+        #   était une raison d'exclusion inexacte — qui la lit peut
+        #   légitimement conclure qu'on peut rétablir la figure.*
+        #
+        # On retire donc LE CODE, pas seulement le rendu : une figure écartée
+        # pour une raison fausse revient. `chart_lift_decile` reste, et elle,
+        # elle mesure.
 
         # ── GRAPHIQUE 3 : COMPARAISON GINI — Barres + Ligne GLM ───────────────
         try:

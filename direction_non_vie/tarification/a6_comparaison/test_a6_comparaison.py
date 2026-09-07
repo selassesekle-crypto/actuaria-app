@@ -373,9 +373,13 @@ class TestA6GiniWalkForwardSentinelles(unittest.TestCase):
 
         ⚠️⚠️ **ET CE CONTRÔLE NE VOIT PAS LE BIAIS DE 1/n — MESURÉ, ET J'AVAIS
         ÉCRIT LE CONTRAIRE.** Un plant qui réintroduit `linspace` dans le socle
-        laisse ce test VERT : le biais vaut 0,0033, la tolérance 0,05. *Un seul
-        tirage ne peut pas détecter un biais six fois plus petit que son propre
-        bruit.* Ce qui le voit est `GU-10` de `test_gini_unique`, qui compare
+        laisse ce test VERT : le biais vaut **0,0050**, la tolérance 0,05. *Un
+        seul tirage ne peut pas détecter un biais dix fois plus petit que son
+        propre bruit.*
+        ⚠️ Ce chiffre disait **0,0033** — c'est-à-dire `1/n`, DÉDUIT de la
+        règle et non mesuré. Le biais vaut `(1 + G)/n` ; sur une exponentielle
+        G = 0,497, donc 1,497/300 = 0,0050 (mesuré, 200 tirages). La
+        conclusion ne change pas ; le chiffre, si. Ce qui le voit est `GU-10` de `test_gini_unique`, qui compare
         les deux axes SUR LES MÊMES TIRAGES — le bruit commun s'y annule.
         Ici on teste le SIGNE et l'ORDRE DE GRANDEUR ; là-bas, le biais.
         """

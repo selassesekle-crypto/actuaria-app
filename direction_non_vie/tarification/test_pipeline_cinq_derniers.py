@@ -237,9 +237,21 @@ class TestC3LaPortee(unittest.TestCase):
         # sur un retour a la ligne -- introuvable, et le fichier ne compilait
         # meme plus. *Un document destine a etre verifie porte ses phrases
         # telles qu'on les cherchera.*
-        self.assertIn('Une seule implémentation dans tout le dépôt', doc,
+        # ⚠️⚠️ LA PHRASE CHERCHEE A CHANGE PARCE QU'ELLE ETAIT FAUSSE --
+        # constat `A6-3`, 07/09/2026. Elle disait << Une seule implementation
+        # dans tout le depot >> au terme d'un releve qui cherchait les
+        # fonctions DONT LE NOM contient `gini` ; `a6._calculer_courbes` en
+        # portait une seconde sous un nom qui n'en contient pas.
+        # *Ce controle exigeait donc la presence d'une affirmation fausse.*
+        # Il exige desormais la phrase qui la remplace ET l'aveu qui
+        # l'accompagne : un document destine a etre verifie porte ses
+        # phrases telles qu'on les cherchera.
+        self.assertIn('il ne reste qu\'une implémentation', doc,
                       "la phrase qui enumere les implementations a change de "
                       "forme : le compte et la liste peuvent diverger")
+        self.assertIn('1 par le nom, 2 par le corps', doc,
+                      "l'aveu du releve trop etroit a disparu : la prochaine "
+                      "mesure se refera par le NOM")
         for cle in implementations:
             module = cle.rsplit('/', 1)[-1].split('::')[0].removesuffix('.py')
             nom = cle.split('::')[-1]

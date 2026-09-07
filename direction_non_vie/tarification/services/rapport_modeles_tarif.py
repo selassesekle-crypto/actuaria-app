@@ -891,8 +891,17 @@ FIGURES_ECARTEES: Dict[str, str] = {
     'homoscedasticite_ratio_variance':
         'doublon — le chapitre 4 imprime déjà le statut H2 et son ratio de '
         'variance en toutes lettres',
-    # le lift
-    'lift_chart': 'doublon — chart_lift_decile, même mesure',
+    # ⚠️⚠️ `lift_chart` N'EST PLUS ICI PARCE QU'ELLE N'EXISTE PLUS — constat
+    # `A4-2`, 07/09/2026. Elle y était écartée pour « doublon —
+    # chart_lift_decile, même mesure », et **ce motif était faux** : la figure
+    # publiée reçoit `lift_deciles_wf`, calculé dans `a6._backtesting_temporel`
+    # — la moyenne OBSERVÉE par décile issue du walk-forward — tandis que
+    # celle-ci DESSINAIT une droite
+    # affine du rang du décile à partir du seul scalaire Gini — différences
+    # secondes nulles, mesuré. *Le seul rempart entre une courbe fabriquée et
+    # le rapport signé était une raison d'exclusion inexacte.* Le code d'A4 qui
+    # la produisait est supprimé, et le contrôle du catalogue signale toute
+    # entrée qui survivrait à sa figure.
     # les scorecards : des tableaux déguisés en figures
     'scorecard_validation_glm': 'tableau déguisé — le chapitre 4 porte déjà '
                                 'les hypothèses en tableau',

@@ -442,10 +442,27 @@ def gini_lorenz(y_true, y_pred) -> float:
     fonctions de production dont le nom porte `gini`, **7 sont comptées** par
     le critère large (leur corps emploie `cumsum`, `trapz` ou le mot Lorenz —
     le nom de la fonction en fait partie) et 2 ne calculent rien (une réserve,
-    un verdict). ⚠️ **Mais UNE SEULE CALCULE vraiment** — critère étroit,
-    ajouté le 05/09/2026 : le corps SANS SA DOCSTRING emploie `cumsum`.
-    ⚠️ **Une seule implémentation dans tout le dépôt** — celle du socle,
-    `core.validation_tarif.gini_lorenz`.
+    un verdict). ⚠️ **Mais UNE SEULE CALCULE vraiment** — critère étroit :
+    le corps SANS SA DOCSTRING emploie `cumsum` ET une intégration.
+
+    ⚠️⚠️ **CETTE DOCSTRING A PORTÉ UNE AFFIRMATION FAUSSE, ET IL FAUT LE DIRE.**
+    Elle annonçait « une seule implémentation dans tout le dépôt » au terme
+    d'un relevé qui cherchait les fonctions **dont le NOM contient `gini`**.
+    L'audit indépendant du 06/09/2026 en a trouvé une seconde
+    (constat `A6-3`) : `a6._calculer_courbes` calculait sa propre courbe de
+    Lorenz — `linspace` + `cumsum` + `trapz` — sous un nom qui ne contient
+    pas `gini`. Re-mesuré au CORPS et non au nom :
+    **1 par le nom, 2 par le corps.**
+    ⚠️ *Cette phrase tient sur UNE ligne à dessein : un document destiné à
+    être vérifié porte ses phrases telles qu'on les cherchera — et j'ai
+    reproduit ici même le défaut que ce contrôle documente.*
+      *Un relevé par symbole ne voit ni le français, ni les alias, ni ce qui
+      n'est simplement pas nommé comme on l'a cherché.*
+
+    Depuis le 07/09/2026, `a6._calculer_courbes` prend son scalaire au socle et
+    aligne son axe sur le sien : **il ne reste qu'une implémentation, et la
+    phrase se mesure désormais AU CORPS**, pas au nom — voir
+    `test_gini_unique.GU-6b`.
 
     ⚠️⚠️ **ELLES ÉTAIENT SIX, ET ELLES N'ÉTAIENT PAS D'ACCORD** — lots 3 et 4.
     `a3`, `a4`, `a5` puis `a6` **délèguent** désormais au socle, dont le calcul
@@ -468,7 +485,12 @@ def gini_lorenz(y_true, y_pred) -> float:
     *Sur un garde-fou de protection des données personnelles, le même
     portefeuille rangé autrement était déclaré avec ou sans fuite.*
 
-    **Il ne reste donc qu'UNE implémentation de Gini dans tout le dépôt.**
+    ⚠️⚠️ **ET CETTE PHRASE-CI ÉTAIT LA MÊME AFFIRMATION SOUS UNE AUTRE FORME.**
+    Elle disait « il ne reste donc qu'UNE implémentation de Gini dans tout le
+    dépôt » — au terme du même relevé par NOM. *Une affirmation fausse
+    corrigée à un endroit et laissée à l'autre est le motif même de ce
+    chantier.* Elle tient désormais **parce que la mesure est faite au corps**
+    et parce qu'`a6._calculer_courbes` délègue : voir plus haut.
 
     ⚠️⚠️ **ET LA MESURE ÉTROITE A CORRIGÉ LA PROSE DE CE MODULE.** Elle
     annonçait « `charts` la sienne pour la figure ». **Faux** :

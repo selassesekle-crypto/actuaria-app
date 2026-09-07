@@ -1655,8 +1655,21 @@ class AgentA6Comparaison:
         #     n =   100 : arange 0,0019   linspace 0,0120   biais +0,0101
         #     n =   600 : arange 0,0019   linspace 0,0035   biais +0,0017
         #     n = 2 000 : arange 0,0003   linspace 0,0008   biais +0,0005
-        # **Le biais vaut exactement 1/n**, il est POSITIF, et il portait sur
-        # chaque fenêtre de chaque analyse temporelle publiée.
+        # ⚠️⚠️ ET LA LOI GÉNÉRALE N'EST PAS « 1/n » — J'AVAIS ÉCRIT QU'ELLE
+        # L'ÉTAIT. Le biais vaut **(1 + G)/n**, où G est le Gini lui-même :
+        # `linspace` compte n-1 intervalles pour n contrats, donc divise
+        # l'aire par n-1 au lieu de n. « 1/n » n'en est que le cas G = 0,
+        # celui du modèle nul mesuré ci-dessus. Vérifié à quatre tailles et
+        # deux concentrations (erreur relative 1/n) :
+        #     n = 1 200, G = 0,882 : biais 0,00157   — et non 0,00083
+        #     n =   300, G = 0,497 : biais 0,00501   — et non 0,00333
+        # Sur le portefeuille de démonstration, la concentration observée
+        # passe donc de 0,8838 à 0,8822, soit **1,88 fois** ce que la règle
+        # « 1/n » annonçait.
+        #   *Une loi ajustée sur le seul cas dégénéré se lit comme la loi
+        #   générale, et le chiffre qu'on en déduit ailleurs est faux.*
+        # Le biais est POSITIF dans tous les cas, et il portait sur chaque
+        # fenêtre de chaque analyse temporelle publiée.
         #   ⚠️ Aucune décision ne bouge, et c'est mesuré PAR EXÉCUTION :
         #   décaler ce Gini de +0,30, ou le supprimer, laisse le statut, le
         #   modèle de production, le score et le classement INCHANGÉS. Il
@@ -2354,16 +2367,31 @@ class AgentA6Comparaison:
         order   = np.argsort(y)[::-1]
         y_sort  = y[order]
         n       = len(y_sort)
-        lorenz_x = np.linspace(0, 1, n)
+        # ⚠️⚠️ L'AXE DE POPULATION EST `arange(1, n+1)/n`, PAS `linspace(0,1,n)`
+        # — constat `A6-3`. Le dépôt a fondu six implémentations du Gini en une
+        # seule ; celle-ci avait survécu, ici, dans le module qui arbitre, avec
+        # l'axe BIAISÉ que le socle avait justement corrigé. `linspace(0,1,n)`
+        # place le premier contrat à 0 et le dernier à 1 : il compte n-1
+        # intervalles pour n contrats, et surestime le Gini de **(1 + G)/n** —
+        # voir `_gini_lorenz`, qui porte la mesure. Ici, n = 1 200 et
+        # G = 0,882 : la concentration publiée passe de 0,8838 à **0,8822**.
+        lorenz_x = np.arange(1, n + 1) / n
         lorenz_y = np.cumsum(y_sort) / np.sum(y_sort)
 
-        # Courbe diagonale (modèle nul)
-        diagonal = np.linspace(0, 1, n)
+        # Courbe diagonale (modèle nul) — le MÊME axe, sans quoi la diagonale
+        # et la courbe ne se comparent plus sur la même abscisse.
+        diagonal = lorenz_x
 
-        # Gini observé (concentration naturelle du portefeuille)
-        fn = np.trapezoid if hasattr(np, 'trapezoid') else np.trapz
-        auc_obs  = fn(lorenz_y, lorenz_x)
-        gini_obs = round(float(2 * auc_obs - 1), 4)
+        # ⚠️⚠️ LE SCALAIRE VIENT DU SOCLE, ET LA COURBE EST ALIGNÉE DESSUS.
+        # Prendre le nombre au socle en laissant la courbe sur l'ancien axe
+        # ferait diverger le GRAPHIQUE et le CHIFFRE qu'il illustre — le défaut
+        # que ce chantier corrige ailleurs sous le nom de surfaces jumelles.
+        # ⚠️ Trier la cible PAR ELLE-MÊME est exactement ce que `gini_lorenz`
+        # calcule quand on lui passe `y` en prédiction : la concentration
+        # naturelle du portefeuille, son maximum atteignable.
+        _gini_socle_obs = gini_socle(y, y)
+        gini_obs = (None if _gini_socle_obs is None
+                    else round(float(_gini_socle_obs), 4))
 
         # Lift par décile (sur valeurs observées)
         n_deciles = 10
@@ -2388,7 +2416,18 @@ class AgentA6Comparaison:
             'prime_moy_globale': round(moy_glob, 2),
         }
 
-        logger.info(f"Courbes calculées | Gini observé = {gini_obs:.4f}")
+        # ⚠️⚠️ `{gini_obs:.4f}` PLANTAIT SUR UNE ABSENCE, et c'est MON correctif
+        # qui l'a rendue atteignable. Avant le constat `A6-3`, `gini_obs` était
+        # toujours un nombre — un `trapz` local rend toujours quelque chose,
+        # même sur une cible constante. En le déléguant au socle, il peut
+        # désormais valoir `None` (prédiction constante, ou cible sans
+        # sinistre), et le format `:.4f` lève alors `TypeError` : la fonction
+        # ne rend plus rien du tout, pour un portefeuille où le Gini n'est
+        # simplement pas mesurable.
+        #   *Déléguer au socle transmet aussi son CONTRAT D'ABSENCE : tout
+        #   lecteur en aval de la valeur déléguée doit être relu, pas
+        #   seulement le site de calcul.*
+        logger.info(f"Courbes calculées | Gini observé = {gini_texte(gini_obs)}")
         return courbes
 
     # ══════════════════════════════════════════════════════════════════════════

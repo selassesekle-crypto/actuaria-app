@@ -91,10 +91,19 @@ from core.validation_tarif import gini_lorenz
 #: calibrees pres du seuil, le VERDICT basculait selon l'ordre des lignes du
 #: fichier (4/40, 29/40, 36/40 detections). Delegue, il est 0/40 ou 40/40.
 #:
-#: ⚠️ CETTE LISTE EST DESORMAIS VIDE, ET C'EST LE FAIT DU CHANTIER : il ne
-#: reste **qu'une seule implementation de Gini dans tout le depot**, celle du
-#: socle. `GU-6` continue de tourner a vide -- il reprendra du service le jour
-#: ou quelqu'un rajoutera une exception, et exigera alors son motif.
+#: ⚠️ CETTE LISTE EST DESORMAIS VIDE, ET C'EST LE FAIT DU CHANTIER. `GU-6`
+#: continue de tourner a vide -- il reprendra du service le jour ou quelqu'un
+#: rajoutera une exception, et exigera alors son motif.
+#:
+#: ⚠️⚠️ MAIS LA PHRASE QUI SUIVAIT ETAIT FAUSSE, ET IL FAUT LE DIRE. Elle
+#: annoncait << il ne reste qu'une seule implementation de Gini dans tout le
+#: depot >> -- au terme d'un releve qui cherchait les fonctions DONT LE NOM
+#: contient `gini`. L'audit independant du 06/09/2026 en a trouve une seconde
+#: (constat `A6-3`) : `a6._calculer_courbes`, qui calculait sa propre courbe
+#: de Lorenz sous un nom qui ne contient pas `gini`. Re-mesure AU CORPS :
+#: **1 par le nom, 2 par le corps**.
+#:   *Un releve par symbole ne voit pas ce qui n'est pas nomme comme on l'a
+#:   cherche.* C'est pourquoi `GU-6b` mesure desormais AU CORPS.
 _NON_DELEGUEES = {}
 
 
@@ -409,7 +418,13 @@ class TestCeQuiRESTE(unittest.TestCase):
         """⚠️⚠️ LE DEFAUT, MESURE ET FERME. `linspace(0, 1, n)` associe la
         premiere valeur cumulee -- qui couvre deja 1/n de la population -- a
         la fraction ZERO. Sur un modele SANS pouvoir discriminant, le vrai
-        Gini est zero ; l ancien axe rendait **+1/n** en moyenne."""
+        Gini est zero ; l ancien axe rendait **+1/n** en moyenne.
+
+        ⚠️ CETTE FIXTURE EST LE CAS DEGENERE, ET `1/n` N'EST QUE SA VALEUR.
+        La loi generale est **(1 + G)/n** : ce test la verifie a G = 0, ou
+        elle vaut 1/n. Ne pas en deduire un chiffre pour un portefeuille
+        concentre -- a G = 0,88 le biais est pres du DOUBLE. `GU-12` le
+        mesure hors du cas nul."""
         from direction_non_vie.tarification.a6_comparaison.agent import (
             AgentA6Comparaison,
         )
@@ -475,8 +490,131 @@ class TestCeQuiRESTE(unittest.TestCase):
         self.assertIsNotNone(v)
         self.assertEqual(round(v, 4), v, "l arrondi a 4 decimales a disparu")
 
+    def test_GU12_la_COURBE_publiee_et_le_CHIFFRE_publie_S_ACCORDENT(self):
+        """⚠️⚠️ LE CONTROLE QUE MON SCEAU A REVELE MANQUANT. Le correctif
+        `A6-3` prend le scalaire au socle et aligne l'axe de la courbe
+        dessus ; sa prose annonce que laisser la courbe sur l'ancien axe
+        ferait diverger le GRAPHIQUE et le CHIFFRE qu'il illustre. **Un plant
+        qui remettait `linspace(0, 1, n)` n'a fait rougir AUCUN test** : le
+        chiffre restait juste, protege par le socle, et la courbe partait
+        seule. *La prose decrivait le danger ; rien ne le surveillait.*
+
+        On ne verifie donc pas un TEXTE mais la PROPRIETE : le Gini recalcule
+        SUR LA COURBE RENDUE doit valoir celui que la meme fonction publie.
+        L'ecart de l'ancien axe vaut **(1 + G)/n** -- et non `1/n`, qui n'en
+        est que le cas du modele nul : ici n = 80 et G vaut environ 0,3, soit
+        un ecart d'environ 0,016, cent fois l'arrondi a 4 decimales.
+
+        ⚠️ `n = 80` pour que le sous-echantillonnage `[::max(1, n//100)]` ne
+        se declenche pas : sur une courbe sous-echantillonnee, l'integrale
+        recalculee porterait sa propre erreur, et le controle mesurerait le
+        sous-echantillonnage plutot que l'axe.
+        """
+        import pandas as pd
+
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+        )
+        f = AgentA6Comparaison.__dict__['_calculer_courbes']
+        rng = np.random.default_rng(11)
+        n = 80
+        y = rng.poisson(0.8, n).astype(float) + rng.random(n)
+        courbes = f(object.__new__(AgentA6Comparaison),
+                    pd.DataFrame({'charge': y}), 'charge')
+
+        self.assertTrue(courbes.get('disponible'))
+        x = np.asarray(courbes['lorenz']['x'], float)
+        cy = np.asarray(courbes['lorenz']['y'], float)
+        self.assertEqual(len(x), n,
+                         'la courbe est sous-echantillonnee : ce controle ne '
+                         'mesurerait plus l axe mais le pas de sortie')
+        trap = getattr(np, 'trapezoid', None) or np.trapz
+        gini_de_la_courbe = float(2 * trap(cy, x) - 1)
+        publie = courbes['gini_observe']
+        self.assertIsNotNone(publie)
+        self.assertAlmostEqual(
+            gini_de_la_courbe, publie, places=4,
+            msg=f'la courbe dessinee rend {gini_de_la_courbe:.6f} et le '
+                f'chiffre publie {publie} : le graphique et la valeur qu il '
+                f'illustre ne mesurent plus la meme chose')
+        # ⚠️ ET LE PLANT DOIT ETRE VISIBLE : on verifie que l'ancien axe
+        # produirait bien un ecart superieur a la tolerance, sans quoi ce
+        # controle serait vert par insensibilite et non par exactitude.
+        ancien = float(2 * trap(cy, np.linspace(0, 1, n)) - 1)
+        self.assertGreater(
+            abs(ancien - publie), 1e-3,
+            f'l ancien axe ne se distingue plus du bon (ecart '
+            f'{abs(ancien - publie):.6f}) : cette fixture ne seale rien')
+
+    def test_GU13_un_gini_observe_NON_MESURABLE_ne_fait_pas_planter(self):
+        """⚠️⚠️ MON PROPRE CORRECTIF A RENDU CETTE ABSENCE ATTEIGNABLE. Avant
+        `A6-3`, `gini_obs` venait d'un `trapz` local ; delegue au socle, il
+        vaut `None` sur un portefeuille SANS SINISTRE OBSERVE -- et le journal
+        formatait `f'{gini_obs:.4f}'`, qui leve `TypeError`. La fonction ne
+        rendait alors plus rien du tout, pour un portefeuille ou le Gini
+        n'est simplement pas mesurable.
+          *Deleguer une valeur transmet aussi le CONTRAT D'ABSENCE du socle :
+          tout lecteur en AVAL doit etre relu, pas seulement le calcul.*
+
+        ⚠️ MA PREMIERE VERSION DE CE TEST PRENAIT UNE CIBLE CONSTANTE, ET LA
+        MESURE L'A REFUTEE : le socle y rend **-0,0004**, pas `None`. Il ne
+        refuse que sur `somme <= 0` ; sur une cible constante il rend l'aire
+        exacte du trapeze, soit `-1/n²` -- 4e-4 a n=50, 2,5e-7 a n=2000, donc
+        0,0000 apres arrondi sur toute taille reelle. *Cet artefact vit dans
+        le socle et porte sur TOUS les Gini : le toucher deplacerait chaque
+        valeur publiee. Il est constate ici, pas corrige.*
+
+        ⚠️ ET C'EST UN GAIN, PAS SEULEMENT UNE ABSENCE : l'ancien corps rendait
+        `round(float(2 * trapz(nan) - 1), 4)`, c'est-a-dire **nan** publie
+        comme un Gini. Le socle rend `None`, qui se declare.
+        """
+        import math
+
+        import pandas as pd
+
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+        )
+        f = AgentA6Comparaison.__dict__['_calculer_courbes']
+        # AUCUN sinistre observe : `somme <= 0`, le socle refuse de mesurer.
+        courbes = f(object.__new__(AgentA6Comparaison),
+                    pd.DataFrame({'charge': [0.0] * 50}), 'charge')
+        self.assertTrue(courbes.get('disponible'))
+        publie = courbes['gini_observe']
+        self.assertIsNone(
+            publie,
+            f'un portefeuille sans sinistre recoit {publie!r} au lieu de '
+            f'l absence')
+        # ⚠️ ET SURTOUT PAS `nan`, qui traverserait les gardes `is not None`.
+        self.assertFalse(isinstance(publie, float) and math.isnan(publie))
+
+        # La cible CONSTANTE, elle, reste MESUREE -- et vaut zero a l'arrondi.
+        cst = f(object.__new__(AgentA6Comparaison),
+                pd.DataFrame({'charge': [3.0] * 50}), 'charge')
+        self.assertIsNotNone(cst['gini_observe'])
+        self.assertEqual(
+            round(cst['gini_observe'], 3), 0.0,
+            f"la concentration d un portefeuille EGAL vaut {cst['gini_observe']} "
+            f"au lieu de zero : l artefact du socle a change d ordre de "
+            f"grandeur et la prose qui le chiffre doit etre relue")
+
     def test_GU6b_le_compte_des_implementations_est_CELUI_MESURE(self):
-        """⚠️ On re-derive le compte plutot que de croire la liste."""
+        """⚠️ On re-derive le compte plutot que de croire la liste.
+
+        ⚠️⚠️ ET ON LE MESURE AU CORPS, PLUS AU NOM -- constat `A6-3`. Ce
+        controle filtrait `'gini' in n.name.lower()` : il ne voyait donc QUE
+        les fonctions nommees comme ce qu'il cherchait. `a6._calculer_courbes`
+        calculait une courbe de Lorenz complete -- `linspace` + `cumsum` +
+        `trapz` -- sous un nom qui ne contient pas `gini`, et ce controle est
+        reste VERT pendant que la docstring du pipeline affirmait << une seule
+        implementation dans tout le depot >>.
+          *Un releve par symbole ne voit pas ce qui n'est pas nomme comme on
+          l'a cherche. C'est l'audit independant qui l'a trouve, pas moi.*
+
+        Le critere est desormais la SIGNATURE D'UN CALCUL DE LORENZ dans le
+        corps : une somme cumulee ET une integration. Toute fonction du depot
+        y passe, quel que soit son nom.
+        """
         implementations = []
         for chemin in sorted(pathlib.Path(_RACINE).rglob('*.py')):
             s = chemin.as_posix()
@@ -489,8 +627,7 @@ class TestCeQuiRESTE(unittest.TestCase):
             except SyntaxError:                     # pragma: no cover
                 continue
             for n in ast.walk(arbre):
-                if not (isinstance(n, ast.FunctionDef)
-                        and 'gini' in n.name.lower()):
+                if not isinstance(n, ast.FunctionDef):
                     continue
                 corps = list(n.body)
                 if (corps and isinstance(corps[0], ast.Expr)
@@ -499,7 +636,11 @@ class TestCeQuiRESTE(unittest.TestCase):
                     corps = corps[1:]
                 code = '\n'.join(ast.get_source_segment(source, i) or ''
                                  for i in corps)
-                if 'cumsum' in code:
+                # ⚠️ LES DEUX ENSEMBLE, jamais l'un seul : `cumsum` sert a
+                # bien d'autres choses, et une integration sans somme cumulee
+                # n'est pas une courbe de Lorenz.
+                if 'cumsum' in code and ('trapz' in code
+                                         or 'trapezoid' in code):
                     implementations.append(f'{s}::{n.name}')
         self.assertEqual(
             len(implementations), 1 + len(_NON_DELEGUEES),
