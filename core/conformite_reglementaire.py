@@ -908,7 +908,40 @@ def avertissement_walk_forward(backtest: Optional[dict]) -> Optional[str]:
         return ("⚠ VALIDATION TEMPORELLE SANS RÉSULTAT — le walk-forward a "
                 "tourné mais n'a produit aucune métrique de discrimination "
                 "(Gini indisponible). Il ne valide rien.")
-    if ae is None or not (0.90 <= float(ae) <= 1.10):
+    # ⚠️⚠️ AUCUNE FENÊTRE N'A PRODUIT D'A/E — CE CAS SE DIT AVANT LA BANDE, ET
+    # C'EST LE CORRECTIF DE LA BRANCHE MORTE (07/09/2026). Le contrôle ajouté
+    # au lot du 06/09 vivait TOUT EN BAS de cette fonction, sur `cv is None` :
+    # il ne pouvait JAMAIS se déclencher. `ae_cv_wf` ne vaut `None` que quand
+    # la liste des A/E est vide (`a6:2084`) — et dans cet état `ae_ratio`, qui
+    # est l'A/E de la DERNIÈRE fenêtre, vaut `None` lui aussi, si bien que le
+    # test de bande ci-dessous rendait quatre lignes plus haut.
+    #   *Un correctif placé après la branche qui court-circuite est du code
+    #   mort, et son test l'ignore s'il assemble le `backtest` à la main.*
+    # Mesuré par exécution le 07/09 : sur le cas que la branche VISAIT, c'est
+    # « BIAIS DE TARIFICATION » qui sortait. Le discriminant honnête est
+    # `ae_moyen_wf`, qui vaut `None` exactement quand aucune fenêtre n'a
+    # d'A/E — et non `ae_cv_wf`, qui vaut aussi `None` sur une moyenne nulle.
+    if ae_moy is None and bt.get('n_fenetres'):
+        return ("⚠ CALIBRATION NON ÉVALUÉE — le walk-forward a tourné mais "
+                "AUCUNE fenêtre n'a produit d'A/E exploitable (aucun sinistre "
+                "attendu sur les exercices testés). Le rapport observé/attendu "
+                "n'est établi ni dans un sens ni dans l'autre.")
+    # ⚠️⚠️ UNE ABSENCE N'EST PAS UN BIAIS — constat `MES-1`. Cette ligne était
+    # `if ae is None or not (0.90 <= ae <= 1.10)`, et elle publiait dans les
+    # SIX surfaces signées « A/E walk-forward = None, hors de la bande
+    # acceptable. Le modèle sur- ou sous-tarifie systématiquement ». Le
+    # littéral `None` en toutes lettres, et surtout **une CAUSE affirmée** :
+    # une conclusion sur le modèle de l'actuaire, tirée d'une mesure qui n'a
+    # pas eu lieu. La ligne voisine `a6:1990` disait pourtant correctement
+    # `'statut': 'AMBRE' if ae is None`.
+    #   *Dire « hors de la bande » d'une valeur absente, c'est ranger le
+    #   non-mesuré du côté du fautif.*
+    if ae is None:
+        return ("⚠ CALIBRATION NON ÉVALUÉE SUR LA DERNIÈRE FENÊTRE — l'A/E "
+                "n'a pas pu être calculé sur l'exercice le plus récent. "
+                "Aucune conclusion sur la calibration du modèle, ni dans un "
+                "sens ni dans l'autre.")
+    if not (0.90 <= float(ae) <= 1.10):
         return (f"⚠ BIAIS DE TARIFICATION — A/E walk-forward = {ae}, hors de la "
                 f"bande acceptable [0,90 ; 1,10]. Le modèle sur- ou "
                 f"sous-tarifie systématiquement hors échantillon.")
@@ -963,11 +996,20 @@ def avertissement_walk_forward(backtest: Optional[dict]) -> Optional[str]:
     # ⚠️ Le discriminant est un CHAMP, jamais un libellé : `n_fenetres` est posé
     # par A6 à côté d'`ae_cv_wf` (`a6:2241`). Y mettre la phrase « NON mesurée »
     # rouvrirait exactement `TR-1`.
+    # ⚠️⚠️ ET SON MOTIF ÉTAIT FAUX QUAND ELLE TIRAIT. Elle affirmait « aucune
+    # fenêtre n'a produit d'A/E exploitable » — or ce cas-là se dit désormais
+    # PLUS HAUT, sur `ae_moyen_wf is None`. Tout ce qui parvient ici a un A/E
+    # moyen mesuré : le message contredisait le `ae_ratio` posé dans le même
+    # dictionnaire. Mesuré : avec `ae_ratio = 1.00` et `ae_cv_wf = None`, la
+    # fonction publiait « aucune fenêtre n'a produit d'A/E ».
+    #   *Un message qui nomme une cause doit être vrai dans TOUS les états qui
+    #   l'atteignent, pas seulement dans celui qu'on avait en tête.*
+    # Le titre, lui, reste exact — la variabilité n'a pas été mesurée — et
+    # c'est ce que `TR-1` épingle.
     if cv is None and gini_wf is not None and bt.get('n_fenetres'):
-        return ("⚠ STABILITÉ TEMPORELLE NON MESURÉE — aucune fenêtre de "
-                "walk-forward n'a produit d'A/E exploitable. La variabilité "
-                "des performances d'un exercice à l'autre n'est PAS établie, "
-                "ni dans un sens ni dans l'autre.")
+        return ("⚠ STABILITÉ TEMPORELLE NON MESURÉE — la variabilité de l'A/E "
+                "d'un exercice à l'autre n'a pas pu être calculée. Elle n'est "
+                "PAS établie, ni dans un sens ni dans l'autre.")
     return None
 
 

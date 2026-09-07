@@ -25,15 +25,19 @@ prochaine cle de piste d'audit de naitre avec un `.get(cle, 0)`. LN-2 lit
 l'arbre syntaxique du dictionnaire et refuse TOUT defaut litteral non nul,
 sur les cles d'aujourd'hui comme sur celles de demain.
 
-⚠️ CE QUI A ETE MESURE ET N'EST PAS CORRIGE ICI. `conformite:908` rend
-<< BIAIS DE TARIFICATION -- A/E walk-forward = None >> quand l'A/E est
-absent : une absence convertie en verdict dur. La BRANCHE tire, c'est
-verifie. Mais l'ETAT n'a pas ete produit : sur trois portefeuilles reels
-(annees equilibrees, derniere annee minuscule, derniere annee sans sinistre)
-`ae_ratio` n'est JAMAIS None quand `gini_wf_moyen` est mesure -- le lien log
-du Poisson rend la somme attendue strictement positive, et le chemin sans
-colonne temporelle sort en amont sur `gini_wf is None` (l. 904). *On ne
-corrige pas un etat qu'on n'a pas su produire.* Signale, non traite.
+✅ CE QUI ETAIT SIGNALE ICI EST DESORMAIS CORRIGE -- constat `MES-1`, ferme le
+07/09/2026, voir `test_absence_pas_verdict.py`. Cette note disait :
+<< `conformite:908` rend "BIAIS DE TARIFICATION -- A/E walk-forward = None"
+quand l'A/E est absent ; la BRANCHE tire, mais l'ETAT n'a pas ete produit sur
+trois portefeuilles reels. On ne corrige pas un etat qu'on n'a pas su
+produire. Signale, non traite. >>
+
+⚠️⚠️ ET C'EST L'ATTENTE DE L'ETAT QUI ETAIT LE MAUVAIS CRITERE. Le meme lot
+avait ajoute une quatrieme branche censee dire l'absence -- placee APRES celle
+qui court-circuite, elle etait du CODE MORT, et son propre sceau ne l'a pas
+vu parce qu'il assemblait le `backtest` a la main. *Exiger un portefeuille
+reel avant de corriger a laisse le defaut vivre ET son correctif mourir ;
+c'est la LECTURE DES BRANCHES, pas la production de l'etat, qui l'a tranche.*
 
 Tout en `unittest.TestCase` : la gate lance `unittest discover`.
 """
