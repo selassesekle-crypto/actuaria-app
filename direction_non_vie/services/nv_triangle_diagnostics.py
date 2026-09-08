@@ -442,7 +442,28 @@ def _ctrl_remplissage(C, n, m) -> Dict:
     pts_max = 10
 
     # Zone observable = triangle supérieur gauche
-    n_attendu = n * (n + 1) // 2  # triangle carré attendu
+    #
+    # ⚠️⚠️ LA ZONE OBSERVABLE D'UN TRIANGLE n×m EST Σ_i min(m, n−i). Elle
+    # vaut n(n+1)/2 SEULEMENT quand m ≥ n. Un triangle TRONQUÉ (m < n) —
+    # la pratique professionnelle standard des branches longues — a moins
+    # de cellules À REMPLIR, pas plus de cellules MANQUANTES.
+    #
+    # ⚠️ MESURÉ sur des triangles SANS UNE SEULE CELLULE MANQUANTE :
+    #      10×10  →  VERT  100,0 %
+    #      20×8   →  AMBRE  62,9 %   « triangle partiellement vide »
+    #      25×8   →  AMBRE  52,9 %
+    #      30×8   →  ROUGE  45,6 %   « fournir les données manquantes »
+    # Le classement se dégradait avec la LONGUEUR de l'historique :
+    # l'alerte était d'autant plus forte que le portefeuille était mieux
+    # documenté, et elle réclamait des données qui n'existent pas et ne
+    # manquent pas. Sur le 30×8, n_attendu passe de 465 à 212 et le taux
+    # de 45,6 % à 100 %. Aucun effet sur un carré : les deux expressions
+    # coïncident dès que m ≥ n.
+    #
+    # ⚠️ LES DEUX VOISINS DE CE FICHIER SAVAIENT DÉJÀ : `_ctrl_colonnes`
+    # et `_ctrl_facteurs` portent chacun leur garde de forme explicite.
+    # C7 était le seul des trois à ne pas l'avoir.
+    n_attendu = sum(min(m, n - i) for i in range(n))
     n_rempli  = sum(1 for i in range(n) for j in range(m)
                     if i + j < n and C[i, j] > 0)
     taux = n_rempli / n_attendu * 100 if n_attendu > 0 else 0

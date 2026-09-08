@@ -677,7 +677,13 @@ def clark_ldf(
     ----------
     C : np.ndarray
         Triangle des paiements CUMULÉS (n × m), zone connue i+j < n.
-        Cas supportés : n=m (carré), n>m (court), n<m (long, rare).
+        Cas supportés : n=m (carré) et n>m (tronqué — m colonnes de
+        développement pour n années de survenance, la forme standard des
+        branches longues). ⚠️ CETTE PHRASE ÉTAIT FAUSSE POUR n>m JUSQU'AU
+        LOT 3 : le masquage supposait un carré et effaçait les années
+        récentes, si bien que tout triangle tronqué échouait. Le cas n<m
+        (plus de colonnes que d'années) n'est PAS supporté par A7 dans
+        son ensemble — voir la porte d'entrée N1.
     periodes : list[float], optional
         Âges de développement, strictement croissants. Défaut : [1, 2, ..., m],
         soit des ANNÉES — θ s'interprète alors en années. Les deux courbes ne
@@ -785,9 +791,24 @@ def clark_ldf(
     C_float = C.astype(float).copy()
 
     # Mettre NaN là où le triangle est vide (cellules au-delà de la diagonale)
+    #
+    # ⚠️⚠️ ZONE CONNUE : `i + j < n`, LA CONVENTION DE TOUT A7 —
+    # `chain_ladder`, `projeter_ultimates`, `nv_triangle_projection`,
+    # `increments_positifs` l'emploient tous. L'écriture précédente,
+    # `j > m - 1 - i`, masquait sur `i + j > m - 1` : elle coïncide avec
+    # la bonne quand n = m, et en diverge dès que le triangle est TRONQUÉ
+    # (m < n), c'est-à-dire la forme standard des branches longues.
+    #
+    # ⚠️ MESURÉ : sur un 14×8, la zone connue réelle porte 84 cellules,
+    # Clark n'en voyait que 36 — les SIX années de survenance les plus
+    # récentes, celles qui portent la réserve, étaient entièrement
+    # effacées. Clark échouait alors sur 10×8, 12×8, 14×8, 12×10 et
+    # 20×10, et n'aboutissait que sur les carrés 8×8 et 10×10. L'échec
+    # était bruyant et ne produisait aucun chiffre faux — mais il était
+    # attribué à « l'optimisation », jamais à la forme du triangle.
     for i in range(n):
         for j in range(m):
-            if j > m - 1 - i:
+            if i + j >= n:
                 C_float[i, j] = np.nan
 
     # Pas de normalisation : la log-vraisemblance ODP n'est pas invariante à
