@@ -684,15 +684,46 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
 
     # ── Chain Ladder ──────────────────────────────────────────────────────────
     tail_val = tail.get('tail_factor', 1.0) if isinstance(tail, dict) else 1.0
+    # ⚠️⚠️ LA CONTRIBUTION DE LA QUEUE SE CALCULE SUR L'ULTIME, PAS SUR LA
+    # RÉSERVE. Elle vaut réserve(tail) − réserve(1) = (tail − 1) × Σ U_sans
+    # queue, et les ultimes PUBLIÉS portent déjà la queue : la forme juste
+    # est donc (1 − 1/tail) × Σ ultimates. L'écriture précédente,
+    # (tail − 1) × réserve_CL, sous-estime d'autant que le triangle est
+    # mature — mesuré −61,4 % sur un triangle à queue 1,3771 (732 530 €
+    # publiés pour 1 898 388 € réels).
+    _u_cl = cl.get('ultimates') or []
+    _contrib_queue = ((1.0 - 1.0 / tail_val) * float(sum(_u_cl))
+                      if tail_val > 1.0 and len(_u_cl) else 0.0)
     if tail_val > 1.005:
         lignes.append(
             f"TAIL FACTOR : {tail_val:.4f} (+{(tail_val-1)*100:.2f}%). "
             f"Le développement ne s'achève pas à la dernière colonne du triangle. "
             f"Ce tail factor a été estimé par régression log-linéaire sur les "
             f"derniers facteurs de développement, ce qui représente "
-            f"{_e((tail_val-1)*cl_r)} de provisions additionnelles. "
+            f"{_e(_contrib_queue)} de provisions additionnelles. "
             f"{'Pour une branche à longue queue (RC, Construction), ce tail est normal.' if tail_val > 1.02 else 'Ce tail factor modéré est caractéristique des branches à développement court (MRH, Auto matériel).'}"
         )
+        # ⚠️⚠️ L'ÉCRÊTAGE ÉTAIT MUET, ET IL RETIRE DE LA RÉSERVE. Le
+        # plafond `min(lob_tail_max_alerte × 1,5 ; 1,50)` est un garde-fou
+        # arithmétique défendable — un tail extrapolé sans borne
+        # multiplierait les ultimes sans limite. Mais il RÉSUMAIT deux
+        # situations très différentes au même chiffre : `chain_ladder`
+        # conserve `tail_brut` et `tail_ecrete` depuis le lot F1 et compose
+        # même le message qui les nomme — message qu'AUCUN livrable ne
+        # rendait. Mesuré : brut 1,7162 ramené à 1,5000, soit 1 377 565 €
+        # (−18,8 %) retirés de la réserve sans qu'un seul document le dise.
+        # Le plafond est un choix prudentiel ; le taire ne l'est pas.
+        if isinstance(tail, dict) and tail.get('tail_ecrete'):
+            lignes.append(
+                f"⚠️ CE FACTEUR EST ÉCRÊTÉ : la régression donne "
+                f"{tail.get('tail_brut', tail_val):.4f}, le plafond de "
+                f"{tail.get('tail_max', 1.5):.4f} le ramène à {tail_val:.4f}. "
+                f"La réserve publiée est donc INFÉRIEURE à ce que la queue "
+                f"observée implique. Le plafond est un garde-fou "
+                f"arithmétique, pas un jugement actuariel : justifier la "
+                f"troncature dans la note méthodologique, ou raccourcir la "
+                f"fenêtre de régression."
+            )
     else:
         lignes.append(
             f"TAIL FACTOR ≈ 1.000 — le développement est considéré complet "
@@ -723,16 +754,18 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
         lignes.append(
             f"Ce niveau d'incertitude modéré (AMBRE EIOPA) reflète "
             f"une variabilité des facteurs dans la plage habituelle "
-            f"pour ce type de branche. Le P90 = {_e(p90_m)} est à "
-            f"utiliser pour le calibrage du buffer de prudence."
+            f"pour ce type de branche. Le P90 = {_e(p90_m)} mesure cette "
+            f"variabilité ; il se documente au dossier actuariel, il ne "
+            f"s'inscrit pas au bilan (Art. 77)."
         )
     else:
         lignes.append(
             f"Ce niveau d'incertitude élevé (ROUGE EIOPA — CV > 20%) "
             f"est préoccupant. Il peut indiquer un triangle trop court, "
             f"des données hétérogènes, ou un portefeuille en forte "
-            f"évolution. Le P90 = {_e(p90_m)} doit être utilisé comme "
-            f"plancher conservateur, et une analyse par cohortes est recommandée."
+            f"évolution. Le P90 = {_e(p90_m)} mesure l'ampleur de cette "
+            f"incertitude ; il ne constitue pas un plancher à inscrire "
+            f"(Art. 77). Une analyse par cohortes est recommandée."
         )
 
     lignes.append("")
@@ -934,9 +967,17 @@ def _s5_best_estimate(n4: Dict) -> str:
         "",
         f"Distribution log-normale — {libelle_percentiles(n4).lower()} — "
         f"percentiles retenus (QIS5 TP.5.26) :",
-        f"  • Provision prudentielle P75  : {_e(p75)}  (+{_p((p75/max(be,1)-1)*100)} vs BE)",
-        f"  • Provision stress test P90   : {_e(p90)}  (+{_p((p90/max(be,1)-1)*100)} vs BE)",
-        f"  • Provision extrême P99.5     : {_e(p995)} (+{_p((p995/max(be,1)-1)*100)} vs BE)",
+        # ⚠️⚠️ UN PERCENTILE SE NOMME PAR SON PERCENTILE, JAMAIS
+        # « PROVISION ». Ces trois lignes s'annoncent « percentiles
+        # retenus » juste au-dessus, puis étiquetaient chacune
+        # « Provision » — le mot qui désigne, sous l'Art. 77, ce qui
+        # S'INSCRIT au bilan. Un percentile MESURE la dispersion autour du
+        # Best Estimate ; il ne s'y substitue pas. Le même mot vivait aux
+        # trois mêmes lignes de `n5_excel`, qui portait déjà la règle en
+        # commentaire sans l'appliquer.
+        f"  • Percentile prudentiel P75   : {_e(p75)}  (+{_p((p75/max(be,1)-1)*100)} vs BE)",
+        f"  • Percentile de stress P90    : {_e(p90)}  (+{_p((p90/max(be,1)-1)*100)} vs BE)",
+        f"  • Percentile extrême P99.5    : {_e(p995)} (+{_p((p995/max(be,1)-1)*100)} vs BE)",
         f"  • Incertitude Mack σ          : {_e(sigma)}",
         f"  • CV inter-méthodes           : {_p(cv)}",
         "",
@@ -956,16 +997,21 @@ def _s5_best_estimate(n4: Dict) -> str:
             f"Le Best Estimate de {_e(be)} est utilisable, mais l'écart "
             f"entre méthodes suggère une sensibilité aux hypothèses "
             f"qui mérite d'être documentée dans le rapport actuaire désigné. "
-            f"Une provision de risque complémentaire peut être envisagée "
-            f"si la direction financière souhaite une couverture au P75."
+            # ⚠️ LE PERCENTILE SE DOCUMENTE, IL NE S'INSCRIT PAS (Art. 77).
+            f"Le P75 de {_e(p75)}, soit {_p((p75/max(be,1)-1)*100)} au-dessus "
+            f"du Best Estimate, mesure cette sensibilité ; il se documente "
+            f"dans le dossier actuariel et ne se substitue pas au BE au bilan."
         )
     else:
         lignes.append(
             f"La divergence inter-méthodes est significative (CV = {_p(cv)}). "
             f"Le Best Estimate de {_e(be)} doit être présenté à l'actuaire "
             f"désigné avec l'ensemble du dossier de calcul avant toute "
-            f"inscription au bilan. Le P90 de {_e(p90)} est recommandé "
-            f"comme plancher conservateur en attendant une validation formelle."
+            f"inscription au bilan. Le P90 de {_e(p90)}, soit "
+            f"{_p((p90/max(be,1)-1)*100)} au-dessus du Best Estimate, mesure "
+            f"l'ampleur de cette divergence ; il éclaire la décision de "
+            f"l'actuaire désigné, il ne constitue pas un montant à inscrire "
+            f"(Art. 77)."
         )
 
     return "\n".join(lignes)
@@ -1128,6 +1174,31 @@ def _s7_scr(n4: Dict) -> str:
 #  SECTION 8 — RECOMMANDATIONS
 # =============================================================================
 
+def _phrase_convergence(n4: Dict, cv: float, be: float) -> str:
+    """La phrase de convergence se DEDUIT de l'assiette, au lieu de l'affirmer.
+
+    ⚠️⚠️ « Une divergence modérée est observée entre méthodes (CV = 0.0%) »
+    était publié sur des dossiers où UNE SEULE méthode avait été retenue. Le
+    coefficient de variation inter-méthodes y vaut zéro PAR CONSTRUCTION : il
+    ne mesure aucune convergence, il mesure l'absence de tout second avis. Un
+    CV nul lu comme une convergence dit exactement l'inverse de ce qu'il vaut.
+
+    ⚠️ Le cas n'est pas marginal : un dossier mono-méthode ne peut pas sortir
+    VERT par construction, donc il sort AMBRE — c'est-à-dire par cette branche.
+    """
+    n_meth = len(n4.get('methodes_incluses') or ())
+    if n_meth < 2:
+        socle = ("Une SEULE méthode a pu être retenue : le coefficient de "
+                 "variation inter-méthodes est nul par construction et ne "
+                 "mesure aucune convergence.")
+    else:
+        socle = (f"Une divergence modérée est observée entre les {n_meth} "
+                 f"méthodes retenues (CV = {_p(cv)}).")
+    return (socle + f" Le Best Estimate de {_e(be)} est utilisable sous "
+            f"réserve de validation par l'actuaire désigné et de "
+            f"documentation des hypothèses dans le dossier actuariel.")
+
+
 def _s8_recommandations(n1: Dict, n2: Dict, n3: Dict, n4: Dict, lob: str) -> str:
     statut   = n4.get('statut', 'AMBRE')
     be       = n4.get('best_estimate', 0)
@@ -1151,13 +1222,17 @@ def _s8_recommandations(n1: Dict, n2: Dict, n3: Dict, n4: Dict, lob: str) -> str
             f"inscription au bilan S2.",
         ]
     elif statut == 'AMBRE':
+        # ⚠️⚠️ « FAVORABLE » EST LE MOT QUE N4 A RETIRÉ DE CE CAS. Vingt
+        # lignes de `n4_best_estimate` expliquent pourquoi : un dossier à
+        # réserves n'est pas « favorable », même sous réserve, et un
+        # lecteur qui parcourt la fin y lisait un feu vert. N4 publie
+        # « AVEC RÉSERVES » dans `rapport_actuaire.avis` ; §8 écrivait
+        # « FAVORABLE AVEC RÉSERVES » DANS LE MÊME DOCUMENT. On aligne sur
+        # N4, qui est la source unique de ce vocabulaire.
         lignes += [
-            "AVIS ACTUARIEL : FAVORABLE AVEC RÉSERVES",
+            "AVIS ACTUARIEL : AVEC RÉSERVES",
             "",
-            f"Une divergence modérée est observée entre méthodes (CV = {_p(cv)}). "
-            f"Le Best Estimate de {_e(be)} est utilisable sous réserve de "
-            f"validation par l'actuaire désigné et de documentation "
-            f"des hypothèses dans le dossier actuariel.",
+            _phrase_convergence(n4, cv, be),
         ]
     else:
         lignes += [
@@ -1194,9 +1269,17 @@ def _s8_recommandations(n1: Dict, n2: Dict, n3: Dict, n4: Dict, lob: str) -> str
         lignes += [
             f"1. Soumettre ce dossier à la validation de l'actuaire désigné.",
             f"2. Si validation obtenue : inscrire {_e(be)} au bilan S2.",
-            f"3. Envisager une provision de risque complémentaire "
-            f"   ({_e(p90)} au lieu du BE) si la direction financière "
-            f"   privilégie la prudence.",
+            # ⚠️⚠️ « AU LIEU DU BE » EST CONTRAIRE À L'ART. 77, que ce même
+            # document cite six lignes plus haut : les provisions
+            # techniques valent BE + marge de risque, et le BE est une
+            # ESPÉRANCE. Mesuré sur RAA : le P90 vaut 86 365 € contre un
+            # BE de 52 135 €, soit +65,7 % — et cette ligne sortait sur
+            # TOUT dossier AMBRE, c'est-à-dire la quasi-totalité, un
+            # dossier mono-méthode ne pouvant pas sortir VERT.
+            f"3. Documenter la dispersion dans le dossier actuariel : "
+            f"{_e(p90)} au P90, soit {_p((p90/max(be,1)-1)*100)} au-dessus "
+            f"du Best Estimate. Cette mesure éclaire l'incertitude ; "
+            f"elle ne se substitue pas au BE au bilan (Art. 77).",
             f"4. SCR provisions indicatif : {_e(scr_prov)}.",
             f"5. Réviser les hypothèses à la prochaine clôture.",
         ]
@@ -1206,8 +1289,10 @@ def _s8_recommandations(n1: Dict, n2: Dict, n3: Dict, n4: Dict, lob: str) -> str
             f"2. Consulter l'actuaire désigné impérativement.",
             f"3. Vérifier la qualité des données source (triangle / sinistres bruts).",
             f"4. Analyser la cause de la divergence inter-méthodes.",
-            f"5. Considérer une provision conservatrice de {_e(p995)} "
-            f"   en attendant la résolution.",
+            f"5. Documenter l'ampleur de l'incertitude : {_e(p995)} au "
+            f"P99,5. Ce percentile mesure la dispersion — la voie est la "
+            f"résolution de la divergence inter-méthodes, pas un matelas "
+            f"prudentiel que l'Art. 77 ne prévoit pas.",
         ]
 
     lignes.append("")

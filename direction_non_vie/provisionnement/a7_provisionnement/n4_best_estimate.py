@@ -1362,6 +1362,23 @@ class BestEstimateS2:
                 f"Méthode principale : "
                 f"{methode_rec.replace('_',' ').title()} — {_raison_short}")
 
+        # ⚠️⚠️ L'ÉCRÊTAGE DE LA QUEUE N'AVAIT AUCUN LECTEUR. `tail_brut` et
+        # `tail_ecrete` sont écrits par `chain_ladder` depuis le lot F1,
+        # avec un message composé qui les nomme — et le relevé de tous
+        # leurs lecteurs de production en donnait ZÉRO. La réserve publiée
+        # était inférieure à ce que la queue ajustée implique, en silence.
+        _tail_info = n3.get('chain_ladder', {}).get('tail_factor', {})
+        if isinstance(_tail_info, dict) and _tail_info.get('tail_ecrete'):
+            recommandations.append(
+                f"QUEUE ÉCRÊTÉE — l'extrapolation ajustée donne un facteur "
+                f"de {_tail_info.get('tail_brut', 0):.4f}, ramené à "
+                f"{_tail_info.get('tail_factor', 0):.4f} par le plafond "
+                f"{_tail_info.get('tail_max', 1.5):.4f}. La réserve publiée "
+                f"est donc INFÉRIEURE à ce que la queue observée implique : "
+                f"justifier la troncature dans la note méthodologique, ou "
+                f"raccourcir la fenêtre de régression."
+            )
+
         # Recommandation back-testing si dispo
         bt_statut_val = n3.get('backtesting', {}).get('statut', '')
         if bt_statut_val == 'ROUGE':
@@ -1804,7 +1821,8 @@ class BestEstimateS2:
         RM = CoC × Σ_{t=0}^{T} [ SCR_NL(t) / (1+r_t)^(t+1) ]
 
         SCR_NL(t) = SCR_NL(0) × BE(t) / BE(0)   [méthode 2]
-        BE(t)     = BE(0) / CDF(t)               [run-off CL]
+        BE(t)     = BE(0) × Σ_{j≥t} r_j / Σ_j r_j   [run-off CL, r = part
+                    ENCORE à développer — cf. le bloc de profil plus bas]
         CoC       = 6%                            [EIOPA fixé]
         r_t       = LA COURBE REÇUE EN PARAMÈTRE, embarquée à défaut
 
@@ -1842,29 +1860,50 @@ class BestEstimateS2:
         tableau = []
 
         # PROFIL DE RUN-OFF RETENU — et il est un CHOIX, pas une donnée.
-        # `f_cum` est dans l'ordre [CDF_dernière_col, …, CDF_1ère_col]. On pose
-        # la part encore à développer à la colonne j, pct_résiduel[j] = 1/f_cum[j],
-        # puis :
         #
-        #     BE(t) = BE(0) × Σ_{j≥t} pct_résiduel[j] / Σ_j pct_résiduel[j]
+        # ⚠️⚠️ `1/f_cum[j]` EST LA PART **DÉJÀ** DÉVELOPPÉE À LA COLONNE j.
+        # C'est mot pour mot ce que documente `calculer_pct_developpe`, dans ce
+        # même module : « pct_dev[i] = fraction des sinistres déjà payés ». La
+        # part ENCORE à développer — celle que ce profil requiert — est son
+        # COMPLÉMENT. La ligne posait `pct_res[j] = 1/f_cum[j]` en le commentant
+        # « la part encore à développer » : le code et son texte donnaient à la
+        # même expression deux sens opposés, et c'est le texte qui avait raison
+        # sur l'intention.
+        #
+        # ⚠️ ET L'ORDRE DE `f_cum` EST NATUREL, PAS INVERSÉ. Le commentaire
+        # annonçait « [CDF_dernière_col, …, CDF_1ère_col] ». Mesuré sur GenIns :
+        # f_cum = [14,4466 · 4,1387 · 2,3686 · … · 1,0177 · 1,0] — décroissant,
+        # f_cum[0] est la CDF de la PREMIÈRE colonne. Un lecteur qui vérifiait
+        # le profil en se fiant à cette phrase concluait qu'il était juste.
+        #
+        #     r_j   = 1 − 1/f_cum[j]                 part encore à développer
+        #     BE(t) = BE(0) × Σ_{j≥t} r_j / Σ_j r_j
         #
         # et le SCR projeté proportionnellement au BE (méthode 2 de l'orientation
         # EIOPA sur la Risk Margin).
         #
-        # ⚠️ CE CHOIX PÈSE LOURD, ET LE CHIFFRE EST MESURÉ, PAS ESTIMÉ (lot F2).
-        # Sur GenIns, BE = 17 571 609 € : le profil ci-dessus rend une Risk
-        # Margin de 2 107 541 € (11,99 % du BE) ; un amortissement LINÉAIRE sur
-        # la même durée, tout aussi admissible au titre de la méthode 2, rend
-        # 1 582 906 € (9,01 % du BE) — soit **−24,9 %**. Le profil n'est donc
-        # pas un détail de mise en œuvre : il déplace le quart d'un poste de
-        # bilan, et c'est à ce titre qu'il est écrit ici plutôt que déduit du
-        # code par le lecteur.
+        # ⚠️ POURQUOI CETTE FORME, ET PAS `1 − 1/f_cum[t]` SEUL. La somme de
+        # queue est l'écoulement AGRÉGÉ du triangle : à la date t, l'année de
+        # survenance i est à l'âge k_i + t, si bien que BE(t) = Σ_i U_i · r_{k_i+t}
+        # — soit exactement Σ_{j≥t} r_j lorsque les ultimes U_i sont comparables
+        # entre années. Un profil de COHORTE unique ne restitue pas cela.
+        #
+        # ⚠️ CE CHOIX PÈSE LOURD, ET SA JUSTIFICATION EST UNE PROPRIÉTÉ, PAS UN
+        # EURO. Le profil est comparé au run-off réellement recalculé sur le
+        # triangle (compléter le carré par CL, puis BE(t) = Σ_i ultime_i −
+        # payé_i(t)) : c'est un rapport sans dimension, donc INDÉPENDANT de la
+        # courbe des taux — contrairement à une Risk Margin en euros, qui bouge
+        # à chaque arrêté de courbe. C'est `test_a7_profil_run_off.py` qui tient
+        # cette comparaison, et `test_a7_gouvernance.T4_Zero_Euro_Deplace` qui
+        # porte les euros. AUCUN chiffre monétaire n'est recopié ici : le
+        # précédent l'était, et il avait dérivé de 2 107 541 € à 2 078 603 €
+        # sans que personne ne le voie.
         #
         # Deux esquisses de profils ABANDONNÉES occupaient cette place, dont une
         # inachevée finissant sur un commentaire vide. Elles décrivaient des
         # méthodes qui ne sont pas celle appliquée : les garder revenait à
         # documenter le code par ce qu'il ne fait pas.
-        pct_res  = [1.0 / max(float(f), 1.0) for f in f_cum]
+        pct_res  = [1.0 - 1.0 / max(float(f), 1.0) for f in f_cum]
         total_pr = max(sum(pct_res), 1e-10)
         m_rm     = len(pct_res)
         be_par_t = []
@@ -2092,7 +2131,13 @@ class BestEstimateS2:
         ] + [
             f"  {code} {bfcc[code].get('libelle', ''):42.42s} "
             f"{bfcc[code].get('statut', 'NON TESTABLE')}"
-            for code in ('BFCC-H1', 'BFCC-H2', 'BFCC-H3', 'BFCC-H4', 'BFCC-H5')
+            # ⚠️ BFCC-H6 EST BLOQUANTE POUR CAPE COD et manquait ici.
+            # `_HYPOTHESES_BLOQUANTES` déclare ('BFCC-H5', 'BFCC-H6') pour
+            # `cape_cod` ; l'énumération, RECOPIÉE, s'arrêtait à H5. Une
+            # Cape Cod écartée à cause de H6 était donc exclue du Best
+            # Estimate sans que le rapport en donne la raison.
+            for code in ('BFCC-H1', 'BFCC-H2', 'BFCC-H3', 'BFCC-H4',
+                         'BFCC-H5', 'BFCC-H6')
             if code in bfcc
         ] + [
             "",
@@ -2201,7 +2246,15 @@ class BestEstimateS2:
                 f"  AVIS AVEC RÉSERVES — Divergence modérée (CV={cv:.1f}%).",
                 f"  BE de {be:,.0f}€ utilisable sous réserve de validation",
                 f"  par l'actuaire désigné avant signature du bilan.",
-                f"  Constituer une provision de risque complémentaire.",
+                # ⚠️⚠️ « CONSTITUER UNE PROVISION COMPLÉMENTAIRE »
+                # demandait d'inscrire au-delà du Best Estimate. Sous
+                # l'Art. 77 les provisions techniques valent BE + marge
+                # de risque, le BE étant une ESPÉRANCE : une prudence
+                # discrétionnaire en sus n'y a pas de place. La même
+                # instruction vivait à six autres endroits de N5 ; elle
+                # est remplacée partout par ce qu'elle voulait dire —
+                # documenter la dispersion, pas l'inscrire.
+                f"  Documenter la dispersion inter-méthodes au dossier.",
             ]
         else:
             lignes += [

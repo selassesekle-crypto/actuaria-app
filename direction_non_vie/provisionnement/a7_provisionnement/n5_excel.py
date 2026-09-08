@@ -1,9 +1,13 @@
 # =============================================================================
 #  ActuarIA — Agent A7 Ibrahim
-#  n5_excel.py  —  Export Excel 10 onglets
+#  n5_excel.py  —  Export Excel (le nombre d'onglets se LIT dans le code,
+#                  il ne se recopie pas : Munich CL est conditionnel, donc
+#                  AUCUN nombre fixe n'est vrai. Mesure : 11 feuilles
+#                  produites quand l'en-tete en annoncait 10, a trois
+#                  endroits.)
 # =============================================================================
 #
-#  10 onglets :
+#  Onglets produits :
 #  1. Synthèse              — KPIs + statuts couleur
 #  2. Triangle brut         — triangle cumulé avec mise en forme heatmap
 #  3. Facteurs CL           — facteurs + cumulés + % développé
@@ -31,6 +35,10 @@ import numpy as np
 from .methodes_be import (ORDRE_AFFICHAGE, disponible, libelle,
                           motif_exclusion, reserve)
 from .n2_hypotheses import mention_recommandation_cl_courte
+# ⚠️ LE LIBELLE DE L'ABSENCE D'ARRETE A UNE SOURCE UNIQUE. `n5_rapport` le
+# porte et `n5_commentaire` l'applique deja : le recopier ici en ferait la
+# troisieme copie d'une chaine que le dépôt a deja divergee ailleurs.
+from .n5_rapport import ARRETE_ABSENT
 from .n2_hypotheses_clm import NON_TESTABLE
 from .n2_hypotheses_clm import lignes_correlations_h1
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
@@ -180,12 +188,16 @@ def _data_row(ws, row, values, formats=None, bold=False, bg=None):
 #  ONGLET 1 — SYNTHÈSE
 # =============================================================================
 
-def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
+def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_generation,
+                   libelle_arrete):
     ws = wb.create_sheet("1. Synthèse")
     ws.sheet_view.showGridLines = False
 
     # En-tête
-    _titre_section(ws, 1, 1, f"ACTUARIA — Rapport de Provisionnement Non-Vie | {ref_client} | {date_str}", 6)
+    # ⚠️ L'EN-TETE PORTE L'ARRETE, PAS LA DATE DU JOUR : c'est l'exercice
+    # qui identifie un rapport de provisionnement, pas l'instant ou le
+    # fichier a ete produit — lequel figure desormais dans son propre champ.
+    _titre_section(ws, 1, 1, f"ACTUARIA — Rapport de Provisionnement Non-Vie | {ref_client} | {libelle_arrete}", 6)
     _row_h(ws, 1, 24)
 
     # Bloc BE S2
@@ -194,9 +206,13 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
     statut = n4['statut']
     kpis = [
         ("Best Estimate S2",       be,                      FMT_NB, statut),
-        ("Provision prudentielle P75", n4['reserve_p75'],   FMT_NB, None),
-        ("Provision stress test P90",  n4['reserve_p90'],   FMT_NB, None),
-        ("Provision extrême P99.5",    n4['reserve_p99_5'], FMT_NB, None),
+        # ⚠️ UN PERCENTILE SE NOMME PAR SON PERCENTILE — la règle 2 du lot
+        # C3b, écrite plus bas dans CE fichier et non appliquée ici.
+        # « Provision » désigne ce qui s'inscrit au bilan sous l'Art. 77 ;
+        # un percentile mesure la dispersion autour du Best Estimate.
+        ("Percentile prudentiel P75",  n4['reserve_p75'],   FMT_NB, None),
+        ("Percentile de stress P90",   n4['reserve_p90'],   FMT_NB, None),
+        ("Percentile extrême P99.5",   n4['reserve_p99_5'], FMT_NB, None),
         ("Incertitude Mack (σ)",       n4['sigma_mack'],    FMT_NB, None),
         ("CV inter-méthodes",          n4['cv_inter_methodes'] / 100, FMT_PCT, None),
     ]
@@ -277,8 +293,9 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
     # APPLIQUÉE, et le tableau de décision porte celle qui a été écartée.
     _kpi(ws, 32, 1, "Variante CL appliquée", n3.get('methode_cl','—'))
     _kpi(ws, 33, 1, "Tail factor",     n3['chain_ladder'].get('tail_factor',{}).get('tail_factor',1) if isinstance(n3['chain_ladder'].get('tail_factor'),dict) else 1, FMT_DEC4)
-    _kpi(ws, 34, 1, "Date rapport",    date_str)
-    _kpi(ws, 35, 1, "Référence",       ref_client)
+    _kpi(ws, 34, 1, "Arrêté",          libelle_arrete)
+    _kpi(ws, 35, 1, "Généré le",       date_generation)
+    _kpi(ws, 36, 1, "Référence",       ref_client)
 
     # Largeurs colonnes
     for col, w in [(1,32),(2,18),(3,16),(4,12),(5,12),(6,12)]:
@@ -435,9 +452,15 @@ def _ong4_methodes(wb, n3, n4):
          n3['chain_ladder'].get('methode',''), '—'),
         ('Mack 1993 (stochastique)', n3['mack']['reserve_best_estimate'],  'mack',
          f"σ={n3['mack']['sigma_total']:,.0f}€", f"CV={n3['mack']['cv_pct']:.1f}%"),
-        ('Bornhuetter-Ferguson',   n3['bf']['reserve_totale'],             'bornhuetter_ferguson',
+        # ⚠️⚠️ LE FAUX ZERO, CINQUIEME FOYER. `reserve()` rend None quand la
+        # methode n'a pas pu etre calculee — l'onglet 1 l'emploie deja, et
+        # le commentaire de `_ong5_ibnr` AFFIRMAIT que l'onglet 4 aussi.
+        # Il lisait `reserve_totale` en direct et publiait « 0 » DANS LA
+        # COLONNE DES MONTANTS, celle qu'on somme et qu'on graphe, dans le
+        # meme classeur qui ecrit « non calculee » a l'onglet 1.
+        ('Bornhuetter-Ferguson',   reserve(n3, 'bornhuetter_ferguson'),     'bornhuetter_ferguson',
          f"LR={libelle_loss_ratio(n3['bf'])}", n3['bf']['source_lr']),
-        ('Cape Cod',               n3['cape_cod']['reserve_totale'],       'cape_cod',
+        ('Cape Cod',               reserve(n3, 'cape_cod'),                'cape_cod',
          f"LR_CC={libelle_loss_ratio(n3['cape_cod'], 'lr_cape_cod')}", n3['cape_cod']['source_exposition']),
         ('Bootstrap ODP',          n3['bootstrap'].get('be_bootstrap',0), 'bootstrap_odp',
          f"φ={libelle_incertitude(n3['bootstrap'], 'phi')}",
@@ -467,7 +490,11 @@ def _ong4_methodes(wb, n3, n4):
                 ('✅ Incluse' if inc else '❌ Exclue'))
         st_c = NAVY if _gb_l else (VERT_S2 if inc else ROUGE_S2)
 
-        vals = [nom, res, poid, st, detail, note]
+        # `None` laissait la cellule VIDE. L'onglet 1 ecrit le MOTIF ; on
+        # emploie le meme mot, pour que le meme fait se lise pareil dans
+        # les deux onglets du meme classeur.
+        vals = [nom, res if res is not None else motif_exclusion(n4, key),
+                poid, st, detail, note]
         fmts = [None, FMT_NB, FMT_PCT, None, None, None]
         for j, (val, fmt) in enumerate(zip(vals, fmts)):
             c = ws.cell(row=3+i, column=j+1, value=val)
@@ -509,10 +536,13 @@ def _ong4_methodes(wb, n3, n4):
     _titre_section(ws, row_be+2, 1,
                    f"Distribution log-normale — {_appr.lower()}", 4)
     pcts = [
-        (f"P75 — Provision prudentielle ({_appr})", n4['reserve_p75']),
-        (f"P90 — Provision stress test ({_appr})",  n4['reserve_p90']),
         # ⚠️ Règle 2 du lot C3b : un percentile se nomme par son percentile.
-        (f"P99.5 — Provision extrême ({_appr})",    n4['reserve_p99_5']),
+        # ELLE ÉTAIT ÉCRITE ICI ET DÉMENTIE PAR LES TROIS LIGNES QU'ELLE
+        # ACCOMPAGNAIT : « Provision » est le mot de l'Art. 77 pour ce qui
+        # s'inscrit au bilan.
+        (f"P75 — percentile prudentiel ({_appr})", n4['reserve_p75']),
+        (f"P90 — percentile de stress ({_appr})",  n4['reserve_p90']),
+        (f"P99.5 — percentile extrême ({_appr})",  n4['reserve_p99_5']),
         ("σ des percentiles publiés",
          n4.get('sigma_percentiles', n4.get('sigma_total_compose', n4['sigma_mack']))),
     ]
@@ -1154,8 +1184,11 @@ def _ong10_sensibilites(wb, n4):
         'sans_cape_cod':             'Sensibilité à Cape Cod',
         'boot_ic_inf':               'Scénario favorable (2.5th percentile)',
         'boot_ic_sup':               'Scénario défavorable (97.5th percentile)',
-        'boot_p90':                  'Provision stress test (90th percentile)',
-        'boot_p99_5':                'Réserve au P99,5 — scénario extrême',
+        # ⚠️ Les deux voisins se nommaient autrement l'un de l'autre :
+        # « Provision » ici, « Réserve » là, pour deux percentiles de la
+        # MÊME distribution. Aucun des deux ne s'inscrit au bilan.
+        'boot_p90':                  'Percentile de stress (90th percentile)',
+        'boot_p99_5':                'Percentile extrême (99,5th percentile)',
     }
 
     # Trier par amplitude
@@ -1212,7 +1245,8 @@ def export_excel(
     resultats_precedents: Optional[Dict] = None,
 ) -> bytes:
     """
-    Génère le fichier Excel 10 onglets en mémoire.
+    Génère le classeur Excel en mémoire. Le nombre d'onglets n'est pas
+    fixe : Munich CL n'est produit que si le triangle engagé est fourni.
 
     Parameters
     ----------
@@ -1231,15 +1265,25 @@ def export_excel(
         return b''
 
     try:
-        date_str = arrete or datetime.now().strftime('%d/%m/%Y')
-        ref      = ref_client or "ActuarIA"
+        # ⚠️⚠️ DEUX CHAMPS, DEUX NOTIONS. L'arrete etablit l'EXERCICE, la
+        # date de generation dit QUAND le fichier a ete produit. Les
+        # confondre publiait la date du JOUR sous l'etiquette « Date
+        # rapport » quand aucun arrete n'etait fourni — et le classeur
+        # n'avait AUCUN champ d'arrete par ailleurs. Le remede existait
+        # deja a cote : `n5_rapport.ARRETE_ABSENT` nomme l'absence au lieu
+        # de la combler, et `n5_commentaire` l'applique. Deux livrables sur
+        # trois nommaient l'absence ; le troisieme la comblait.
+        date_generation = datetime.now().strftime('%d/%m/%Y')
+        libelle_arrete  = arrete or ARRETE_ABSENT
+        ref             = ref_client or "ActuarIA"
 
         wb = Workbook()
         # Supprimer la feuille vide par défaut
         if wb.active:
             wb.remove(wb.active)
 
-        _ong1_synthese(wb, n1, n2, n3, n4, ref, date_str)
+        _ong1_synthese(wb, n1, n2, n3, n4, ref, date_generation,
+                       libelle_arrete)
         _ong2_triangle(wb, C)
         _ong3_facteurs(wb, n3)
         _ong4_methodes(wb, n3, n4)

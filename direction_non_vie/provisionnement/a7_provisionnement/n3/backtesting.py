@@ -8,8 +8,10 @@
 #    · Seules les années avec pct_développé >= seuil_maturite sont évaluées
 #    · Ultimate N-1 = projection CL depuis triangle tronqué à (n-1) colonnes
 #    · Ultimate N-2 = projection CL depuis triangle tronqué à (n-2) colonnes
-#    · Observé N    = dernière diagonale connue
-#    · Boni/Mali    = Ultimate projeté - Observé
+#    · Ultimate N   = projection CL depuis le triangle COMPLET
+#    · Boni/Mali    = Ultimate projeté (N-k) − Ultimate projeté (N)
+#    · Observé N    = dernière diagonale connue — PUBLIÉ, mais ce n'est
+#                     PAS la référence de l'écart (cf. plus bas)
 #
 #  Comptage alertes : séparé N-1 et N-2 (pas le pire des deux)
 #  Statut global    : ROUGE si rouge N-1 OU rouge N-2 sur années matures
@@ -146,6 +148,22 @@ def calculer_backtesting(
 
     ult_n1 = _ult_tronque(1)
     ult_n2 = _ult_tronque(2)
+    # ⚠️⚠️ UN BONI/MALI DE LIQUIDATION COMPARE DEUX ESTIMATIONS DE LA MÊME
+    # QUANTITÉ — l'ultime : celle faite il y a k périodes et celle
+    # d'aujourd'hui. La référence était la dernière diagonale CONNUE, un
+    # cumulé PAYÉ à date : « ultime moins payé » mesure le DÉVELOPPEMENT
+    # RESTANT de l'année, pas l'erreur de provisionnement.
+    #
+    # ⚠️ LA SIGNATURE ÉTAIT VISIBLE DANS LE RÉSULTAT : l'écart croissait
+    # MONOTONEMENT avec la récence de l'année, ce qu'un écart de
+    # provisionnement ne fait pas et ce qu'un développement restant fait
+    # toujours. Mesuré sur un triangle engendré EXACTEMENT par un motif
+    # chain-ladder — donc où le provisionnement passé est exact par
+    # construction et le vrai boni/mali quasi nul — le module publiait
+    # ROUGE, avec des écarts de −1,2 / −0,0 / +2,5 / +7,1 / +15,7 / +31,9
+    # / +68,8 %. Corrigé, il publie −1,2 % sur toutes les années : le seul
+    # artefact du recalcul des facteurs sur une diagonale de moins.
+    ult_n0 = _chain_ladder_simple(C)
 
     # Observé N = dernière valeur connue de chaque ligne
     obs_n = np.zeros(n)
@@ -166,6 +184,7 @@ def calculer_backtesting(
 
     for i in range(n):
         obs    = float(obs_n[i])
+        u_n0   = float(ult_n0[i])
         u_n1   = float(ult_n1[i])
         u_n2   = float(ult_n2[i])
         pct_i  = float(pct_dev[i])
@@ -173,11 +192,12 @@ def calculer_backtesting(
 
         if obs <= 0: continue
 
-        # Boni/Mali
-        bm_n1 = round(u_n1 - obs, 0) if u_n1 > 0 else None
-        bm_n2 = round(u_n2 - obs, 0) if u_n2 > 0 else None
-        ep_n1 = round(bm_n1 / obs * 100, 1) if bm_n1 is not None else None
-        ep_n2 = round(bm_n2 / obs * 100, 1) if bm_n2 is not None else None
+        # Boni/Mali — RÉFÉRENCE : l'ultime vu AUJOURD'HUI, pas le payé.
+        base  = u_n0 if u_n0 > 0 else obs
+        bm_n1 = round(u_n1 - u_n0, 0) if (u_n1 > 0 and u_n0 > 0) else None
+        bm_n2 = round(u_n2 - u_n0, 0) if (u_n2 > 0 and u_n0 > 0) else None
+        ep_n1 = round(bm_n1 / base * 100, 1) if bm_n1 is not None else None
+        ep_n2 = round(bm_n2 / base * 100, 1) if bm_n2 is not None else None
 
         # Statut par horizon — uniquement si année mature
         def _statut_h(ep):
@@ -213,6 +233,10 @@ def calculer_backtesting(
             'annee':         i,
             'annee_label':   annee_label,
             'observe_n':     round(obs, 0),
+            # ⚠️ CETTE CLÉ EST LUE PAR LE BLOC DES TOTAUX, qui parcourt
+            # `tableau` — pas `alertes`. L'écrire ailleurs rendait les
+            # totaux muets sans qu'aucun test ne tombe.
+            'ultimate_n0':   round(u_n0, 0) if u_n0 > 0 else None,
             'ultimate_n1':   round(u_n1, 0) if u_n1 > 0 else None,
             'ultimate_n2':   round(u_n2, 0) if u_n2 > 0 else None,
             'boni_mali_n1':  bm_n1,
@@ -239,12 +263,24 @@ def calculer_backtesting(
 
     # ── Totaux ────────────────────────────────────────────────────────────────
     tot_obs  = sum(r['observe_n']   for r in tableau if r['observe_n'])
-    tot_u_n1 = sum(r['ultimate_n1'] for r in tableau if r['ultimate_n1'])
-    tot_u_n2 = sum(r['ultimate_n2'] for r in tableau if r['ultimate_n2'])
-    tot_bm_n1 = round(tot_u_n1 - tot_obs, 0) if tot_u_n1 else None
-    tot_bm_n2 = round(tot_u_n2 - tot_obs, 0) if tot_u_n2 else None
-    tot_ep_n1 = round(tot_bm_n1 / tot_obs * 100, 1) if tot_bm_n1 and tot_obs else None
-    tot_ep_n2 = round(tot_bm_n2 / tot_obs * 100, 1) if tot_bm_n2 and tot_obs else None
+    # ⚠️⚠️ LE TOTAL SE CALCULE SUR LA POPULATION COMMUNE AUX DEUX TERMES.
+    # L'ancienne écriture sommait `ultimate_n1` sur les années qui en ont
+    # un et le comparait à `observe_n` sommé sur TOUTES les années : deux
+    # populations, donc une différence contaminée par une année entière.
+    # Mesuré sur un triangle où chaque ligne affiche −1,2 % : le total
+    # annonçait −14,3 %, l'écart valant l'ultime de l'année la plus
+    # récente, celle qui n'a pas de projection N−1. Sur la population
+    # commune il annonce −1,2 %, c'est-à-dire ce que disent ses lignes.
+    _c1 = [r for r in tableau if r.get('ultimate_n0') and r.get('ultimate_n1')]
+    _c2 = [r for r in tableau if r.get('ultimate_n0') and r.get('ultimate_n2')]
+    tot_u_n1 = sum(r['ultimate_n1'] for r in _c1)
+    tot_u_n2 = sum(r['ultimate_n2'] for r in _c2)
+    tot_b_n1 = sum(r['ultimate_n0'] for r in _c1)
+    tot_b_n2 = sum(r['ultimate_n0'] for r in _c2)
+    tot_bm_n1 = round(tot_u_n1 - tot_b_n1, 0) if tot_b_n1 else None
+    tot_bm_n2 = round(tot_u_n2 - tot_b_n2, 0) if tot_b_n2 else None
+    tot_ep_n1 = round(tot_bm_n1 / tot_b_n1 * 100, 1) if tot_bm_n1 is not None and tot_b_n1 else None
+    tot_ep_n2 = round(tot_bm_n2 / tot_b_n2 * 100, 1) if tot_bm_n2 is not None and tot_b_n2 else None
 
     totaux = {
         'observe_n':    round(tot_obs, 0),

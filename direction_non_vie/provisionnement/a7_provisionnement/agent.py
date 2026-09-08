@@ -75,6 +75,7 @@ from .n3.chain_ladder  import (
     calculer_facteurs,
     calculer_facteurs_cumules,
     calculer_tail_factor,
+    calculer_tail_factor_multi,
     calculer_pct_developpe,
     pct_developpe_brut,
     cadence_admissible,
@@ -1153,10 +1154,28 @@ class AgentA7Provisionnement:
                 'html_bytes':  b'',
                 'graphiques':  {},
                 'graphiques_erreur': 'run interrompu avant N5',
+                # ⚠️ `pdf` EST UN FANTOME : `export_pdf` a ete retire au lot
+                # C1. `html`, qui EST produit, manquait. Le retour degrade
+                # annoncait donc un livrable qui n'existe plus et taisait
+                # celui qui existe.
                 'livrables_erreurs': {k: 'run interrompu avant N5'
                                       for k in ('graphiques', 'excel',
-                                                'word', 'pdf')},
+                                                'word', 'html')},
                 'n1': {}, 'n2': {}, 'n3': {}, 'n4': {},
+                # ⚠️⚠️ MESURE : le nominal publie 33 cles, le degrade en
+                # publiait 16. Les DIX-SEPT manquantes sont ici DECLAREES
+                # vides plutot qu'absentes — c'est exactement ce que le
+                # commentaire ci-dessus promettait deja.
+                # ⚠️ ET CHAQUE VIDE PORTE LE TYPE DU NOMINAL : `triangle`
+                # est une LISTE au nominal, pas un dict ; un consommateur
+                # qui fait `len()` ou `np.asarray()` ne doit pas changer de
+                # branche selon le succes.
+                'triangle': [], 'lob': lob, 'lob_label': '',
+                'chain_ladder': {}, 'mack': {}, 'bf': {}, 'cape_cod': {},
+                'bootstrap': {}, 'munich_cl': {}, 'tail_factor': {},
+                'best_estimate': {}, 'validation': {}, 'hypotheses': {},
+                'back_testing': {}, 'atypiques': {}, 'audit_trail': {},
+                'rapport_actuaire': {'avis': 'DÉFAVORABLE', 'sections': []},
             }
 
     # =========================================================================
@@ -1182,12 +1201,38 @@ class AgentA7Provisionnement:
         """
         try:
             facteurs, _ = calculer_facteurs(C, 'standard')
-            tail_info = calculer_tail_factor(
-                facteurs,
+            _kw = dict(
                 lob_tail_max_alerte      = cfg_lob.get('tail_factor_max_alerte', 1.05),
                 risque_long              = cfg_lob.get('risque_long', True),
                 tail_seuil_stabilisation = cfg_lob.get('tail_seuil_stabilisation', 1.02),
             )
+            tail_info = calculer_tail_factor(facteurs, **_kw)
+            # ⚠️⚠️ CLM-H4 JUGE L'ÉCART ENTRE COURBES INDISCERNABLES AU SENS
+            # DE L'AIC, et lit pour cela `comparaison_methodes` — que seule
+            # `calculer_tail_factor_multi` publie. La version SIMPLE, celle
+            # qui sert ici, ne la porte pas : la comparaison portait sur un
+            # dictionnaire VIDE, `ecart_rel` valait 0,0 par construction et
+            # la branche NON VALIDÉE était structurellement inatteignable.
+            # L'hypothèse publiait « les courbes concordent (écart de
+            # réserve 0 %) » à partir de ZÉRO mesure — le zéro d'un calcul
+            # vide, présenté comme un résultat.
+            #
+            # ⚠️ ON LUI FOURNIT LA COMPARAISON SANS TOUCHER AU TAIL RETENU :
+            # aucun euro ne bouge, l'hypothèse récupère seulement de quoi
+            # conclure. Balayage : 0 NON VALIDÉE avant, 3 sur 14 après.
+            #
+            # ⚠️ RÉSERVE HONNÊTE — CE CORRECTIF RÉVEILLE L'HYPOTHÈSE, IL NE
+            # LA REND PAS SUFFISANTE. `_sensibilite_aux_queues` lit le champ
+            # `tail` des candidats, qui est DÉJÀ ÉCRÊTÉ : sur les queues
+            # très lourdes les trois courbes tombent toutes sur le plafond
+            # et l'écart redevient nul. Le remède complet passe par
+            # `tail_brut` — lien avec la queue écrêtée, même défaut vu de
+            # deux côtés. Signalé, non ouvert ici.
+            tail_info = {
+                **tail_info,
+                'comparaison_methodes': calculer_tail_factor_multi(
+                    facteurs, **_kw).get('comparaison_methodes', {}),
+            }
             return verifier_hypotheses_clm(
                 C, tail_info=tail_info, facteurs=facteurs, annee_base=annee_base)
         except Exception as e:
@@ -1400,6 +1445,10 @@ class AgentA7Provisionnement:
             n_sim      = n_sim_bootstrap,
             seed       = seed,
             annee_base = annee_base,
+            # ⚠️ LA QUEUE DÉJÀ CALCULÉE EST TRANSMISE : le Best Estimate la
+            # porte, la cible de recentrage du Bootstrap doit la porter
+            # aussi, sans quoi les percentiles publiés sont décentrés.
+            tail_factor = float(tail_info['tail_factor']),
         )
 
         # ── Munich CL ─────────────────────────────────────────────────────────

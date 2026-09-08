@@ -188,9 +188,28 @@ class T4_Zero_Euro_Deplace(unittest.TestCase):
     #:      Recours  BE      1 032 inchangé   RM        71 →        70
     #: L'effet dépend de la duration, il n'est donc pas une constante —
     #: mesuré de −1,67 % à nul sur 197 portefeuilles.
+    #:
+    #: ⚠️⚠️ TROISIÈME MISE À JOUR — LOT PA-1 (profil de run-off de la Risk
+    #: Margin). LES BEST ESTIMATE NE BOUGENT TOUJOURS PAS, et c'est encore ce
+    #: qui identifie la cause : seul le PROFIL change, pas le niveau.
+    #:      GenIns   BE 17 571 609 inchangé   RM 2 078 603 → 968 523  (−53,4 %)
+    #:      Recours  BE      1 032 inchangé   RM        70 →      31  (−55,7 %)
+    #: `_calculer_risk_margin` posait la part encore à développer à
+    #: `1/f_cum[j]`, qui est la part DÉJÀ développée (cf.
+    #: `calculer_pct_developpe`). Le profil déclarait que 99 % de la réserve
+    #: restait à payer après un an sur un triangle à dix ans de développement.
+    #: Oracle indépendant — run-off Chain Ladder recalculé sur GenIns :
+    #:      t         1       2       3       4       5       6
+    #:      oracle  0,7202  0,4965  0,3289  0,2150  0,1314  0,0683
+    #:      avant   0,9896  0,9531  0,8894  0,7966  0,6877  0,5674
+    #:      après   0,7239  0,4989  0,3275  0,2133  0,1309  0,0708
+    #: ⚠️ CE TEST A ATTRAPÉ LE CORRECTIF, ET C'EST SON RÔLE. Il gelait la
+    #: valeur fausse : le garde-fou était bon, son étalon ne l'était pas.
+    #: La PROPRIÉTÉ qui, elle, ne dépend pas de la courbe des taux est tenue
+    #: par `test_a7_profil_run_off.py`.
     _ATTENDU = {
-        'GenIns':  {'best_estimate': 17_571_609.0, 'risk_margin': 2_078_603.0},
-        'Recours': {'best_estimate': 1_032.0,      'risk_margin': 70.0},
+        'GenIns':  {'best_estimate': 17_571_609.0, 'risk_margin': 968_523.0},
+        'Recours': {'best_estimate': 1_032.0,      'risk_margin': 31.0},
     }
 
     def test_les_grandeurs_monetaires_sont_inchangees(self):
@@ -201,8 +220,8 @@ class T4_Zero_Euro_Deplace(unittest.TestCase):
                                        msg=f'{nom}.{cle}')
             for cle in _GRANDEURS_EN_EUROS:
                 self.assertIn(cle, n4, f'{cle} a disparu du livrable')
-        print("    OK A1-7 GenIns 17 571 609 € / RM 2 078 603 € et Recours "
-              "1 032 € / RM 70 € — les BE inchangés par le lot A1")
+        print("    OK A1-7 GenIns 17 571 609 € / RM 968 523 € et Recours "
+              "1 032 € / RM 31 € — les BE inchangés par le lot PA-1")
 
     def test_le_verdict_bouge_mais_pas_les_poids(self):
         """Recours passe en AMBRE sans qu'aucune pondération ne change."""

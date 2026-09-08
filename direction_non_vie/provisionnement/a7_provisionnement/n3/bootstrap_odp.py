@@ -404,6 +404,11 @@ def bootstrap_odp(
     n_sim:   int = N_SIM_DEFAUT,
     seed:    int = 42,
     annee_base: int = 1,
+    # ⚠️ LA CIBLE DE RECENTRAGE DOIT PORTER LA MÊME QUEUE QUE LE BEST
+    # ESTIMATE. Sans elle le point Bootstrap sortait SOUS le BE — mesuré
+    # −12,7 % sur un triangle à queue 1,0607 — et le document imputait
+    # l'écart à « une possible non-normalité ou hétéroscédasticité ».
+    tail_factor: float = 1.0,
 ) -> Dict:
     """
     Bootstrap ODP conforme England & Verrall (2002).
@@ -452,7 +457,7 @@ def bootstrap_odp(
             f"{n_params} paramètre(s), df={n_obs - n_params}. "
             f"Bootstrap non fiable sur ce triangle."
         )
-        reserve_cl = _reserve_cl_simple(C, facteurs, annee_base)
+        reserve_cl = _reserve_cl_simple(C, facteurs, annee_base, tail_factor)
         return _resultat_degrade(reserve_cl, n_sim, C)
 
     res_arr = np.array(res_list)
@@ -463,7 +468,7 @@ def bootstrap_odp(
     ])
 
     # ── 2. Réserve CL de référence ────────────────────────────────────────────
-    reserve_ref = _reserve_cl_simple(C, facteurs, annee_base)
+    reserve_ref = _reserve_cl_simple(C, facteurs, annee_base, tail_factor)
 
     # ── 3. Simulations Bootstrap ──────────────────────────────────────────────
     reserves_sim, reserves_par = _simuler(
@@ -619,16 +624,17 @@ def _statut_eiopa(cv: float) -> str:
 
 
 def _reserve_cl_simple(
-    C:          np.ndarray,
-    facteurs:   np.ndarray,
-    annee_base: int = 1,
+    C:           np.ndarray,
+    facteurs:    np.ndarray,
+    annee_base:  int = 1,
+    tail_factor: float = 1.0,
 ) -> float:
-    """Réserve CL simple (sans tail) — cible de recentrage E&V. IBNR BRUT (D1) :
+    """Réserve CL — cible de recentrage E&V, AVEC la queue reçue. IBNR BRUT (D1) :
     le recentrage vise l'estimateur CL honnête (recours conservés), cohérent avec
     chain_ladder post-Lot B (1076 et non 1483 sur un triangle à recours fort).
     Ne concerne QUE la cible ; le rééchantillonnage et le pseudo-triangle sont
     indépendants de cette fonction."""
-    proj = projeter_ultimates(C, facteurs, tail_factor=1.0)
+    proj = projeter_ultimates(C, facteurs, tail_factor=float(tail_factor))
     return float(np.sum(proj['ibnr_brut'][annee_base:]))
 
 

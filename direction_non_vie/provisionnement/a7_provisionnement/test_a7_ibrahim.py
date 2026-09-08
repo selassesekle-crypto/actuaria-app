@@ -1103,8 +1103,17 @@ class T19_BE_Negatif_Livrables_Et_RM(unittest.TestCase):
         # n'est pas une constante — mesuré de −1,67 % à nul sur 197
         # portefeuilles ; il vaut ici −1,373 %, et le BE reste 20 680 856 €.
         # LA RELATION TESTÉE N'A, ELLE, TOUJOURS PAS BOUGÉ.
-        self.assertAlmostEqual(r['n4']['risk_margin'], 2_446_406, delta=1)
-        print("    OK T19c LLT normal : RM = 2 446 406 (recalcul ≡ proratisation)")
+        # ⚠️ CONSTANTE MISE À JOUR UNE SIXIÈME FOIS — lot PA-1 (profil de
+        # run-off de la Risk Margin) : 2 446 406 → 1 139 901, soit −53,4 %,
+        # exactement le mouvement relatif mesuré sur GenIns. NI LE BE NI σ NE
+        # BOUGENT : `_calculer_risk_margin` posait la part encore à développer
+        # à `1/f_cum[j]`, qui est la part DÉJÀ développée. Voir
+        # `test_a7_gouvernance.T4_Zero_Euro_Deplace` pour la mesure complète et
+        # `test_a7_profil_run_off.py` pour la propriété qui, elle, ne dépend
+        # pas de la courbe des taux.
+        # LA RELATION TESTÉE — recalcul à neuf ≡ proratisation — N'A PAS BOUGÉ.
+        self.assertAlmostEqual(r['n4']['risk_margin'], 1_139_901, delta=1)
+        print("    OK T19c LLT normal : RM = 1 139 901 (recalcul ≡ proratisation)")
 
 
 # =============================================================================
@@ -1608,10 +1617,17 @@ class T24_Bootstrap_Recentrage_Brut(unittest.TestCase):
         import direction_non_vie.provisionnement.a7_provisionnement.n3.bootstrap_odp as _bo
         f = calculer_facteurs(_TRI_RECOURS_FORT, 'standard')[0]
         _orig = _bo._reserve_cl_simple
+        # ⚠️ LE STUB SUIT LA SIGNATURE REELLE, ET C'EST LA MOITIE DU TEST.
+        # `_reserve_cl_simple` a recu un parametre `tail_factor` au lot
+        # « recentrage avec la queue » : la cible de recentrage doit porter
+        # la meme queue que le Best Estimate, sans quoi le point Bootstrap
+        # sort SOUS le BE (mesure : −12,7 % sur une queue de 1,0607). Un
+        # substitut qui ne suit pas la signature ne teste plus la fonction
+        # qu'il remplace : il leve un TypeError, ce que la gate a vu.
         try:
-            _bo._reserve_cl_simple = lambda C, fa, ab=1: 1076.0
+            _bo._reserve_cl_simple = lambda C, fa, ab=1, tf=1.0: 1076.0
             r_brut = bootstrap_odp(_TRI_RECOURS_FORT, f, n_sim=3000, seed=42)
-            _bo._reserve_cl_simple = lambda C, fa, ab=1: 1483.0
+            _bo._reserve_cl_simple = lambda C, fa, ab=1, tf=1.0: 1483.0
             r_plan = bootstrap_odp(_TRI_RECOURS_FORT, f, n_sim=3000, seed=42)
         finally:
             _bo._reserve_cl_simple = _orig

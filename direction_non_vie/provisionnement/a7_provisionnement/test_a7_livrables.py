@@ -509,7 +509,13 @@ def _today_fr():
 
 class T_Arrete_Les_Trois_Livrables_Ne_Fabriquent_Pas_La_Date(unittest.TestCase):
     """⚠️ TROIS LIVRABLES, UN INVARIANT : la date du jour ne se fait jamais
-    passer pour l'arrete quand aucun arrete n'est communique."""
+    passer pour l'arrete quand aucun arrete n'est communique.
+
+    ⚠️ L'EXCEL ETAIT L'EXCEPTION, IL NE L'EST PLUS. Il comblait l'absence
+    par la date du jour sous l'etiquette « Date rapport », et ce test le
+    documentait comme connu et hors lot. Les trois livrables nomment
+    desormais l'absence, et l'Excel distingue en outre l'arrete (exercice)
+    de la date de production."""
 
     @classmethod
     def setUpClass(cls):
@@ -559,9 +565,20 @@ class T_Arrete_Les_Trois_Livrables_Ne_Fabriquent_Pas_La_Date(unittest.TestCase):
         print('    OK LIV-B3 le Word dit « non communiqué » dans sa table')
 
     def test_excel_n_etiquette_jamais_la_date_du_jour_en_arrete(self):
-        # ⚠️ L'EXCEL N'EST PAS LE MEME FAUX (cf. l'en-tete). On verrouille qu'il
-        # ne le DEVIENNE pas : la date du jour peut figurer, mais jamais sous
-        # une etiquette d'arrete.
+        # ⚠️⚠️ CE TEST GARDAIT UN CONTOURNEMENT, IL GARDE DESORMAIS L'OBJECTIF.
+        # Il exigeait la presence de l'etiquette « Date rapport » — celle qui
+        # portait DEUX notions sous un seul nom : l'arrete quand il etait
+        # fourni, la date du JOUR sinon. Le classeur n'avait par ailleurs
+        # AUCUN champ d'arrete. C'etait le defaut connu et declare hors lot.
+        #
+        # L'Excel a rejoint ses deux voisins : il porte maintenant « Arrete »
+        # (valeur, ou `ARRETE_ABSENT` qui NOMME l'absence) ET « Genere le »
+        # (date de production). Le test verrouille donc la meme chose que
+        # `test_word_nomme_l_absence` juste au-dessus, au lieu d'epingler le
+        # nom d'une etiquette qui melangeait les deux.
+        #
+        # ⚠️ L'INVARIANT DE LA CLASSE EST INCHANGE, ET IL EST PLUS FORT : la
+        # date du jour peut figurer, jamais sous une etiquette d'arrete.
         import io
 
         from openpyxl import load_workbook
@@ -570,12 +587,17 @@ class T_Arrete_Les_Trois_Livrables_Ne_Fabriquent_Pas_La_Date(unittest.TestCase):
         wb = load_workbook(io.BytesIO(xl))
         textes = [str(c.value) for ws in wb.worksheets
                   for row in ws.iter_rows() for c in row if c.value is not None]
-        self.assertTrue(any('Date rapport' in t for t in textes),
-                        "l'etiquette « Date rapport » a disparu")
+        self.assertTrue(any(t == 'Arrêté' for t in textes),
+                        "le classeur n'a AUCUN champ d'arrete")
+        self.assertTrue(any(t == ARRETE_ABSENT for t in textes),
+                        "l'arrete absent n'est pas NOMME dans le classeur")
+        self.assertTrue(any(t == 'Généré le' for t in textes),
+                        "la date de production a perdu son propre champ")
         for forme in self._formes_fabriquees():
             self.assertFalse(any(forme in t for t in textes),
                              f'Excel etiquette la date du jour en arrete : {forme!r}')
-        print('    OK LIV-B4 l Excel etiquette la date du jour « Date rapport »')
+        print('    OK LIV-B4 l Excel nomme l absence d arrete et date sa '
+              'production a part')
 
 
 # =============================================================================
