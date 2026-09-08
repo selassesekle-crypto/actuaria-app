@@ -83,6 +83,18 @@ from direction_non_vie.tarification.services.rapport_modeles_tarif import (
     valeur_audit,
 )
 
+
+def _lire_texte(chemin: str) -> str:
+    """Le texte d'un fichier, lu ET REFERME.
+
+    ⚠️ `open(...).read()` laisse le descripteur a la merci du ramasse-miettes.
+    Sur Windows un fichier reste alors verrouille assez longtemps pour qu'une
+    ecriture suivante echoue -- et le sceau de ce lot REECRIT precisement ce
+    fichier-la, sept fois."""
+    import pathlib as _pl
+    return _pl.Path(chemin).read_text(encoding='utf-8')
+
+
 # =============================================================================
 #  FABRIQUES — de vrais fichiers, jamais des octets simules
 # =============================================================================
@@ -742,6 +754,130 @@ class TestAssietteDeLaChaine(unittest.TestCase):
             f'deux, exactement le defaut qu il doit attraper.')
         print(f'    GEL-13 muet a l identique · {len(ecarts)} ecart(s) sur '
               f'{len(touchees)} surface(s) quand le modele retenu change')
+
+
+class TestLaReferenceDeContenu(unittest.TestCase):
+    """GEL-15 — LE GEL ETAIT UN INSTRUMENT, PAS UNE SENTINELLE.
+
+    ⚠️⚠️ LE SEUL MANQUE STRUCTUREL SUR LEQUEL DEUX AUDITS INDEPENDANTS
+    TOMBENT D'ACCORD (08/09/2026, signal (4) des deux passes). Tout ce que
+    GEL-1 a GEL-14 verifie est juste, et rien de tout cela ne se declenche
+    seul : la comparaison est toujours << ce run contre ce run >>, et
+    `scripts/gel_avant_apres.py` exige `--sortie` sans defaut, HORS DEPOT.
+    *Un changement commite sans que quelqu'un lance la comparaison laissait
+    la gate VERTE.* Trois des constats publies de la passe 1 sont exactement
+    des changements de livrable que personne n'a vus.
+
+    ⚠️⚠️ ELLE NE VERSIONNE AUCUNE DONNEE. Le fichier de reference ne porte,
+    par surface, qu'un sha256 de l'empreinte NORMALISEE. Le depot est PUBLIC :
+    c'est la condition pour que cette reference puisse y vivre. L'argument
+    << on ne peut pas versionner les livrables >> vaut pour les OCTETS (le ZIP
+    horodate, `deflate` varie -- mesure : 41 588 puis 41 589 octets pour un
+    contenu identique) ; il ne vaut pas pour un condense.
+
+    ⚠️ LE DETERMINISME A ETE MESURE AVANT D'ECRIRE CETTE CLASSE, et entre
+    PROCESSUS DISTINCTS cette fois -- deux invocations separees du lanceur,
+    **0 ecart sur les 14 surfaces**, 105 s et 103 s. Sans cela la sentinelle
+    serait instable, et une sentinelle instable est pire que pas de
+    sentinelle : on apprend a la relancer.
+
+    ⚠️ ET UN ECART N'EST PAS UN ECHEC, C'EST UNE QUESTION. Le message nomme
+    les surfaces qui ont bouge et renvoie a `--comparer`, qui dit ecart par
+    ecart ce qui a change. Le desarmement (`--figer`) est un geste explicite,
+    a justifier au commit.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        warnings.filterwarnings('ignore')
+        import json
+        cls._json = json
+        cls._chemin = os.path.join(_ICI, 'reference_gel.json')
+
+    def test_GEL15_la_reference_de_contenu_existe_et_ne_porte_aucune_donnee(
+            self):
+        """⚠️ LE PREMIER SENS : la reference EXISTE, et elle est publiable.
+
+        Un depot public ne peut pas versionner le contenu d'un livrable de
+        demonstration ; il peut versionner un condense. On l'exige."""
+        self.assertTrue(
+            os.path.exists(self._chemin),
+            'la reference de contenu est absente : le gel est redevenu un '
+            'instrument qu on lance, et la gate ne voit plus les documents. '
+            '`py scripts/gel_avant_apres.py --figer`')
+        ref = self._json.loads(_lire_texte(self._chemin))
+        self.assertTrue(ref.get('surfaces'), 'aucune surface figee')
+        for nom, valeur in ref['surfaces'].items():
+            with self.subTest(surface=nom):
+                self.assertRegex(
+                    str(valeur), r'^sha256:[0-9a-f]{64}$',
+                    f'la surface « {nom} » porte autre chose qu un condense : '
+                    f'une reference qui porte du CONTENU ne peut pas vivre '
+                    f'dans un depot public')
+        # ⚠️ ET L'ASSIETTE SE DECLARE A COTE DU VERDICT. Un « 0 ecart » ne
+        # vaut que sur l'assiette qui l'a produit -- celle-ci ne porte AUCUN
+        # mapping client, et le taire ferait passer un correctif de cette
+        # zone pour neutre.
+        self.assertTrue(
+            ref.get('_assiette_non_couverte'),
+            "la reference ne declare pas ce qu'elle NE couvre PAS")
+        self.assertTrue(ref.get('jeu', {}).get('graine') is not None,
+                        'le jeu d entree ne voyage pas avec la reference')
+        print(f'    GEL-15 reference : {len(ref["surfaces"])} surfaces, '
+              f'condenses seuls, assiette declaree')
+
+    def test_GEL15b_le_contenu_des_livrables_signes_n_a_pas_bouge(self):
+        """⚠️⚠️ LE SECOND SENS, ET C'EST LUI QUI GARDE. On rejoue la chaine
+        et on compare surface par surface au condense fige.
+
+        ⚠️ Une surface ILLISIBLE fait rougir avant toute comparaison : un
+        « 0 ecart » qui tairait trois surfaces illisibles serait le pire
+        resultat possible -- c'est la doctrine que le lanceur porte deja."""
+        import hashlib
+        import importlib.util
+        chemin_script = os.path.join(_RACINE, 'scripts', 'gel_avant_apres.py')
+        spec = importlib.util.spec_from_file_location('_gel_lanceur',
+                                                      chemin_script)
+        lanceur = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(lanceur)
+        from direction_non_vie.tarification.services import gel_livrables as G
+
+        ref = self._json.loads(_lire_texte(self._chemin))
+        # ⚠️ LE JEU D'ENTREE SE VERIFIE : un ecart lu entre deux assiettes
+        # differentes mesurerait le jeu de donnees, pas le correctif.
+        jeu = {'graine': lanceur.GRAINE, 'taille': lanceur.TAILLE,
+               'arrete': lanceur.ARRETE, 'annees': list(lanceur.ANNEES)}
+        self.assertEqual(
+            ref.get('jeu'), jeu,
+            'le jeu d entree du lanceur a change depuis le figeage : la '
+            'reference ne porte plus sur la meme assiette. Re-figer, et '
+            'justifier.')
+
+        emp = G.empreinte(G.livrables_de_la_chaine(lanceur.produire_la_chaine()))
+        self.assertEqual(
+            emp.non_lues, {},
+            f'des surfaces sont ILLISIBLES : un « 0 ecart » les tairait. '
+            f'{emp.non_lues}')
+        actuel = {nom: 'sha256:' + hashlib.sha256(
+            self._json.dumps(contenu, sort_keys=True, ensure_ascii=False,
+                             default=str).encode('utf-8')).hexdigest()
+            for nom, contenu in emp.contenus.items()}
+        attendu = dict(ref['surfaces'])
+        self.assertEqual(
+            set(actuel), set(attendu),
+            f'le NOMBRE de surfaces produites a change : '
+            f'apparues={sorted(set(actuel) - set(attendu))} '
+            f'disparues={sorted(set(attendu) - set(actuel))}')
+        bouge = sorted(n for n in actuel if actuel[n] != attendu[n])
+        self.assertEqual(
+            bouge, [],
+            f'LE CONTENU DE CES LIVRABLES SIGNES A CHANGE : '
+            f'{", ".join(bouge)}\n'
+            f'Si le changement est VOULU : `py scripts/gel_avant_apres.py '
+            f'--figer` et JUSTIFIEZ-LE dans le message de commit. Pour voir '
+            f'ce qui a bouge, ecart par ecart : `--sortie A`, `--sortie B` '
+            f'de part et d autre, puis `--comparer A B`.')
+        print(f'    GEL-15b {len(actuel)} surfaces signees, contenu inchange')
 
 
 if __name__ == '__main__':

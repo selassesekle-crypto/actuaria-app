@@ -26,6 +26,7 @@ des surfaces qu'il n'a PAS su lire. Un << 0 ecart >> qui tairait trois
 surfaces illisibles serait le pire resultat possible ici.
 """
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -171,6 +172,86 @@ def deposer(chemin: str) -> int:
     return 0 if not empreinte.non_lues else 1
 
 
+#: ⚠️⚠️ LA REFERENCE DE CONTENU, ET ELLE EST VERSIONNEE. Tout ce fichier
+#: existait deja SAUF elle : le gel comparait toujours << ce run contre ce
+#: run >>, donc un changement commite sans que quelqu'un lance la comparaison
+#: laissait la gate VERTE. C'etait un INSTRUMENT, pas une SENTINELLE -- le
+#: seul manque structurel sur lequel DEUX audits independants tombent
+#: d'accord (08/09/2026, signal (4) des deux passes).
+CHEMIN_REFERENCE = os.path.join(
+    RACINE, 'direction_non_vie', 'tarification', 'reference_gel.json')
+
+#: ⚠️ CE QUE LA REFERENCE NE COUVRE PAS, ET ELLE LE DIT. Un << 0 ecart >> ne
+#: vaut que sur l'assiette qui l'a produit. Mesure du 07/09/2026 : la chaine
+#: de gel ne porte AUCUN `config/{client}_mapping.json`, donc le diagnostic de
+#: mapping y est inerte et son bloc vide -- un correctif de cette zone y
+#: passerait pour neutre. *Une assiette qui ne se declare pas se prend pour
+#: l'univers.*
+ASSIETTE_NON_COUVERTE = (
+    "un seul plan (auto), une seule graine, AUCUN mapping client declare, "
+    "aucun modele de Deep Learning si torch est absent"
+)
+
+
+def _condense(contenu) -> str:
+    """Le sha256 d'un contenu normalise, serialise CANONIQUEMENT.
+
+    ⚠️⚠️ ON VERSIONNE UN CONDENSE, JAMAIS LE CONTENU. Le depot est PUBLIC :
+    une empreinte porte les cellules d'un classeur de demonstration, un
+    sha256 ne porte rien. C'est la condition pour que cette reference puisse
+    vivre dans le depot -- et l'argument << on ne peut pas versionner les
+    livrables >> ne vaut que pour les OCTETS, pas pour un condense.
+    """
+    canon = json.dumps(contenu, sort_keys=True, ensure_ascii=False,
+                       default=str)
+    return 'sha256:' + hashlib.sha256(canon.encode('utf-8')).hexdigest()
+
+
+def figer() -> int:
+    """Regenere la reference de contenu versionnee.
+
+    ⚠️⚠️ C'EST LE SEUL GESTE QUI DESARME LA SENTINELLE. Toute regeneration
+    doit etre JUSTIFIEE dans le message de commit : sans cette discipline, on
+    remplace un garde-fou par un bouton.
+    """
+    from direction_non_vie.tarification.services import gel_livrables as G
+
+    depart = time.time()
+    resultats = produire_la_chaine()
+    emp = G.empreinte(G.livrables_de_la_chaine(resultats))
+    # ⚠️ UNE SURFACE ILLISIBLE NE SE FIGE PAS. Figer sur une assiette amputee
+    # graverait l'amputation dans la reference, et le << 0 ecart >> des runs
+    # suivants la tairait pour toujours.
+    if emp.non_lues:
+        print(f'  ⛔ SURFACES ILLISIBLES, REFERENCE NON ECRITE : '
+              f'{emp.non_lues}', flush=True)
+        return 2
+    charge = {
+        '_doctrine': (
+            "REFERENCE DE CONTENU DES LIVRABLES SIGNES. Elle ne porte AUCUNE "
+            "donnee : seulement, par surface, le sha256 de son empreinte "
+            "NORMALISEE (horodatages d'impression neutralises, dates metier "
+            "conservees). Regeneree par `py scripts/gel_avant_apres.py "
+            "--figer`, et TOUTE regeneration se justifie dans le message de "
+            "commit -- c'est ce qui fait d'un instrument une sentinelle."),
+        '_assiette_non_couverte': ASSIETTE_NON_COUVERTE,
+        'jeu': {'graine': GRAINE, 'taille': TAILLE, 'arrete': ARRETE,
+                'annees': list(ANNEES)},
+        'surfaces': {nom: _condense(contenu)
+                     for nom, contenu in sorted(emp.contenus.items())},
+    }
+    with open(CHEMIN_REFERENCE, 'w', encoding='utf-8') as fichier:
+        json.dump(charge, fichier, ensure_ascii=False, indent=2)
+        fichier.write('\n')
+    print(f'  reference figee   : {CHEMIN_REFERENCE}', flush=True)
+    print(f'  surfaces          : {len(charge["surfaces"])}', flush=True)
+    print(f'  tete git          : {_tete_git()}', flush=True)
+    print(f'  duree             : {time.time() - depart:.0f} s', flush=True)
+    print('  ⚠️ JUSTIFIEZ CETTE REGENERATION DANS LE MESSAGE DE COMMIT.',
+          flush=True)
+    return 0
+
+
 def comparer(avant: str, apres: str) -> int:
     from direction_non_vie.tarification.services import gel_livrables as G
 
@@ -205,11 +286,21 @@ def main() -> int:
                                 '(a placer HORS du depot)')
     analyseur.add_argument('--comparer', nargs=2, metavar=('AVANT', 'APRES'),
                            help='compare deux empreintes deposees')
+    analyseur.add_argument(
+        '--figer', action='store_true',
+        help="regenere `direction_non_vie/tarification/reference_gel.json`. "
+             "A n'employer QUE lorsque le changement de contenu est VOULU, et "
+             "a justifier dans le message de commit : c'est le seul geste qui "
+             "desarme la sentinelle GEL-14.")
     arguments = analyseur.parse_args()
-    if bool(arguments.sortie) == bool(arguments.comparer):
-        analyseur.error('choisir --sortie OU --comparer')
+    choisis = sum(1 for x in (arguments.sortie, arguments.comparer,
+                              arguments.figer) if x)
+    if choisis != 1:
+        analyseur.error('choisir --sortie OU --comparer OU --figer')
     warnings.filterwarnings('ignore')
     logging.disable(logging.CRITICAL)
+    if arguments.figer:
+        return figer()
     if arguments.sortie:
         return deposer(arguments.sortie)
     return comparer(*arguments.comparer)

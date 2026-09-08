@@ -1,0 +1,47 @@
+{
+  "_doctrine": "REFERENCE DE CONTENU DES LIVRABLES SIGNES. Elle ne porte AUCUNE donnee : seulement, par surface, le sha256 de son empreinte NORMALISEE (horodatages d'impression neutralises, dates metier conservees). Regeneree par `py scripts/gel_avant_apres.py --figer`, et TOUTE regeneration se justifie dans le message de commit -- c'est ce qui fait d'un instrument une sentinelle.",
+  "_assiette_non_couverte": "un seul plan (auto), une seule graine, AUCUN mapping client declare, aucun modele de Deep Learning si torch est absent",
+  "jeu": {
+    "graine": 7,
+    "taille": 1200,
+    "arrete": "2026-06-30",
+    "annees": [
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  },
+  "surfaces": {
+    "a1 Excel": "sha256:f519de01fc651ae7220800f3d0ef38e2b3d6f626e79b4b3439245e8736b10f43",
+    "a1 PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a1 Word": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a2 Excel": "sha256:79255e9d08b7833ca68d7b5b1a92de95e451fa3dfdc7811372d68a5d6bf1caf4",
+    "a2 PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a2 Word": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a3 Excel": "sha256:d081a8fe819a08ad27f0eb4cec54573ca391ba772c1bb71a7870c7ffa39ab59e",
+    "a3 PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a3 Word": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a4 Excel": "sha256:6caa532aa355b885c659ef5460182a1a52cf8694394115cfd2bd406f949082f9",
+    "a4 PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a4 Word": "sha256:8632305f2130682eb028ac889ad05aea34e95cc5fc48f5ee4485638fe7b27f5a",
+    "a5 Excel": "sha256:fb243e6a17277ff9257d875436b55318f82a9a30d20f0f812229f1eee3dfb02f",
+    "a6 Excel": "sha256:b1b481441cbaeb534ffdc0527d2c23eb9efa75a30e200514de8304669ae8013b",
+    "a6 HTML": "sha256:9b095e4b55e2a89d7fcd6dc10f8420953c2967c9d432f2cf6a5a72f4b2a17cdc",
+    "a6 PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a6 Rapport equipe Excel": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a6 Rapport equipe HTML": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a6 Rapport equipe PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a6 Rapport equipe Word": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a6 Word": "sha256:1c7b20343bc43dc9bd503b221bea84129391bb82561181c752829f85b582a591",
+    "rapport_equipe Excel": "sha256:7f5e0303ab664ae1677cbfd999a9062c10daa91cfa3cb6327c9362b1729fad08",
+    "rapport_equipe HTML": "sha256:72191cd6776cffab409f37a5b9a6ed63b94ae8088f4d9abaec4c61afcf629282",
+    "rapport_equipe PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "rapport_equipe Word": "sha256:bc7074e0c6af0cddeda3c76fbe226bfda07b89bf21ae0bbd591898cc14e2fde8",
+    "rapport_modeles Excel": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "rapport_modeles HTML": "sha256:34cf94cb5d0372866bbcfed131ade278146d107e5869aad8c96e157f4da0d3cc",
+    "rapport_modeles PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "rapport_modeles Word": "sha256:32ecc1934fc87a1d40324afc9cbe73ff57ea64726dbb470fc2ad31489ea8a72c"
+  }
+}
