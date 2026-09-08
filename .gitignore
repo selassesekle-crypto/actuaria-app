@@ -58,3 +58,28 @@ torch_compile_debug/
 # code 0 trompeur, alors que le fichier interieur n'etait pas ignore.
 Python/
 python_install_*.log
+
+# ══════════════════════════════════════════════════════════════════════
+#  LES ARTEFACTS DE RUN — 08/09/2026
+# ══════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ CE QUE `git status` PROPOSAIT A L'AJOUT, ET QUI NE DOIT PAS PARTIR.
+# Le depot est PUBLIC. Ces fichiers sont des SORTIES d'execution, pas du
+# code : 3 095 pistes d'audit JSON (11 Mo), 24 sorties de stress A8, un
+# rapport de provisionnement A7 genere (avec son Best Estimate), et une
+# base de couverture. Rien la-dedans n'est une source ; tout y est le
+# resultat d'un run sur des donnees locales.
+#
+# ⚠️ Verifie avant d'ecrire ces lignes : `models/` ne porte que DEUX
+# fichiers suivis (`placeholder.txt`), `audit/` n'en porte AUCUN. Ces
+# motifs ne masquent donc rien de versionne.
+#
+# ⚠️ `NUL` est un artefact Windows : une redirection `> NUL` executee
+# depuis un shell POSIX cree un FICHIER de ce nom au lieu du peripherique
+# nul. Il n'a jamais rien a faire dans un depot.
+models/*.json
+audit/
+.coverage
+.coverage.*
+NUL
+RAA_commentaire.txt
+*_commentaire.txt
