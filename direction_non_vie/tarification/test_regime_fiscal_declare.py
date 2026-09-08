@@ -81,9 +81,22 @@ from direction_non_vie.tarification.pipeline_tarifaire import (
 
 _PLANS = os.path.join(_RACINE, 'plans')
 
-
 def _plan(nom: str) -> PlanTarifaire:
     return PlanTarifaire.depuis_yaml(os.path.join(_PLANS, f'{nom}.yaml'))
+
+
+#: ⚠️⚠️ LE CAS NORMAL DEPUIS L'ARBITRAGE DU 08/09/2026 : un client declare SES
+#: trois chargements commerciaux, et la taxe vient du registre via
+#: `regime_fiscal`. `taxes` est ABSENT -- son absence dit precisement << le taux
+#: vient du regime >>. Ces controles observent un TAUX DE TAXE sur un prix : il
+#: leur faut donc une prime commerciale, donc des chargements declares.
+_CHARGEMENTS = Chargements(frais=0.15, commission=0.10, marge=0.03,
+                           declare_par='Controle du lot', declare_le='2026-09-08')
+
+
+def _plan_tarifable(nom: str) -> PlanTarifaire:
+    """Le plan du depot, plus des chargements declares -- rien d autre."""
+    return dataclasses.replace(_plan(nom), chargements=_CHARGEMENTS)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -217,26 +230,78 @@ class TestLePlanRefuse(unittest.TestCase):
         self.assertIn('type_de_flotte', str(ctx.exception))
         print("    TX-4b route sur un facteur inexistant REFUSEE")
 
-    def test_TX9_chargements_ET_regime_fiscal_ensemble_sont_REFUSES(self):
-        """⚠️⚠️ DEUX SOURCES POUR LE MEME NOMBRE EN DONNENT DEUX.
+    def test_TX9_UN_TAUX_de_taxe_ET_un_regime_sont_REFUSES_ENSEMBLE(self):
+        """⚠️⚠️ LE CONFLIT REEL, ET IL EST PLUS ETROIT QU'IL N'Y PARAISSAIT.
 
-        `Chargements` porte un `taxes` **avec un defaut de 0,33** : un plan qui
-        declarerait les deux aurait donc deux taux, et lequel s'applique
-        deviendrait une affaire d'ordre dans le code -- invisible depuis le
-        document signe. *Meme refus que la collision de mapping : quand deux
-        declarations se contredisent, on refuse, on ne choisit pas.*
+        Ce controle a d'abord refuse TOUTE cohabitation de `chargements` et
+        `regime_fiscal`. C'etait trop large, et cela interdisait le cas
+        NORMAL : un client qui declare SA commission et dont la taxe vient du
+        registre. Le defaut venait de ce que `taxes` avait alors un defaut
+        implicite (0,33) -- le bloc portait toujours un taux, meme muet.
+
+        `taxes` est desormais optionnel, et son absence dit << le taux vient du
+        regime >>. Le conflit se resserre donc sur ce qu'il est vraiment : un
+        NOMBRE dans `taxes` ET un `regime_fiscal`. *Quand deux declarations se
+        contredisent, on refuse, on ne choisit pas -- mais encore faut-il
+        qu'elles se contredisent.*
         """
         with self.assertRaises(ValueError) as ctx:
-            dataclasses.replace(T.AUTO,
-                                regime_fiscal='residuel_par_elimination',
-                                chargements=Chargements(frais=0.20))
+            dataclasses.replace(
+                T.AUTO, regime_fiscal='residuel_par_elimination',
+                chargements=dataclasses.replace(_CHARGEMENTS, taxes=0.20))
         msg = str(ctx.exception)
         self.assertIn('regime_fiscal', msg)
-        self.assertIn('chargements', msg)
-        self.assertIn('0.33', msg,
-                      "le motif doit MONTRER le taux implicite : c'est lui "
-                      "qui rend le conflit invisible")
-        print("    TX-9 `chargements` + `regime_fiscal` REFUSES ensemble")
+        self.assertIn('0.2', msg,
+                      "le motif doit MONTRER le taux qui entre en conflit")
+        print("    TX-9 un TAUX de taxe + un regime : REFUSES ensemble")
+
+    def test_TX9b_LE_MIROIR_commission_propre_ET_taxe_du_registre_ADMIS(self):
+        """⚠️⚠️ SANS CE SENS, TX-9 SERAIT SATISFAIT PAR UN GARDE QUI REFUSE TOUT.
+
+        C'est exactement ce qui s'etait produit : la premiere version refusait
+        toute cohabitation, et aucun controle ne mesurait qu'elle interdisait
+        au passage le cas le plus courant. *Un garde-fou ne se verifie que dans
+        ses DEUX sens.*
+        """
+        plan = dataclasses.replace(
+            T.AUTO, regime_fiscal='residuel_par_elimination',
+            chargements=_CHARGEMENTS)          # `taxes` ABSENT
+        self.assertIsNone(plan.chargements.taxes)
+        self.assertEqual(plan.regime_fiscal, 'residuel_par_elimination')
+        self.assertEqual(plan.chargements.commission, 0.10)
+        print("    TX-9b commission propre + taxe du registre : ADMIS")
+
+    def test_TX9c_une_declaration_A_MOITIE_est_REFUSEE(self):
+        """⚠️ Le niveau general est la RACINE dont les exceptions heritent : il
+        n'a lui-meme rien a heriter. Declarer `frais` seul serait une
+        declaration a moitie faite -- le depot a deja arbitre ce cas pour
+        `Comportement`."""
+        with self.assertRaises(ValueError) as ctx:
+            dataclasses.replace(
+                T.AUTO, chargements=Chargements(
+                    frais=0.20, declare_par='X', declare_le='2026-09-08'))
+        msg = str(ctx.exception)
+        self.assertIn('INCOMPL', msg.upper())
+        self.assertIn('commission', msg)
+        self.assertIn('marge', msg)
+        print("    TX-9c declaration incomplete REFUSEE, et elle NOMME "
+              "ce qui manque")
+
+    def test_TX9d_declare_par_et_declare_le_sont_OBLIGATOIRES(self):
+        """⚠️⚠️ UN CHARGEMENT DECIDE DU PRIX PAYE : un regulateur demande QUI
+        l'a fixe. Et c'est un ROLE, jamais un nom -- ce fichier est versionne
+        dans un depot public."""
+        for manquant in ('declare_par', 'declare_le'):
+            with self.subTest(champ=manquant):
+                champs = {'frais': 0.15, 'commission': 0.10, 'marge': 0.03,
+                          'declare_par': 'Direction Technique',
+                          'declare_le': '2026-09-08'}
+                champs[manquant] = ''
+                with self.assertRaises(ValueError) as ctx:
+                    dataclasses.replace(T.AUTO,
+                                        chargements=Chargements(**champs))
+                self.assertIn(manquant, str(ctx.exception))
+        print("    TX-9d `declare_par` et `declare_le` obligatoires")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -291,8 +356,9 @@ class TestLeTauxApplique(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.flotte = pipeline_complet(T.portefeuille_flotte(n=1500),
-                                      _plan('flotte_automobile'))
+        cls.flotte = pipeline_complet(
+            T.portefeuille_flotte(n=1500),
+            _plan_tarifable('flotte_automobile'))
         cls.contrat = {'taille_flotte': 20, 'valeur_moyenne_vehicule': 18000,
                        'age_moyen_flotte': 6, 'puissance_moyenne': 120,
                        'secteur_activite': 'Transport',
@@ -384,8 +450,10 @@ class TestLAsymetrie(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.rcg = pipeline_complet(T.portefeuille_rcg(n=1500),
-                                   _plan('rc_generale'))
-        cls.mrh = pipeline_complet(T.portefeuille_mrh(n=1500), T.MRH)
+                                   _plan_tarifable('rc_generale'))
+        cls.mrh = pipeline_complet(
+            T.portefeuille_mrh(n=1500),
+            dataclasses.replace(T.MRH, chargements=_CHARGEMENTS))
 
     def test_TX13_un_plan_ETIQUETE_bouge_un_plan_NU_ne_bouge_pas(self):
         r_etiquete = self.rcg.tarifer({
@@ -400,25 +468,40 @@ class TestLAsymetrie(unittest.TestCase):
             msg="rc_generale est etiquetee au taux residuel : sa taxe doit "
                 "valoir 9 %, pas le repli de 33 %")
 
+        # ⚠️⚠️ L'AUTRE MOITIE DE L'ASYMETRIE A CHANGE DE FORME AVEC LE REPLI.
+        # Elle disait : << un plan non etiquete garde EXACTEMENT le prix
+        # d'hier (x1,33) >>. Ce prix d'hier venait du repli, et le repli
+        # n'existe plus. Ce qu'on peut affirmer maintenant est plus fort : un
+        # plan sans regime obtient sa prime commerciale HT -- ses chargements
+        # sont declares -- mais AUCUNE prime TTC, parce qu'aucun taux de taxe
+        # n'existe pour lui. *Le refus se voit, il ne se devine pas.*
         r_nu = self.mrh.tarifer({
             'surface_m2': 75, 'etage': 2, 'alarme': 1, 'double_vitrage': 1,
             'garantie_vol': 1, 'zone_geographique': 'Urbaine',
             'statut_occupation': 'Locataire', 'type_logement': 'Appartement',
             'valeur_mobilier': 30000, 'annee_construction': 1990})
-        rapport_n = r_nu['prime_ttc'] / r_nu['prime_commerciale_ht']
-        self.assertAlmostEqual(rapport_n, 1.33, places=3,
-            msg="un plan NON etiquete a vu son prix bouger : ce lot aurait "
-                "deplace un euro que personne n'a arbitre")
-        self.assertIsNone(r_nu['regime_fiscal'])
-        print(f"    TX-13 ASYMETRIE : rc_generale x{rapport_e:.4f} (9 %), "
-              f"mrh x{rapport_n:.4f} (repli 33 %, inchange)")
+        self.assertGreater(r_nu['prime_commerciale_ht'], 0,
+                           "les chargements sont declares : la prime HT doit "
+                           "exister")
+        self.assertIsNone(r_nu['prime_ttc'],
+                          "un plan sans regime fiscal a recu une prime TTC : "
+                          "un taux de taxe est apparu sans etre declare")
+        # ⚠️ ET LE REFUS EST DIT. `regime_fiscal` ne vaut plus `None` ici : il
+        # porte le MOTIF. Un `None` se lit << rien a signaler >> ; ce n'est pas
+        # le cas — il y a quelque chose a signaler, et c'est meme la raison
+        # pour laquelle aucun prix TTC ne sort.
+        self.assertIsNotNone(r_nu['regime_fiscal'], "le refus est MUET")
+        self.assertIn('AUCUN TAUX DE TAXE', r_nu['regime_fiscal'])
+        print(f"    TX-13 ASYMETRIE : rc_generale x{rapport_e:.4f} (9 %, "
+              f"sourcee) · mrh HT={r_nu['prime_commerciale_ht']} mais "
+              f"TTC=None (aucun taux declare)")
 
     def test_TX10_l_appelant_EXPLICITE_l_emporte_sur_le_regime_du_plan(self):
         """⚠️ Des chargements passes a l'appel sont une decision sur CE calcul :
         les ecraser par le registre reviendrait a ignorer un parametre qu'on
         accepte. C'est l'ordre deja arbitre pour `_chargements_effectifs`."""
         force = pipeline_complet(
-            T.portefeuille_rcg(n=1200), _plan('rc_generale'),
+            T.portefeuille_rcg(n=1200), _plan_tarifable('rc_generale'),
             chargements={'frais': 0.15, 'commission': 0.10, 'marge': 0.03,
                          'taxes': 0.20})
         r = force.tarifer({
@@ -468,25 +551,37 @@ class TestPeremptionEtPhrases(unittest.TestCase):
         self.assertIsNotNone(nu)
         self.assertIn('CHARGEMENTS NON DECLARES', nu)
         self.assertNotIn('MRH 30', nu)
-        self.assertIn('1001', nu, "le repli doit dire de QUEL taux il s'agit")
-        print("    TX-12 phrase de repli : plus d'affirmation fausse sur la MRH")
+        # ⚠️⚠️ ELLE N ANNONCE PLUS UN REPLI : IL N Y EN A PLUS. Depuis
+        # l'arbitrage du 08/09/2026, un plan sans chargements n'obtient pas un
+        # prix approximatif -- il n'obtient PAS DE PRIME COMMERCIALE, et la
+        # prime PURE sort quand meme. La phrase doit dire les deux.
+        self.assertIn('aucune prime commerciale', nu.lower())
+        self.assertIn('pure', nu.lower(),
+                      "le refus doit dire ce qui RESTE publie, sinon il se lit "
+                      "comme une panne")
+        self.assertNotIn('repli', nu.lower(),
+                         "le mot `repli` survit a la disparition du repli")
+        print("    TX-12 phrase de refus : plus d'affirmation fausse, et elle "
+              "dit ce qui reste publie")
 
     def test_TX12b_un_plan_qui_declare_son_REGIME_a_une_phrase_DIFFERENTE(self):
         """⚠️⚠️ DEUX SILENCES DIFFERENTS. Un plan qui declare son regime a une
         taxe SOURCEE, mais ses frais, sa commission et sa marge restent le
         repli. Se taire effacerait la moitie supposee ; dire << non declares >>
         effacerait la moitie sourcee."""
-        etiquete = phrase_chargements_non_declares(_plan('rc_generale'))
-        self.assertIsNotNone(etiquete)
-        self.assertIn('PARTIELLEMENT', etiquete)
-        self.assertIn('commission', etiquete.lower())
-        # ⚠️ ET LE TROISIEME ETAT : un plan qui declare ses chargements se TAIT.
+        # ⚠️⚠️ IL N Y A PLUS DE TROISIEME ETAT << PARTIELLEMENT >>, et c'est
+        # l'arbitrage : les chargements ne sont plus a moitie declares par un
+        # repli. Restent DEUX etats, et le second est le silence.
+        nu = phrase_chargements_non_declares(_plan('rc_generale'))
+        self.assertIsNotNone(nu, "un plan sans chargements doit le DIRE")
+        self.assertIn('CHARGEMENTS NON DECLARES', nu)
         self.assertIsNone(
             phrase_chargements_non_declares(
-                dataclasses.replace(T.MRH, chargements=Chargements())),
+                dataclasses.replace(T.MRH, chargements=_CHARGEMENTS)),
             "un avertissement permanent est un avertissement qu'on cesse de "
             "lire")
-        print("    TX-12b trois etats : NON declares / PARTIELLEMENT / silence")
+        print("    TX-12b deux etats : NON declares -> DIT ; declares -> "
+              "silence")
 
     def test_TX12c_la_synthese_d_un_MIXTE_nomme_ses_composantes(self):
         """⚠️ Un refus qui ne dit pas ce qu'il faudrait declarer pour en sortir

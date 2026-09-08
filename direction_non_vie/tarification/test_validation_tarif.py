@@ -77,6 +77,7 @@ from core.validation_tarif import (
     AMBRE,
     MINIMUM_POUR_INTERVALLE,
     ROUGE,
+    DecoupeValidation,
     Discrimination,
     gini_lorenz,
     mesurer_discrimination,
@@ -281,7 +282,19 @@ class TestLeTarifPorteSaValidation(unittest.TestCase):
             pipeline_complet,
         )
         np.random.seed(7)
-        cls.plan = T._PLAN_AUTO
+        # ⚠️⚠️ LA DECOUPE SE DECLARE DESORMAIS -- constat `C-36`, ferme le
+        # 08/09/2026. Elle etait positionnelle et MUETTE : mesure sur `auto`,
+        # 4 000 lignes, MEMES donnees, seul l'ordre changeant, le Gini de
+        # frequence variait d'un facteur 1,71 et celui de severite d'un
+        # facteur 8,9. Sans declaration, AUCUNE validation n'est plus mesuree.
+        #   Ces controles portent sur la VALIDATION : il leur faut donc une
+        # decoupe declaree. `positionnelle` reproduit EXACTEMENT le
+        # comportement sous lequel ils ont ete ecrits -- l'ordre du fichier,
+        # mais desormais ASSUME. *Ce qu'ils prouvent est inchange.*
+        import dataclasses as _dc
+        cls.plan = _dc.replace(
+            T._PLAN_AUTO,
+            decoupe_validation=DecoupeValidation('positionnelle'))
         cls.df = T._portefeuille_auto(2500)
         cls.tarif = pipeline_complet(cls.df, cls.plan)
 
@@ -370,7 +383,11 @@ class TestLeTarifPorteSaValidation(unittest.TestCase):
         df = T.portefeuille_auto(1500, 1)
 
         # ① Sans declaration : le tarif SORT, et il porte sa mention ROUGE.
-        tarif = pipeline_complet(df, T.AUTO)
+        # ⚠️ Meme raison qu'au `setUpClass` : ce controle porte sur la MENTION
+        # que la validation produit, il lui faut donc une decoupe declaree.
+        _auto = dataclasses.replace(
+            T.AUTO, decoupe_validation=DecoupeValidation('positionnelle'))
+        tarif = pipeline_complet(df, _auto)
         self.assertIsNotNone(tarif.validation)
         sev = tarif.validation.severite
         self.assertIsNotNone(sev, 'la severite du cas mesure n est pas validee')
@@ -384,7 +401,7 @@ class TestLeTarifPorteSaValidation(unittest.TestCase):
         self.assertEqual(tarif.validation.niveau_max, _R)
 
         # ② Avec declaration : le MEME jeu ne produit AUCUN tarif.
-        plan_bloquant = dataclasses.replace(T.AUTO, refus_anti_selection=True)
+        plan_bloquant = dataclasses.replace(_auto, refus_anti_selection=True)
         with self.assertRaises(
                 CalculImpossibleBloquant,
                 msg="`refus_anti_selection` declare au plan ne bloque rien : "

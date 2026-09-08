@@ -26,43 +26,58 @@ from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
-import dataclasses
+
 # ⚠️ `families` n'est plus importé ici : la seule construction de famille de ce
 # module était celle du GLM de fréquence, partie dans `core/frequence.py` avec
 # le reste du moteur. *Un import qui survit à son usage devient une piste
 # fausse pour qui cherche où le modèle est ajusté.*
-
-from core.plan_tarifaire import CHARGEMENTS_DEFAUT, PlanTarifaire
-from core.taxes_assurance import (TauxTaxe, regime_du_plan,
-                                  synthese_regime_fiscal)
+from core.chargements_declares import (
+    CHAMPS_CHARGEMENT,
+    chargements_du_contrat,
+    synthese_chargements,
+)
 from core.conformite_reglementaire import construire_matrice_x, source_exposition
 from core.frequence import ajuster_glm_frequence
-from core.validation_tarif import (
-    MINIMUM_POUR_INTERVALLE,
-    gini_lorenz as gini_socle,
-    mesurer_discrimination,
-    publication as publication_validation,
-    valider,
-)
+from core.plan_tarifaire import PlanTarifaire
+
 # ⚠️ `QualiteBloquante` n'est plus importée ici : la levée a suivi le préambule
 # dans `core.qualite_donnees`. Vérifié avant de la retirer — **aucun module ne
 # l'importait DEPUIS ce fichier** (mesuré). *Un ré-export tacite se casse en
 # silence ; celui-ci n'existait pas.*
 from core.qualite_donnees import preambule_qualite
+
 # ⚠️⚠️ LES PRIMITIVES DE SEVERITE VIVENT DESORMAIS DANS `core/severite.py`.
 # Elles etaient ici, dans la direction, et A3 -- l'autre moteur -- codait la
 # famille Gamma EN DUR faute de pouvoir les atteindre. *Deux chemins qui
 # ajustent la meme grandeur avec deux codes finissent par diverger.*
-from core.severite import (ModeleCout, ajuster_glm_cout,
-                           construire_cible_severite,
-                           couts_par_sinistre_du_plan, seuil_declare)
+from core.severite import (
+    ModeleCout,
+    ajuster_glm_cout,
+    construire_cible_severite,
+    couts_par_sinistre_du_plan,
+    seuil_declare,
+)
+from core.taxes_assurance import TauxTaxe, regime_du_plan, synthese_regime_fiscal
+from core.validation_tarif import (
+    MINIMUM_POUR_INTERVALLE,
+    indices_validation,
+    mesurer_discrimination,
+    phrase_decoupe,
+    valider,
+)
+from core.validation_tarif import (
+    gini_lorenz as gini_socle,
+)
+from core.validation_tarif import (
+    publication as publication_validation,
+)
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 
 # ⚠️ Le journal de la zone, au nom de la famille `actuaria.*` déjà en place
@@ -98,11 +113,25 @@ class TarifNonVie:
     features: List[str]               # colonnes conformes réellement ajustées
     ecretement: float = 0.0           # prime de graves unitaire (étape 6)
     coefficient_equilibre: float = 1.0  # k (INV-8)
-    chargements: Dict[str, float] = field(default_factory=lambda: dict(CHARGEMENTS_DEFAUT))
+    #: ⚠️⚠️ `None` PAR DEFAUT DEPUIS LE 08/09/2026, ET C'EST L'ARBITRAGE. Ce
+    #: champ valait `CHARGEMENTS_DEFAUT` -- trois decisions commerciales que le
+    #: systeme prenait a la place du client, sur vingt LoB. Un objet tarif qui
+    #: se construit sans chargements produit desormais une prime PURE, et refuse
+    #: la prime commerciale en le disant.
+    #: ⚠️⚠️ ET IL N'EST PLUS LA SOURCE DU PRIX POUR UN PLAN DECLARANT --
+    #: mesure du sceau, plant Q1. Depuis ce lot, `tarifer()` resout les
+    #: chargements PAR CONTRAT, depuis le PLAN, parce qu'une exception peut
+    #: deroger au taux general sur une modalite ou sur un contrat nomme. Ce
+    #: champ ne decide donc plus que d'UN chemin : celui de l'appelant qui a
+    #: fourni ses propres chargements (`chargements_explicites`).
+    #:   *Y remettre un repli ne redonnerait aucun prix -- c'est ce que le
+    #:   plant Q1 a mesure, et c'est pourquoi le garde qui tient l'arbitrage
+    #:   est un releve AST (`CD-23`), pas une assertion de prix.*
+    chargements: Dict[str, float] | None = None
     # Rapport de la couche qualité (exclusions/corrections/signalements) — surfacé
     # dans les livrables, jamais un traitement silencieux. None si la couche n'a
     # pas tourné (ex. appelée hors pipeline_complet).
-    rapport_qualite: Optional[Any] = None
+    rapport_qualite: Any | None = None
     #: ⚠️⚠️ CE QUE LE TARIF SAIT DE LUI-MÊME — lot 14. Cet objet portait le
     #: plan, deux GLM, un écrêtement et des chargements : **aucun Gini, aucun
     #: statut, aucun garde-fou**. Le pouvoir discriminant de ses modèles vivait
@@ -119,6 +148,16 @@ class TarifNonVie:
     #: lui seul. *Deviner l'origine en comparant au repli confondrait « pas
     #: fourni » avec « fourni, égal au repli ».*
     chargements_explicites: bool = False
+    #: ⚠️⚠️ LA TABLE D'EXCEPTIONS PAR CONTRAT, DEJA CHARGEE ET DEJA VERIFIEE.
+    #: Elle vit HORS du depot : les vingt plans sont versionnes publiquement, et
+    #: un identifiant de contrat y serait une donnee personnelle publiee. Le
+    #: plan n'en declare que la provenance, le nombre de lignes et le SHA-256 ;
+    #: c'est l'APPELANT qui la charge, verifie son empreinte contre la
+    #: declaration, et la passe ici.
+    #:   *Le socle ne va jamais chercher des donnees personnelles de lui-meme.*
+    #: `None` = aucune table fournie : les exceptions par contrat ne
+    #: s'appliquent pas, et le plan le dit.
+    table_exceptions: dict | None = None
 
     # ── Prédiction interne, partagée par tarifer() et le portefeuille (INV-7) ──
     def _design(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -196,6 +235,28 @@ class TarifNonVie:
             "prime_pure": prime_pure, "exposition": expo,
         }, index=df.index)
 
+    def _chargements_du_contrat(self, contrat: dict):
+        """Les trois chargements applicables a CE contrat, et leur origine.
+
+        Rend ``(valeurs, origine, detail)``, ou ``valeurs`` vaut ``None`` quand
+        rien n'est declare -- et alors **aucune prime commerciale ne sort**.
+
+        ⚠️⚠️ L'APPELANT EXPLICITE PASSE EN PREMIER, comme pour la taxe. Des
+        chargements fournis a l'appel sont une decision sur CE calcul : les
+        ecraser par la declaration du plan reviendrait a ignorer un parametre
+        qu'on accepte. C'est l'ordre deja arbitre pour `_chargements_effectifs`.
+
+        ⚠️ LE PLUS SPECIFIQUE L'EMPORTE : la table par contrat prime sur
+        l'exception par critere, qui prime sur le taux general. Un client qui
+        nomme un contrat precis a voulu ce contrat precis, pas la moyenne de
+        son segment. L'ordre vit dans `core.chargements_declares`, une seule
+        fois, et cette methode ne fait que lui passer le contrat.
+        """
+        if self.chargements_explicites:
+            return dict(self.chargements), 'appelant', None
+        return chargements_du_contrat(self.plan, contrat,
+                                      self.table_exceptions)
+
     def _taxe_du_contrat(self, contrat: dict):
         """Le taux de taxe applicable à CE contrat — ou le refus de le tarifer.
 
@@ -219,16 +280,35 @@ class TarifNonVie:
         `regime_du_plan` rend un mixte, donc un refus. *Ne pas savoir sous
         quelle qualification on taxe n'autorise pas à taxer quand même.*
         """
-        _repli = float(self.chargements["taxes"])
-        if self.chargements_explicites:
-            return _repli, False, None
+        # ⚠️⚠️ IL N'Y A PLUS DE REPLI DE TAXE, ET C'EST VOULU. Le taux ne peut
+        # venir que de deux endroits : les chargements que l'APPELANT a
+        # explicitement fournis, ou le REGISTRE via `regime_fiscal`. Un plan
+        # qui ne declare ni l'un ni l'autre n'obtient pas de prime TTC -- le
+        # `0.33` qui bouchait ce trou etait le taux de la RC auto applique aux
+        # vingt LoB, et personne ne l'avait declare.
+        _explicite = (float(self.chargements["taxes"])
+                      if (self.chargements_explicites
+                          and self.chargements is not None
+                          and self.chargements.get("taxes") is not None)
+                      else None)
+        if _explicite is not None:
+            return _explicite, False, None
         regime = regime_du_plan(self.plan, contrat)
-        if regime is None:                       # le plan ne déclare rien
-            return _repli, False, None
+        if regime is None:
+            # ⚠️ Ni regime declare, ni taxe fournie a l'appel : aucun taux
+            # n'existe. On REFUSE le TTC -- la prime HT, elle, reste publiee.
+            _declare = (getattr(self.plan.chargements, 'taxes', None)
+                        if getattr(self.plan, 'chargements', None) else None)
+            if _declare is not None:
+                return float(_declare), False, None
+            return 0.0, True, (
+                "AUCUN TAUX DE TAXE : ni `regime_fiscal` au plan, ni `taxes` "
+                "fourni a l'appel. La prime TTC n'est pas calculee. La prime "
+                "commerciale HT, elle, reste publiee.")
         phrase = synthese_regime_fiscal(self.plan, contrat)
         if isinstance(regime, TauxTaxe):
             return float(regime.taux), False, phrase
-        return _repli, True, phrase
+        return 0.0, True, phrase
 
     def anomalies_du_contrat(self, contrat: dict) -> list:
         """Ce qui, dans ce contrat, n'est pas LISIBLE au regard du plan signé.
@@ -363,8 +443,21 @@ class TarifNonVie:
             prime_pure = (self.coefficient_equilibre
                           * (freq * cout + self.ecretement)
                           * float(expo_retenue))
-            ch = self.chargements
-            pc = (prime_pure * (1 + ch["frais"]) * (1 + ch["marge"])
+            # ⚠️⚠️ LA PRIME PURE EST UN FAIT, LA COMMERCIALE EST UNE DECISION.
+            # Arbitrage du 08/09/2026 : `prime_pure` sort TOUJOURS -- elle ne
+            # depend d'aucune declaration --, et la prime commerciale n'existe
+            # QUE si le client a declare ses trois chargements. Sans eux, `pc`
+            # reste `None` et le refus est PUBLIE : jamais un repli muet.
+            # ⚠️ Les exceptions se resolvent PAR CONTRAT : un client peut
+            # deroger a son taux general sur une modalite declaree, ou sur des
+            # contrats nommes dans une table qui vit hors du depot.
+            # ⚠️ Le DETAIL du cas applique n'est pas repris ici : il vit deja,
+            # redige, dans `synthese_chargements` -- source unique. Le lire une
+            # seconde fois pour le reformater ferait deux redactions du meme
+            # fait, et deux redactions finissent par en dire deux choses.
+            ch, _origine_ch, _ = self._chargements_du_contrat(contrat)
+            pc = (None if ch is None else
+                  prime_pure * (1 + ch["frais"]) * (1 + ch["marge"])
                   / (1 - ch["commission"]))
             # ⚠️⚠️ LE TAUX DE TAXE SE RÉSOUT ICI, CONTRAT PAR CONTRAT — et il
             # peut REFUSER. Sur `flotte_automobile`, la qualification fiscale
@@ -378,20 +471,33 @@ class TarifNonVie:
                 "success": True,
                 "frequence_annuelle": round(freq, 5),
                 "cout_moyen": round(cout, 2),
+                # ⚠️⚠️ TOUJOURS PUBLIEE, SANS AUCUNE CONDITION. C'est un fait
+                # actuariel : frequence x cout moyen, plus la charge grave,
+                # porte par l'exposition. Rien a declarer pour l'obtenir.
                 "prime_pure": round(prime_pure, 2),
-                "prime_commerciale_ht": round(pc, 2),
-                # ⚠️ `None` SOUS UN RÉGIME NON TRANCHÉ, ET LA CLÉ RESTE. La
-                # faire disparaître romprait le contrat de sortie pour tous les
-                # lecteurs ; à `None`, un appelant qui multiplie la valeur
-                # échoue BRUYAMMENT au lieu de publier un prix faux.
-                "prime_ttc": (None if _refus
+                # ⚠️ `None` QUAND LE CLIENT N'A PAS DECLARE SES CHARGEMENTS, ET
+                # LA CLE RESTE. La faire disparaitre romprait le contrat de
+                # sortie ; a `None`, un appelant qui multiplie la valeur echoue
+                # BRUYAMMENT au lieu de publier un prix faux.
+                "prime_commerciale_ht": (None if pc is None else round(pc, 2)),
+                # ⚠️ DEUX CAUSES DE `None`, et le document les distingue : le
+                # regime fiscal n'est pas tranche, OU les chargements ne sont
+                # pas declares. `regime_fiscal` et `chargements` le disent.
+                "prime_ttc": (None if (_refus or pc is None)
                               else round(pc * (1 + _taux), 2)),
                 # ⚠️ Le régime appliqué, sa source légale et sa date de
                 # relecture — ou le motif du refus. `None` quand le plan ne
-                # déclare rien : `chargements_supposes` parle alors.
+                # déclare rien : `chargements` parle alors.
                 "regime_fiscal": _phrase_fiscale,
-                # ⚠️ L'HYPOTHESE VOYAGE AVEC LE PRIX — constat `pipeline/C5`.
-                # `None` quand le plan declare : rien a signaler.
+                # ⚠️⚠️ CE QUI A ETE APPLIQUE, D'OU CA VIENT ET QUI L'A DECLARE.
+                # Un chargement decide du prix paye : un regulateur demande QUI
+                # l'a fixe. L'origine (`general`, `exception_critere`,
+                # `exception_contrat`, `non_declare`) voyage avec le prix.
+                "chargements": synthese_chargements(
+                    self.plan, contrat, self.table_exceptions),
+                "chargements_origine": _origine_ch,
+                # ⚠️ Conserve sous son ancien nom : des lecteurs existants le
+                # lisent. Il dit la meme chose, par la meme source unique.
                 "chargements_supposes": phrase_chargements_non_declares(
                     self.plan),
                 # ⚠️ Constat `pipeline/C1`, residu : la porte existe, aucun
@@ -413,6 +519,12 @@ class TarifNonVie:
                 # `None` = validation NON MESURÉE, jamais « aucun défaut ».
                 "validation": (publication_validation(self.validation)
                                if self.validation is not None else None),
+                # ⚠️⚠️ POURQUOI IL N'Y A PAS DE VALIDATION -- constat `C-36`.
+                # `validation: None` disait deja << non mesuree >>, mais pas
+                # POURQUOI. Un Gini absent parce que la decoupe n'est pas
+                # declaree et un Gini absent parce que le portefeuille est trop
+                # petit ne demandent pas le meme geste au lecteur.
+                "validation_hypothese": phrase_decoupe(self.plan),
                 "plan_empreinte": empreinte,          # traçabilité ACPR (ex-clé 'plan')
                 "date_calcul": date_calcul,
             }
@@ -589,7 +701,7 @@ def gini_lorenz(y_true, y_pred) -> float:
 
 
 def evaluer_stabilite_temporelle(portefeuille: pd.DataFrame, plan: PlanTarifaire,
-                                 col_temps: Optional[str] = None,
+                                 col_temps: str | None = None,
                                  n_fenetres: int = 4,
                                  models_path: str = "/tmp/actuaria",
                                  audit_path: str = "/tmp/actuaria") -> Dict[str, Any]:
@@ -637,7 +749,7 @@ def evaluer_stabilite_temporelle(portefeuille: pd.DataFrame, plan: PlanTarifaire
 # ══════════════════════════════════════════════════════════════════════════════
 #  pipeline_complet — de A1 au tarif, piloté PAR LE PLAN (étapes 2→6)
 # ══════════════════════════════════════════════════════════════════════════════
-def _chargements_effectifs(explicites, plan) -> dict[str, float]:
+def _chargements_effectifs(explicites, plan) -> dict[str, float] | None:
     """L'appelant, puis LE PLAN, puis le repli — et le repli se DIT.
 
     ⚠️⚠️ CONSTATS `pipeline/C4` + `C5`, LA MEME QUESTION. `CHARGEMENTS_DEFAUT`
@@ -663,48 +775,31 @@ def _chargements_effectifs(explicites, plan) -> dict[str, float]:
         return dict(explicites)
     declares = getattr(plan, 'chargements', None)
     if declares is not None:
-        return dataclasses.asdict(declares)
-    return dict(CHARGEMENTS_DEFAUT)
+        return {c: getattr(declares, c) for c in CHAMPS_CHARGEMENT}
+    # ⚠️⚠️ ET SURTOUT PAS UN REPLI. C'est le coeur de l'arbitrage du
+    # 08/09/2026 : `None` veut dire << ce plan ne declare aucun chargement >>,
+    # et l'appelant doit alors REFUSER de fabriquer une prime commerciale.
+    # Rendre `CHARGEMENTS_DEFAUT` ici revenait a deviner, vingt fois, trois
+    # decisions commerciales que seul le client peut prendre.
+    return None
 
 
 def phrase_chargements_non_declares(plan) -> str | None:
-    """L'hypothese de chargement, DITE — le coeur de `pipeline/C5`.
+    """L'hypothese de chargement, DITE -- le coeur de `pipeline/C5`.
 
-    ⚠️ Ne s'ajoute QUE si le plan ne declare rien : *un avertissement permanent
-    est un avertissement qu'on cesse de lire.*
+    ⚠️⚠️ CE QU'ELLE DIT A CHANGE DE NATURE LE 08/09/2026, ET LE TEXTE SUIT.
+    Elle annoncait un REPLI applique ; il n'y a plus de repli. Un plan sans
+    chargements n'obtient pas un prix approximatif, il n'obtient PAS DE PRIME
+    COMMERCIALE -- et la prime PURE, elle, sort toujours.
 
-    ⚠️⚠️ ELLE A ETE RELUE LE 08/09/2026, ET DEUX DE SES AFFIRMATIONS ETAIENT
-    FAUSSES. Elle annoncait << les taux varient par LoB (auto 33 %, MRH 30 %,
-    RC 9 %) >> : le document de reference etabli le meme jour montre que
-    l'AUTO n'a pas de taux unique -- 33 % sur la RC obligatoire, 18 % sur ses
-    autres garanties -- et que la MRH non plus : 30 % ne portent que sur sa
-    composante INCENDIE, le reste relevant du taux residuel de 9 %. *Un texte
-    qui accompagne un comportement se relit quand ce comportement change.*
-
-    ⚠️ ET ELLE DISTINGUE DESORMAIS DEUX SILENCES. Un plan qui declare son
-    `regime_fiscal` a une taxe SOURCEE, mais ses frais, sa commission et sa
-    marge restent le repli : le dire << non declare >> tout court effacerait
-    la moitie sourcee, et se taire effacerait la moitie supposee.
+    ⚠️ Elle delegue a `core.chargements_declares.synthese_chargements`, source
+    UNIQUE de cette redaction : deux formulations du meme fait finissent par en
+    dire deux choses. Elle se tait quand l'appelant a fourni ses propres
+    chargements -- il sait ce qu'il a passe.
     """
-    if getattr(plan, 'chargements', None) is not None:
-        return None
-    _lob = getattr(plan, 'lob', '?')
-    if getattr(plan, 'regime_fiscal', None):
-        return (f"CHARGEMENTS PARTIELLEMENT DECLARES au plan '{_lob}' : le "
-                f"regime fiscal est declare, donc la TAXE est sourcee et datee "
-                f"(voir `regime_fiscal`). En revanche frais "
-                f"{CHARGEMENTS_DEFAUT['frais']:.0%}, commission "
-                f"{CHARGEMENTS_DEFAUT['commission']:.0%} et marge "
-                f"{CHARGEMENTS_DEFAUT['marge']:.0%} restent le REPLI : ce sont "
-                f"des parametres commerciaux, qu'aucune source legale ne fixe.")
-    return (f"CHARGEMENTS NON DECLARES au plan '{_lob}' : le repli AUTO a ete "
-            f"suppose, dont une taxe de {CHARGEMENTS_DEFAUT['taxes']:.0%}. Ce "
-            f"taux est celui de la RC automobile obligatoire des vehicules "
-            f"legers (CGI art. 1001-5 quater) ; il ne vaut pour AUCUNE autre "
-            f"branche -- une branche au taux residuel est sur-taxee de 22,02 %, "
-            f"la protection juridique de 17,28 %. Declarez `regime_fiscal` au "
-            f"plan : la taxe viendra alors du registre, avec sa source et sa "
-            f"date de relecture.")
+    if getattr(plan, 'chargements', None) is None:
+        return synthese_chargements(plan)
+    return None
 
 
 def phrase_domaines_non_declares(plan) -> str | None:
@@ -811,10 +906,10 @@ def _refuser_illisibles_sur_roles_du_glm(rapport, roles_par_colonne, lob):
 
 
 def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
-                     chargements: Optional[dict] = None,
+                     chargements: dict | None = None,
                      quantile_ecretement: float = 0.995,
                      equilibrer: bool = True,
-                     qualite_validee_par: Optional[str] = None,
+                     qualite_validee_par: str | None = None,
                      models_path: str = "/tmp/actuaria",
                      audit_path: str = "/tmp/actuaria") -> TarifNonVie:
     """Ajuste le tarif complet à partir du seul plan signé. Aucune connaissance
@@ -989,12 +1084,24 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
     # l'accord entre 1 500 et 3 000, MÊMES données, MÊME graine. *Un verdict
     # qui dépend de la taille de l'échantillon mesure du bruit.* Le blocage
     # dur existe toujours, mais il se DÉCLARE au plan.
+    # ⚠️⚠️ LA DECOUPE VIENT DU PLAN, ET SON ABSENCE SE MESURE -- constat `C-36`.
+    # Elle etait positionnelle et MUETTE : `_idx[:n]`, `_idx[n:]`, sans melange,
+    # sans graine, sans tri temporel, et sans qu'aucune phrase ne declare
+    # l'hypothese d'echangeabilite du fichier. Mesure du 08/09/2026 sur `auto`,
+    # 4 000 lignes, MEMES donnees, seul l'ordre changeant : Gini de frequence
+    # x1,71, Gini de severite x8,9, et trie par la cible la validation
+    # DISPARAISSAIT -- le GLM mourait sur un nan, rattrape en silence.
+    #   Non declaree, aucune validation n'est desormais mesuree. Le TARIF ne
+    #   bouge pas d'un centime : il s'ajuste sur 100 % du portefeuille, et la
+    #   mesure d'origine l'a verifie aux six ordres essayes.
     _validation = None
+    _decoupe = getattr(plan, 'decoupe_validation', None)
     try:
         _n_val = int(len(df) * 0.80)
-        if _n_val >= 50 and len(df) - _n_val >= MINIMUM_POUR_INTERVALLE:
-            _idx = np.arange(len(df))
-            _tr, _te = _idx[:_n_val], _idx[_n_val:]
+        _paire = indices_validation(df, _decoupe)
+        if (_paire is not None and _n_val >= 50
+                and len(df) - _n_val >= MINIMUM_POUR_INTERVALLE):
+            _tr, _te = _paire
             _Xtr, _Xte = Xc.iloc[_tr], Xc.iloc[_te]
             _glm_val = ajuster_glm_frequence(
                 pd.concat([_Xtr, y_freq.iloc[_tr].rename(col_freq)], axis=1),

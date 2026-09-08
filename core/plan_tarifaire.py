@@ -41,8 +41,18 @@ import json
 import math
 from dataclasses import asdict as dataclasses_asdict
 from dataclasses import dataclass, field
-from typing import Literal, Optional, Sequence, get_args
+from typing import Literal, Sequence, get_args
 
+from core.chargements_declares import (
+    # ⚠️ La déclaration commerciale et sa validation vivent là-bas, en un seul
+    # endroit — même partage que pour le régime fiscal : le plan porte la
+    # déclaration, le module porte la règle qui la refuse.
+    ExceptionsChargements,
+    TableExceptionsContrat,
+    exceptions_depuis_dict,
+    table_depuis_dict,
+    valider_chargements,
+)
 from core.derivations import sources_brutes
 from core.taxes_assurance import (
     # ⚠️ LE PLAN DÉCLARE LA QUALIFICATION, LE REGISTRE PORTE LE NOMBRE. Le
@@ -53,6 +63,7 @@ from core.taxes_assurance import (
     route_depuis_dict,
     valider_declaration,
 )
+from core.validation_tarif import DecoupeValidation
 
 TypeFacteur = Literal["continu", "categoriel", "binaire"]
 Encodage = Literal["one_hot", "label", "aucun"]
@@ -113,52 +124,108 @@ class Chargements:
     lit ; seuls des tests l'assertent `> 0`. *C'est la surface publique de
     `tarifer()`, pas un rapport signé.*
 
-    ⚠️⚠️ CETTE CLASSE NE REMPLIT RIEN. Les vrais taux par LoB demandent une
-    SOURCE DE RÉFÉRENCE (le CGI pour les taxes) : aucun n'est inventé ici.
-    Tant qu'un plan ne déclare pas ses chargements, le repli d'aujourd'hui
-    s'applique — **et il est DIT**, jamais supposé en silence.
+    ⚠️⚠️ ARBITRAGE DU 08/09/2026 — PLUS AUCUN DÉFAUT, ET C'EST LE POINT.
+    Cette classe portait `frais 0.15 · commission 0.10 · marge 0.03 ·
+    taxes 0.33` **par défaut**, donc appliqués aux vingt LoB sans que personne
+    les ait déclarés. L'enquête d'origine les fait remonter au commit
+    `a17f058` du 14/07/2026 — *le même commit, le même jour et la même absence
+    de source que le `taxes: 0.33`* remplacé par le registre fiscal.
+
+      **La prime pure est un fait actuariel ; la prime commerciale est une
+      décision commerciale.** Frais, commission et marge dépendent du client
+      et de son réseau de distribution : le système ne les devine pas. Sans
+      déclaration, la prime commerciale n'est pas calculée — et le refus est
+      PUBLIÉ. La prime pure, elle, sort toujours.
+
+    ⚠️⚠️ `taxes` EST OPTIONNEL, ET SON ABSENCE A UN SENS PRÉCIS : *« le taux
+    vient du régime fiscal déclaré »*. Un plan peut donc porter à la fois une
+    commission qui lui est propre et un taux de taxe sourcé — c'est le cas
+    normal. Le seul vrai conflit est un **nombre** dans `taxes` **et** un
+    `regime_fiscal` : là, deux sources donnent deux taux, et laquelle
+    s'applique deviendrait une affaire d'ordre dans le code.
+
+    ⚠️ Les exceptions vivent dans `core.chargements_declares` — deux voies,
+    par CRITÈRE (un axe catégoriel du plan) et par CONTRAT (une table hors
+    dépôt, dont seul le SHA-256 est déclaré). Le RGPD ferme la première voie
+    naïve : les vingt plans sont versionnés publiquement.
     """
-    frais: float = 0.15
-    commission: float = 0.10
-    marge: float = 0.03
-    taxes: float = 0.33
+    # ⚠️ AUCUN DÉFAUT NUMÉRIQUE, et c'est la substance de l'arbitrage : une
+    # valeur par défaut EST une valeur devinée. `None` = non déclaré.
+    frais: float | None = None
+    commission: float | None = None
+    marge: float | None = None
+    #: ⚠️ `None` = « le taux vient de `regime_fiscal` ». Un NOMBRE ici avec un
+    #: `regime_fiscal` déclaré est le seul vrai conflit — refusé au plan.
+    taxes: float | None = None
+    #: ⚠️ UN RÔLE, JAMAIS UN NOM DE PERSONNE. Ce fichier est versionné dans un
+    #: dépôt public : un nom y serait une donnée personnelle publiée. Le nom de
+    #: l'actuaire signataire vit dans le rapport, qui le reçoit déjà.
+    declare_par: str = ''
+    declare_le: str = ''
+    exceptions: ExceptionsChargements | None = None
+    exceptions_par_contrat: TableExceptionsContrat | None = None
 
     def __post_init__(self):
-        # ⚠️ Une commission de 100 % divise par zéro dans `tarifer()` : la borne
-        # n'est pas une préférence, c'est le domaine de définition du calcul.
-        for nom, valeur in dataclasses_asdict(self).items():
+        # ⚠️⚠️ LA VALIDATION DE FOND VIT DANS `core.chargements_declares`, pas
+        # ici : elle a besoin des FACTEURS du plan pour vérifier qu'une
+        # exception porte sur un axe qui existe. Ce qui reste ici est le
+        # domaine de définition des nombres, vérifiable sans le plan.
+        # ⚠️ `TypeError` pour un mauvais TYPE, `ValueError` pour une valeur
+        # hors domaine : l'appelant qui rattrape ne traite pas les deux pareil.
+        for nom in ('frais', 'commission', 'marge', 'taxes'):
+            valeur = getattr(self, nom)
+            if valeur is None:
+                continue
             if not isinstance(valeur, (int, float)) or isinstance(valeur, bool):
-                # ⚠️ `TypeError` et non `ValueError` : ce n'est pas une valeur
-                # hors domaine, c'est le mauvais TYPE. La distinction compte
-                # pour l'appelant qui rattrape.
                 raise TypeError(
                     f"chargements : '{nom}' doit être un nombre, reçu "
                     f"{valeur!r}.")
             if valeur < 0:
                 raise ValueError(
                     f"chargements : '{nom}' = {valeur} est négatif.")
-        if self.commission >= 1.0:
+        if self.commission is not None and self.commission >= 1.0:
             raise ValueError(
                 f"chargements : commission = {self.commission} >= 1 — la prime "
                 f"commerciale divise par (1 - commission).")
 
 
-#: LE REPLI DE CHARGEMENTS, SOUS SA FORME DICTIONNAIRE — **DÉRIVÉ, PAS
-#: RECOPIÉ**. Il vivait dans `direction_non_vie.tarification.pipeline_tarifaire`
-#: sous ce même nom, avec les quatre mêmes littéraux ; `core/elasticite.py`
-#: allait donc le CHERCHER DANS LA DIRECTION — le seul import de production
-#: qui remontait du socle vers une direction, mesuré par AST le 05/09/2026.
+#: ⚠️⚠️ CE N'EST PLUS UN REPLI DE TARIFICATION — ET LE NOM RESTE PARCE QUE DES
+#: PREUVES D'AUDIT FIGÉES LE CITENT. Depuis l'arbitrage du 08/09/2026, aucun
+#: chemin de production ne s'en sert pour fabriquer un prix : un plan qui ne
+#: déclare rien n'obtient **pas** de prime commerciale, il obtient un refus
+#: publié. Un contrôle dédié le vérifie plutôt que de le supposer.
 #:
-#:   *Coût mesuré de cet import : 4,41 s et QUATORZE modules amenés — dont le
-#:   provisionnement et la réglementation — pour obtenir quatre flottants.*
+#: Ce qu'il reste : la **convention de structure** dont `core/elasticite.py` a
+#: besoin pour sa marge technique — `prime × (1 − commission) − charge ×
+#: (1 + frais)`. Rien n'y est normatif, et ce module porte déjà son propre
+#: vocabulaire de source qui le dit (`CONVENTION_MODULE`).
 #:
-#: ⚠️ IL DÉRIVE DE `Chargements`, il ne la double pas : deux listes de quatre
-#: littéraux finissent par diverger, une dérivation ne le peut pas.
-#: ⚠️⚠️ ET CES VALEURS RESTENT UN REPLI, PAS UN TARIF. Voir `Chargements` :
-#: `taxes = 0.33` est le taux AUTO appliqué aux 20 LoB, alors que MRH = 30 %
-#: et RC = 9 %. Ce lot déplace l'ORIGINE de la valeur, jamais la valeur —
-#: les vrais taux demandent une SOURCE (le CGI), qui n'est pas arbitrée.
-CHARGEMENTS_DEFAUT: dict[str, float] = dataclasses_asdict(Chargements())
+#: ⚠️ IL NE DÉRIVE PLUS DE `Chargements`, et la raison de la dérivation a
+#: disparu avec elle : `Chargements` n'a plus de valeurs par défaut à
+#: dériver. Deux listes ne peuvent plus diverger — il n'en reste qu'une.
+CHARGEMENTS_DEFAUT: dict[str, float] = {
+    'frais': 0.15, 'commission': 0.10, 'marge': 0.03, 'taxes': 0.33,
+}
+
+
+def _chargements_depuis_dict(d: dict) -> Chargements:
+    """Construit un bloc `chargements` depuis le YAML, exceptions comprises.
+
+    ⚠️ La porte est ici et pas dans `depuis_dict` : un seul endroit où l'on
+    décide comment un bloc YAML devient une déclaration signée, donc un seul
+    endroit où l'ordre des modalités se fixe. *Deux lectures du même fichier
+    doivent signer pareil.*
+    """
+    _refuser_cles_inconnues(d, Chargements, "le bloc `chargements`")
+    reste = {c: v for c, v in d.items()
+             if c not in ('exceptions', 'exceptions_par_contrat')}
+    return Chargements(
+        **reste,
+        exceptions=(exceptions_depuis_dict(d['exceptions'])
+                    if d.get('exceptions') else None),
+        exceptions_par_contrat=(table_depuis_dict(d['exceptions_par_contrat'])
+                                if d.get('exceptions_par_contrat') else None),
+    )
 
 
 #: LES ASSIETTES ADMISES POUR UN SEUIL DE SINISTRE GRAVE DÉCLARÉ.
@@ -283,7 +350,17 @@ class SeuilGrave:
 #: montant a l'assure. Mesure faite AVANT le bump, comme les sept precedents :
 #: aucune empreinte `s8:` persistee dans `models/` ni `data/`. Golden mis a
 #: jour dans le MEME commit.
-EMPREINTE_SCHEMA = 9
+#: ⚠️ `9` -> `10` LE 08/09/2026 : le bloc `chargements` change de FORME et de
+#: SENS. Il perd ses valeurs par defaut -- une valeur par defaut EST une valeur
+#: devinee, et le systeme n'a pas a deviner une decision commerciale --, `taxes`
+#: y devient optionnel (son absence dit << le taux vient du regime fiscal >>),
+#: et il porte desormais QUI a declare, QUAND, ainsi que les EXCEPTIONS par
+#: critere et la declaration d'une table par contrat. Chacun de ces elements
+#: decide du prix PAYE par un assure : deux plans qui n'en different que par eux
+#: ne facturent pas le meme montant. Mesure faite AVANT le bump, comme les huit
+#: precedents : aucune empreinte `s9:` persistee dans `models/` ni `data/`.
+#: Goldens mis a jour dans le MEME commit.
+EMPREINTE_SCHEMA = 10
 
 # Transformations dérivées : suffixe appliqué par A2
 _SUFFIXE_TRANSFO = {"log": "log_{}", "carre": "{}_carre", "racine": "{}_racine"}
@@ -320,10 +397,10 @@ class Facteur:
     nom: str                                   # colonne source du fichier client
     type: TypeFacteur
     encodage: Encodage = "aucun"
-    transformation: Optional[Transformation] = None
-    modalites: Optional[tuple] = None          # figées à l'apprentissage (one_hot/label)
+    transformation: Transformation | None = None
+    modalites: tuple | None = None          # figées à l'apprentissage (one_hot/label)
     anteriorite: bool = False                  # sinistralité passée légitime (V14)
-    reference: Optional[str] = None            # modalité de référence du one-hot
+    reference: str | None = None            # modalité de référence du one-hot
     #: ⚠️⚠️ LE DOMAINE DE VALIDITÉ — constat `pipeline/C1`, résidu.
     #: `C1` est fermé pour l'ILLISIBILITÉ : `tarifer()` refuse désormais
     #: `bonus_malus = 'beaucoup'`. Il reste ouvert pour la PLAUSIBILITÉ —
@@ -636,6 +713,16 @@ class PlanTarifaire:
     # ⚠️ EXCLUSIF DE `chargements` : les deux portent le taux de taxe, et deux
     # sources pour un même nombre finissent par en donner deux. Refusé au plan.
     regime_fiscal: str | RegimeFiscalRoute | None = None
+    # ⚠️⚠️ COMMENT LE PORTEFEUILLE SE COUPE POUR SE VALIDER — constat `C-36`.
+    # La découpe était positionnelle et muette. Mesuré, MÊMES données, seul
+    # l'ordre changeant : Gini de fréquence ×1,71, Gini de sévérité ×8,9, et
+    # trié par la cible la validation DISPARAISSAIT en silence.
+    #   Non déclarée → **aucune validation n'est mesurée**, et la phrase le dit.
+    #   Le TARIF ne bouge pas : il s'ajuste sur 100 % du portefeuille.
+    # ⚠️ DANS L'EMPREINTE : elle décide du Gini publié à côté d'un prix signé.
+    # Deux plans qui n'en diffèrent que par elle ne publient pas la même
+    # validation — c'est l'argument du `commentaire`, haché depuis `s4`.
+    decoupe_validation: DecoupeValidation | None = None
     # ⚠️⚠️ LE SEUIL DE SINISTRE GRAVE, DECLARE PAR LE CLIENT. Sans lui,
     # l'ecretement retombe sur le quantile 0,995 des couts observes -- une
     # valeur que le portefeuille se donne A LUI-MEME. Le vrai seuil vient
@@ -664,7 +751,7 @@ class PlanTarifaire:
     # exclusion sans discussion) ; sinon un doublon de LIGNE entière reste ambigu
     # (règle 3, signalé et laissé). Purement un RÔLE de données — jamais un facteur
     # tarifaire (n'entre pas dans colonnes_produites()).
-    identifiant_contrat: Optional[str] = None
+    identifiant_contrat: str | None = None
     # Colonne d'ÉCHÉANCE (optionnelle) — l'observation d'un contrat à une date.
     # ⚠️ SANS ELLE, « DOUBLON » ET « ÉCHÉANCE » SONT INDISCERNABLES. Un contrat
     # observé sur trois exercices donne trois lignes de même identifiant : la
@@ -839,22 +926,35 @@ class PlanTarifaire:
                 f"fichier ne permet pas de tenir.")
 
         # ── LE TAUX DE TAXE N'A QU'UNE SOURCE ────────────────────────────────
-        # ⚠️⚠️ `chargements` PORTE DÉJÀ UN `taxes`, ET IL A UN DÉFAUT (0,33).
-        # Un plan qui déclarerait les deux aurait donc DEUX taux de taxe : celui
-        # du registre, sourcé et daté, et celui — souvent implicite — du bloc
-        # `chargements`. Lequel s'applique deviendrait une affaire d'ordre dans
-        # le code, c'est-à-dire invisible depuis le document signé.
-        # *Le même refus que la collision de mapping, fermée le 08/09 : quand
-        # deux déclarations se contredisent, on refuse, on ne choisit pas.*
-        if self.regime_fiscal is not None and self.chargements is not None:
+        # ⚠️⚠️ CE GARDE A ÉTÉ CORRIGÉ LE 08/09/2026, ET LA CORRECTION COMPTE.
+        # Il refusait TOUTE cohabitation de `chargements` et `regime_fiscal` —
+        # ce qui interdisait le cas normal : un client qui déclare SA commission
+        # et dont la taxe vient du registre. Le défaut venait de ce que `taxes`
+        # avait alors un défaut implicite (0,33) : le bloc portait toujours un
+        # taux, même muet.
+        #   `taxes` est désormais OPTIONNEL, et son absence dit « le taux vient
+        #   du régime ». Le conflit réel est donc plus étroit : un NOMBRE dans
+        #   `taxes` ET un `regime_fiscal`. Là seulement, deux sources donnent
+        #   deux taux — et laquelle s'applique deviendrait une affaire d'ordre
+        #   dans le code, invisible depuis le document signé.
+        # *Même refus que la collision de mapping : quand deux déclarations se
+        # contredisent, on refuse, on ne choisit pas.*
+        _tx = getattr(self.chargements, 'taxes', None) \
+            if self.chargements is not None else None
+        if self.regime_fiscal is not None and _tx is not None:
             raise ValueError(
-                f"Plan '{self.lob}' : `regime_fiscal` ET `chargements` sont "
-                f"déclarés tous les deux. Ils portent le MÊME nombre — le taux "
-                f"de taxe — et `chargements.taxes` vaut "
-                f"{self.chargements.taxes} même quand vous ne l'écrivez pas. "
-                f"Déclarez le régime (le taux vient alors du registre, avec sa "
-                f"source et sa date), OU déclarez les chargements en entier — "
-                f"pas les deux.")
+                f"Plan '{self.lob}' : `chargements.taxes = {_tx}` ET "
+                f"`regime_fiscal = {self.regime_fiscal!r}` sont déclarés tous "
+                f"les deux. Ils portent le MÊME nombre — le taux de taxe. "
+                f"Retirez `taxes` du bloc `chargements` (son absence dit "
+                f"précisément « le taux vient du régime »), ou retirez "
+                f"`regime_fiscal`. Les autres chargements — frais, commission, "
+                f"marge — cohabitent sans difficulté avec un régime : ce sont "
+                f"des décisions commerciales, pas un fait légal.")
+        # ⚠️ LE RESTE DE LA RÈGLE VIT DANS `core.chargements_declares` : elle a
+        # besoin des FACTEURS pour vérifier qu'une exception porte sur un axe
+        # qui existe, et dans les DEUX SENS.
+        valider_chargements(self.chargements, self.facteurs, self.lob)
         # ⚠️ LE VOCABULAIRE ET LES DEUX SENS DU ROUTAGE SONT VÉRIFIÉS LÀ-BAS :
         # `core.taxes_assurance` est le seul à connaître les régimes admis.
         valider_declaration(self.regime_fiscal, self.facteurs, self.lob)
@@ -948,6 +1048,43 @@ class PlanTarifaire:
     # ⚠️ Rien n'est perdu : chaque clé qu'elle construisait est une
     # compréhension d'une ligne sur `self.facteurs`, disponible à qui la veut.
 
+    def _charge_chargements(self) -> dict:
+        """La charge hachée du bloc `chargements` — écrite, jamais déduite.
+
+        ⚠️⚠️ TOUT CE QUI DÉCIDE D'UN PRIX Y EST, ET RIEN D'AUTRE. Les trois
+        taux, la taxe si elle est déclarée, **qui** a déclaré et **quand** —
+        deux plans dont l'auteur diffère ne portent pas la même responsabilité,
+        et c'est le même argument que le `commentaire` du facteur, haché depuis
+        `s4` parce que l'empreinte scelle LE DOCUMENT SIGNÉ.
+
+        ⚠️ Et la table par contrat n'y entre QUE par son empreinte : son
+        contenu est une donnée personnelle, il ne doit jamais approcher un
+        fichier versionné.
+        """
+        ch = self.chargements
+        exc = getattr(ch, 'exceptions', None)
+        tab = getattr(ch, 'exceptions_par_contrat', None)
+        return {
+            "frais": ch.frais, "commission": ch.commission,
+            "marge": ch.marge, "taxes": ch.taxes,
+            "declare_par": ch.declare_par, "declare_le": ch.declare_le,
+            "exceptions": ({
+                "selon": exc.selon,
+                "cas": [[m, {"frais": c.frais, "commission": c.commission,
+                             "marge": c.marge, "motif": c.motif,
+                             "declare_par": c.declare_par,
+                             "declare_le": c.declare_le}]
+                        for m, c in exc.cas],
+            } if exc is not None else None),
+            "exceptions_par_contrat": ({
+                "source": tab.source,
+                "empreinte_sha256": tab.empreinte_sha256,
+                "nb_contrats": tab.nb_contrats,
+                "declare_par": tab.declare_par,
+                "declare_le": tab.declare_le,
+            } if tab is not None else None),
+        }
+
     # ── Traçabilité ACPR : le plan est opposable ───────────────────────────
     def empreinte(self) -> str:
         """SHA-256 du plan, préfixé par la version de SCHÉMA — `sN:hash`.
@@ -981,7 +1118,16 @@ class PlanTarifaire:
             "unite_exposition": self.unite_exposition,
             "valeurs_absentes": self.valeurs_absentes,
             # ⚠️ Un chargement décide du prix payé : opposable, donc haché.
-            "chargements": (dataclasses_asdict(self.chargements)
+            # ⚠️⚠️ ÉCRIT EXPLICITEMENT, PLUS PAR `asdict` — bump `s9` -> `s10`.
+            # Le bloc porte désormais des structures imbriquées (exceptions par
+            # critère, déclaration de table par contrat) : s'en remettre à la
+            # récursion d'`asdict` ferait dépendre une signature OPPOSABLE de la
+            # façon dont une bibliothèque traite un `NamedTuple` imbriqué. On
+            # écrit la charge, on ne la déduit pas.
+            # ⚠️ Le SHA-256 de la table par contrat entre dans l'empreinte ;
+            # son CONTENU n'y entre jamais — la table vit hors du dépôt, et le
+            # plan reste publiable.
+            "chargements": (self._charge_chargements()
                             if self.chargements else None),
             # ⚠️ La QUALIFICATION fiscale decide du taux applique, et parfois
             # decide qu'aucun prix TTC ne sorte. Opposable -- d'ou le bump
@@ -993,6 +1139,12 @@ class PlanTarifaire:
                  "regimes": [list(p) for p in self.regime_fiscal.regimes]}
                 if isinstance(self.regime_fiscal, RegimeFiscalRoute)
                 else self.regime_fiscal),
+            # ⚠️ Elle decide du Gini publie a cote d un prix signe :
+            # deux plans qui n en different que par elle ne publient pas
+            # la meme validation. Opposable -- constat `C-36`.
+            "decoupe_validation": (
+                dataclasses_asdict(self.decoupe_validation)
+                if self.decoupe_validation else None),
             "cibles": [self.cible_frequence, self.cible_cout],
             "famille_severite": self.famille_severite,
             "identifiant_contrat": self.identifiant_contrat,
@@ -1067,7 +1219,7 @@ class PlanTarifaire:
 
     # ── Chargement depuis YAML/JSON ────────────────────────────────────────
     @classmethod
-    def depuis_dict(cls, d: dict) -> "PlanTarifaire":
+    def depuis_dict(cls, d: dict) -> PlanTarifaire:
         # ⚠️⚠️ CONSTAT `plan/C5`, RANG 1 — LA PORTE AVALAIT LES CLÉS INCONNUES.
         # Le plan est le document OPPOSABLE : l'actuaire le signe. Mesuré,
         # `famille_severity: lognormal` (l'anglais) était accepté sans un mot
@@ -1114,12 +1266,18 @@ class PlanTarifaire:
             # AVANT d'ajouter ce champ.
             unite_exposition=d.get("unite_exposition"),
             valeurs_absentes=d.get("valeurs_absentes"),
-            chargements=(Chargements(**d["chargements"])
+            # ⚠️ Les deux blocs imbriqués se construisent par leur propre porte
+            # d'entrée : c'est elle qui TRIE les modalités, et le tri est ce qui
+            # rend l'empreinte reproductible d'une lecture à l'autre.
+            chargements=(_chargements_depuis_dict(d["chargements"])
                          if d.get("chargements") else None),
             # ⚠️ Une chaine reste une chaine (un regime pour tout le plan) ;
             # un bloc devient une ROUTE TRIEE. Le tri est dans
             # `route_depuis_dict`, pas ici : un seul endroit ou l'ordre se
             # decide, donc une empreinte reproductible.
+            decoupe_validation=(
+                DecoupeValidation(**d["decoupe_validation"])
+                if d.get("decoupe_validation") else None),
             regime_fiscal=(route_depuis_dict(d["regime_fiscal"])
                            if isinstance(d.get("regime_fiscal"), dict)
                            else d.get("regime_fiscal")),
@@ -1136,7 +1294,7 @@ class PlanTarifaire:
         )
 
     @classmethod
-    def depuis_yaml(cls, chemin) -> "PlanTarifaire":
+    def depuis_yaml(cls, chemin) -> PlanTarifaire:
         """Charge un plan depuis un fichier YAML (ou JSON — YAML en est un
         sur-ensemble). C'est le point d'entrée du test de vérité INV-9 :
         une LoB inconnue du code se tarife par ce seul fichier."""
@@ -1150,7 +1308,7 @@ class PlanTarifaire:
         return sorted(requis - set(colonnes_df))
 
 
-def verifier_completude_plan(plan: "PlanTarifaire",
+def verifier_completude_plan(plan: PlanTarifaire,
                              colonnes_df: Sequence[str]) -> dict:
     """Le modèle est-il AMPUTÉ ? Compare ce que le plan DÉCLARE à ce que les
     données PORTENT réellement. SOURCE UNIQUE, appelée par A3/A4/A5 (qui
@@ -1196,7 +1354,7 @@ def plafonner_statut_si_ampute(statut: str, rapport) -> str:
     return statut
 
 
-def alerte_modele_ampute(rapport, modele: str) -> Optional[dict]:
+def alerte_modele_ampute(rapport, modele: str) -> dict | None:
     """Entrée `alertes_modele` normalisée (source unique du libellé), au format
     agrégé par A6 depuis result_a3/a4/a5.
     None si le plan est honoré : rien n'est alors signalé.
@@ -1243,7 +1401,7 @@ def alerte_modele_ampute(rapport, modele: str) -> Optional[dict]:
     }
 
 
-def synthese_colonnes_plan_manquantes(rapport) -> Optional[str]:
+def synthese_colonnes_plan_manquantes(rapport) -> str | None:
     """SOURCE UNIQUE du libellé « colonnes du plan non produites », partagée par
     l'Excel A6, le rapport équipe et le Word/HTML — comme
     synthese_qualite_donnees() pour la qualité de données.

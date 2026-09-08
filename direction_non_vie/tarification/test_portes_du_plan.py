@@ -85,13 +85,13 @@ import warnings
 import numpy as np
 
 from core.plan_tarifaire import (
+    CHARGEMENTS_DEFAUT,
     EMPREINTE_SCHEMA,
     Chargements,
     Facteur,
     PlanTarifaire,
 )
 from direction_non_vie.tarification.pipeline_tarifaire import (
-    CHARGEMENTS_DEFAUT,
     DonneeIllisibleBloquante,
     phrase_chargements_non_declares,
     phrase_domaines_non_declares,
@@ -114,6 +114,16 @@ from direction_non_vie.tarification.test_pipeline_agents import (
 #: mieux. On leur rend donc la precondition sous laquelle ils ont ete ecrits,
 #: sans toucher a une seule de leurs assertions.
 _PLAN_SANS_REGIME = dataclasses.replace(_PLAN_AUTO, regime_fiscal=None)
+
+#: ⚠️⚠️ UN BLOC COMPLET, PARCE QU'UNE DECLARATION A MOITIE EST REFUSEE DEPUIS
+#: LE 08/09/2026. Ces controles observent l'effet d'un TAUX DE TAXE declare ;
+#: ils avaient jusqu'ici le droit d'ecrire `Chargements(taxes=0.09)` seul,
+#: parce que frais, commission et marge avaient des valeurs par defaut. Ces
+#: defauts ont disparu -- ils devinaient trois decisions commerciales. Ce
+#: qu'ils prouvent est inchange : la taxe declaree est REELLEMENT appliquee.
+def _ch(taxes):
+    return Chargements(frais=0.15, commission=0.10, marge=0.03, taxes=taxes,
+                       declare_par='Controle du lot', declare_le='2026-09-08')
 
 _CONTRAT = {
     'age': 40, 'bonus_malus': 0.9, 'anciennete_permis': 20,
@@ -159,10 +169,10 @@ class TestPorte1Chargements(unittest.TestCase):
         base = _PLAN_SANS_REGIME.empreinte()
         auto = dataclasses.replace(
             _PLAN_SANS_REGIME,
-            chargements=Chargements(taxes=0.33)).empreinte()
+            chargements=_ch(0.33)).empreinte()
         rc = dataclasses.replace(
             _PLAN_SANS_REGIME,
-            chargements=Chargements(taxes=0.09)).empreinte()
+            chargements=_ch(0.09)).empreinte()
         self.assertNotEqual(auto, rc, "la taxe ne bouge pas l'empreinte : "
                                       "elle n'est donc pas opposable")
         self.assertNotEqual(base, auto)
@@ -201,19 +211,29 @@ class TestPorte1Chargements(unittest.TestCase):
         qu'on cesse de lire."""
         muet = phrase_chargements_non_declares(_PLAN_SANS_REGIME)
         self.assertIn('CHARGEMENTS NON DECLARES', muet)
-        self.assertIn('33%', muet.replace(' %', '%'))
+        # ⚠️ Elle n'annonce plus un repli de 33 % : il n'y a plus de repli.
+        # Elle annonce un REFUS de prime commerciale, et dit que la prime
+        # PURE reste publiee. Les DEUX SENS que ce controle garde -- dire,
+        # puis se taire -- sont inchanges.
+        self.assertIn('aucune prime commerciale', muet.lower())
+        self.assertIn('pure', muet.lower())
         declare = phrase_chargements_non_declares(
-            dataclasses.replace(_PLAN_SANS_REGIME,
-                                chargements=Chargements(taxes=0.09)))
+            dataclasses.replace(_PLAN_SANS_REGIME, chargements=_ch(0.09)))
         self.assertIsNone(declare, "la phrase parle alors que le plan declare")
         print("    PTE-3 repli non declare -> DIT ; plan declarant -> silence")
 
     def test_le_plan_declarant_est_REELLEMENT_applique(self):
         """⚠️ Un champ declare que le calcul n'utiliserait pas serait un champ
         qui PROMET — le defaut que cet audit poursuit."""
-        t_auto = _tarif(_PLAN_SANS_REGIME)
+        # ⚠️ LES DEUX COTES DECLARENT DESORMAIS. Le cote << auto >> prenait le
+        # 33 % du repli sans rien declarer ; le repli a disparu, et un plan qui
+        # ne declare rien n'obtient plus de prime TTC du tout. Ce que ce
+        # controle prouve est inchange : deux taux DECLARES differents
+        # produisent deux prix differents, dans le rapport exact des taux.
+        t_auto = _tarif(dataclasses.replace(
+            _PLAN_SANS_REGIME, chargements=_ch(0.33)))
         t_rc = _tarif(dataclasses.replace(
-            _PLAN_SANS_REGIME, chargements=Chargements(taxes=0.09)))
+            _PLAN_SANS_REGIME, chargements=_ch(0.09)))
         ttc_auto = t_auto.tarifer(_CONTRAT)['prime_ttc']
         ttc_rc = t_rc.tarifer(_CONTRAT)['prime_ttc']
         self.assertAlmostEqual(ttc_auto / ttc_rc, 1.33 / 1.09, places=4)
@@ -368,9 +388,17 @@ class TestAucunEuroSurLExistant(unittest.TestCase):
                    if any(fa.bornes for fa in p.facteurs)]
         self.assertEqual(avec_ch, [])
         self.assertEqual(avec_bo, [])
-        self.assertEqual(CHARGEMENTS_DEFAUT['taxes'], 0.33)
+        # ⚠️⚠️ CE QUE CE CONTROLE MESURE A CHANGE AVEC LE REPLI. Il disait
+        # << 0 plan declare, donc le repli s'applique, donc aucun euro ne
+        # bouge >>. Depuis l'arbitrage du 08/09/2026, 0 plan declare veut dire
+        # que 0 plan obtient une prime COMMERCIALE -- et c'est le fait qui
+        # compte. La constante subsiste comme CONVENTION de structure pour la
+        # marge technique de l'elasticite, plus comme repli de tarification :
+        # `CD-23` le scelle par un releve AST sur le module qui tarife.
+        self.assertEqual(sorted(CHARGEMENTS_DEFAUT),
+                         ['commission', 'frais', 'marge', 'taxes'])
         print(f"    PTE-11 0 / {len(fichiers)} plans declarent chargements ou "
-              f"bornes : repli inchange, aucun euro")
+              f"bornes : aucune prime commerciale, prime pure inchangee")
 
 
 if __name__ == '__main__':

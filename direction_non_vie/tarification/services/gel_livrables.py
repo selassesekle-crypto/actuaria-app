@@ -72,7 +72,19 @@ MOTIFS_IMPRESSION: tuple[tuple[re.Pattern, str], ...] = (
     (re.compile(r'\b\d{4}-\d{2}-\d{2}[\sT]+\d{1,2}:\d{2}(:\d{2})?(\.\d+)?'),
      '<horodatage>'),
     # une heure seule, dans une cellule qui ne porte que ça
-    (re.compile(r'(?<![\d.,])\d{1,2}:\d{2}(:\d{2})?(?![\d.,])'), '<heure>'),
+    # ⚠️⚠️ LE `(?![0-9a-f]{6})` N'EST PAS DÉCORATIF : SANS LUI, CE MOTIF
+    # AVALAIT LE PRÉFIXE DE SCHÉMA DES EMPREINTES. Mesuré le 08/09/2026 :
+    # `s8:20fefd1aa55cf229` devenait `s<heure>fefd1aa55cf229` — `8:20` était
+    # pris pour une heure. **Le témoin de gel ne voyait donc plus le numéro de
+    # schéma** : un bump `sN` -> `sN+1` dont le digest n'aurait pas changé
+    # serait resté invisible. Le garde a tenu au bump `s8` -> `s9` parce que la
+    # queue du digest différait — *il a tenu par chance, pas par construction.*
+    #   Une empreinte a la forme `sN:` suivie de 16 hexadécimaux ; exiger que
+    #   ce qui suit ne soit PAS six hexadécimaux d'affilée la met hors
+    #   d'atteinte, sans toucher à une vraie heure (« 01:46 » est suivi d'un
+    #   espace ou d'une fin de cellule).
+    (re.compile(r'(?<![\d.,])\d{1,2}:\d{2}(:\d{2})?(?![\d.,])(?![0-9a-f]{6})'),
+     '<heure>'),
 )
 
 

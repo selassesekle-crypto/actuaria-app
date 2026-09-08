@@ -75,6 +75,124 @@ ROUGE = 'ROUGE'
 AMBRE = 'AMBRE'
 
 
+# =============================================================================
+#  LA DÉCOUPE DE VALIDATION — constat `C-36`, fermé le 08/09/2026
+# =============================================================================
+
+#: ⚠️⚠️ POURQUOI CE VOCABULAIRE EXISTE. La découpe du holdout était purement
+#: POSITIONNELLE — `_idx[:n]`, `_idx[n:]` — sans mélange, sans graine, sans tri
+#: temporel, et **sans qu'aucune phrase ne déclare l'hypothèse d'échangeabilité
+#: du fichier**. Mesuré sur `auto`, 4 000 lignes, MÊMES données, seul l'ordre
+#: changeant : Gini de fréquence **0,1375 → 0,2352 (facteur 1,71)**, Gini de
+#: sévérité **0,0047 → 0,0418 (facteur 8,9)**, et trié par la cible de
+#: fréquence **la validation disparaît** — le GLM meurt sur « deviance function
+#: returned a nan », rattrapé en silence et converti en « non mesurée ».
+#:
+#:   ⚠️ LE PRIX, LUI, NE BOUGEAIT PAS : `k`, prime pure et prime TTC sont
+#:   identiques aux six ordres. Le tarif de production est ajusté sur 100 % du
+#:   portefeuille et il est invariant. *C'est la validation PUBLIÉE qui
+#:   dépendait de l'ordre, pas le tarif.*
+#:
+#: Ce qui rendait le défaut sérieux, c'est ce qui vient : le jour où un prix
+#: est publié dans un document signé, **cette validation l'accompagne**. Un
+#: nombre qui varie d'un facteur 8,9 selon l'ordre du fichier ne peut pas être
+#: publié comme fiable sans que l'hypothèse soit déclarée et tenue.
+METHODES_DECOUPE = ('chronologique', 'aleatoire', 'positionnelle')
+
+
+@dataclass(frozen=True)
+class DecoupeValidation:
+    """Comment le portefeuille se coupe entre apprentissage et validation.
+
+    ⚠️ Les trois méthodes ne se valent pas, et le plan CHOISIT :
+      · `chronologique` — la seule qui mesure ce qu'on veut vraiment savoir
+        (le modèle tient-il sur l'avenir ?). Exige une colonne de date, qui se
+        nomme ici ;
+      · `aleatoire` — exige une GRAINE déclarée. Sans elle, deux exécutions du
+        même plan publieraient deux Gini différents ;
+      · `positionnelle` — le comportement d'hier, mais **assumé** : « l'ordre
+        du fichier porte un sens et je le prends tel quel ». Elle reste admise
+        parce qu'elle est parfois juste ; ce qui n'est plus admis, c'est de
+        l'appliquer sans le dire.
+    """
+    methode: str
+    graine: int | None = None
+    colonne: str | None = None
+
+    def __post_init__(self):
+        if self.methode not in METHODES_DECOUPE:
+            raise ValueError(
+                f"decoupe_validation : methode '{self.methode}' inconnue — "
+                f"attendu l'une de {', '.join(METHODES_DECOUPE)}.")
+        if self.methode == 'aleatoire' and self.graine is None:
+            raise ValueError(
+                "decoupe_validation : la methode 'aleatoire' EXIGE une "
+                "`graine`. Sans elle, deux executions du meme plan publieraient "
+                "deux Gini differents, et aucun des deux ne serait "
+                "reproductible par celui qui lit le document.")
+        if self.methode == 'chronologique' and not (self.colonne or '').strip():
+            raise ValueError(
+                "decoupe_validation : la methode 'chronologique' EXIGE la "
+                "`colonne` qui porte la date. Trier sur une colonne devinee "
+                "reviendrait a choisir l'hypothese a la place de l'actuaire.")
+        if self.methode != 'aleatoire' and self.graine is not None:
+            raise ValueError(
+                f"decoupe_validation : `graine` n'a de sens que pour la "
+                f"methode 'aleatoire', pas pour '{self.methode}'. Un parametre "
+                f"qui ne sert pas est un parametre qui PROMET.")
+        if self.methode != 'chronologique' and self.colonne:
+            raise ValueError(
+                f"decoupe_validation : `colonne` n'a de sens que pour la "
+                f"methode 'chronologique', pas pour '{self.methode}'.")
+
+
+def indices_validation(df, decoupe: DecoupeValidation | None,
+                       part_apprentissage: float = 0.80):
+    """Les indices POSITIONNELS d'apprentissage et de test, ou ``None``.
+
+    ⚠️⚠️ ``None`` QUAND RIEN N'EST DÉCLARÉ, et c'est le cœur du correctif :
+    sans découpe déclarée, **aucune validation n'est mesurée**. Le tarif de
+    production, lui, ne bouge pas — il s'ajuste sur 100 % du portefeuille.
+    """
+    if decoupe is None:
+        return None
+    n = len(df)
+    n_appr = int(n * part_apprentissage)
+    if decoupe.methode == 'chronologique':
+        if decoupe.colonne not in getattr(df, 'columns', ()):
+            raise ValueError(
+                f"decoupe_validation chronologique : la colonne "
+                f"'{decoupe.colonne}' est DECLAREE et ABSENTE du fichier. Une "
+                f"declaration que le fichier ne tient pas ne se remplace pas "
+                f"en silence.")
+        ordre = np.argsort(
+            df[decoupe.colonne].to_numpy(), kind='stable')
+    elif decoupe.methode == 'aleatoire':
+        ordre = np.random.default_rng(decoupe.graine).permutation(n)
+    else:
+        ordre = np.arange(n)
+    return ordre[:n_appr], ordre[n_appr:]
+
+
+def phrase_decoupe(plan) -> str | None:
+    """L'hypothèse de découpe, DITE — ``None`` quand elle est déclarée.
+
+    ⚠️ Un avertissement permanent est un avertissement qu'on cesse de lire :
+    elle se tait dès que le plan déclare.
+    """
+    if getattr(plan, 'decoupe_validation', None) is not None:
+        return None
+    return (
+        "DECOUPE DE VALIDATION NON DECLAREE au plan "
+        f"'{getattr(plan, 'lob', '?')}' : aucune validation de holdout n'est "
+        "mesuree, et aucun Gini n'est publie. Mesure du 08/09/2026 sur 4 000 "
+        "contrats, MEMES donnees, seul l'ordre des lignes changeant : le Gini "
+        "de frequence variait d'un facteur 1,71 et celui de severite d'un "
+        "facteur 8,9. Un tel nombre ne peut pas accompagner un prix publie "
+        "sans que l'hypothese d'ordre soit declarée et tenue. Le TARIF, lui, "
+        "est inchange : il s'ajuste sur 100 % du portefeuille.")
+
+
 def gini_lorenz(y_vrai, y_pred) -> float | None:
     """LE calcul de Gini de Lorenz DU SOCLE — 2 × aire de Lorenz − 1, en
     triant les contrats par la PRÉDICTION décroissante.

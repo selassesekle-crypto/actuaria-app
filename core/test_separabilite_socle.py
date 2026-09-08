@@ -158,34 +158,70 @@ class TestLeSocleNeRemonteJamais(unittest.TestCase):
 
 class TestLeRepliDeChargements(unittest.TestCase):
 
-    def test_SEP3_la_direction_et_le_socle_partagent_LE_MEME_objet(self):
-        """⚠️ `is`, pas `==`. Deux dictionnaires egaux aujourd'hui sont deux
-        copies : elles peuvent rediverger a la premiere modification."""
-        from core.plan_tarifaire import CHARGEMENTS_DEFAUT as socle
-        from direction_non_vie.tarification.pipeline_tarifaire import (
-            CHARGEMENTS_DEFAUT as direction,
-        )
-        self.assertIs(direction, socle,
-                      "la direction s'est redonne sa propre copie du repli "
-                      "de chargements : deux copies finissent par diverger.")
+    def test_SEP3_la_direction_ne_lit_PLUS_le_repli_du_tout(self):
+        """⚠️⚠️ CE CONTROLE A CHANGE DE SUJET LE 08/09/2026, ET IL EST DEVENU
+        PLUS FORT.
 
-    def test_SEP4_le_repli_DERIVE_de_Chargements(self):
-        """⚠️ Sinon on aurait remplace quatre litteraux par quatre autres."""
+        Il prouvait que la direction et le socle partageaient LE MEME objet
+        (`is`, pas `==`) -- un garde contre le defaut d'origine, ou la
+        direction s'etait redonne sa propre copie des quatre litteraux.
+
+        L'arbitrage a supprime le repli lui-meme : un plan qui ne declare pas
+        ses chargements n'obtient plus un prix approximatif, il n'obtient PAS
+        DE PRIME COMMERCIALE. La direction n'importe donc plus rien du tout,
+        et *ne rien partager est plus sur que partager le meme objet.*
+        """
+        from direction_non_vie.tarification import pipeline_tarifaire
+        self.assertFalse(
+            hasattr(pipeline_tarifaire, 'CHARGEMENTS_DEFAUT'),
+            "la direction a repris un repli de chargements. Depuis "
+            "l'arbitrage du 08/09/2026, aucun chemin de prix n'en lit un : "
+            "frais, commission et marge se declarent au plan, ou la prime "
+            "commerciale n'existe pas.")
+
+    def test_SEP4_le_repli_a_CESSE_de_deriver_et_la_raison_a_disparu(self):
+        """⚠️⚠️ LA DERIVATION EXISTAIT POUR EMPECHER DEUX LISTES DE DIVERGER.
+        `Chargements` n'a plus de valeurs par defaut -- une valeur par defaut
+        EST une valeur devinee --, il n'y a donc plus rien a deriver, et plus
+        rien qui puisse diverger : *il ne reste qu'une seule liste.*
+
+        Ce qui subsiste sous ce nom est une CONVENTION DE STRUCTURE, pour la
+        marge technique de `core/elasticite.py` : `prime x (1 - commission) -
+        charge x (1 + frais)`. Rien n'y est normatif, et ce module porte deja
+        le vocabulaire de source qui le dit.
+        """
         from core.plan_tarifaire import CHARGEMENTS_DEFAUT, Chargements
-        self.assertEqual(CHARGEMENTS_DEFAUT,
-                         dataclasses.asdict(Chargements()))
         self.assertEqual(sorted(CHARGEMENTS_DEFAUT),
                          ['commission', 'frais', 'marge', 'taxes'])
+        nu = dataclasses.asdict(Chargements())
+        for champ in ('frais', 'commission', 'marge', 'taxes'):
+            self.assertIsNone(
+                nu[champ],
+                f"`Chargements.{champ}` a repris une valeur par defaut : le "
+                f"systeme redeviendrait capable de deviner une decision "
+                f"commerciale a la place du client.")
 
-    def test_SEP4b_le_repli_reste_DECLARE_comme_un_repli(self):
-        """⚠️⚠️ CE QUI RESTE OUVERT, ET QUI DOIT LE RESTER VISIBLEMENT.
-        `taxes = 0.33` est le taux AUTO applique aux 20 LoB ; MRH = 30 % et
-        RC = 9 %. Ce lot n'y touche pas -- il faudrait une source (le CGI).
-        Le jour ou quelqu'un croira que ces valeurs sont un tarif, ce test
-        lui rappellera qu'elles sont un repli."""
+    def test_SEP4b_le_repli_est_DECLARE_pour_ce_qu_il_est_devenu(self):
+        """⚠️⚠️ CE QUI RESTE OUVERT DOIT LE RESTER VISIBLEMENT -- et ce qui a
+        change de nature doit le dire. Ce controle exigeait le mot << REPLI >>
+        dans la docstring de `Chargements`. Le repli a disparu ; exiger encore
+        ce mot ferait survivre une affirmation fausse dans un texte signe.
+
+        Ce qui doit s'y lire desormais : que la prime commerciale est une
+        DECISION, et que le systeme ne la devine pas.
+        """
         from core import plan_tarifaire
-        self.assertIn('REPLI', (plan_tarifaire.Chargements.__doc__ or '')
-                      .upper())
+        doc = (plan_tarifaire.Chargements.__doc__ or '').upper()
+        # ⚠️ On vise la DOCTRINE, pas un mot : << DECISION >> s'ecrit avec un
+        # accent dans le texte, et une assertion sur la forme non accentuee
+        # echouait. C'est le piege des regex qui cherchent une graphie que le
+        # texte n'emploie pas -- deja paye sept fois dans ce chantier.
+        self.assertIn('NE LES DEVINE PAS', doc,
+                      "la docstring ne dit plus que le systeme ne devine pas "
+                      "les chargements a la place du client")
+        self.assertNotIn(
+            'LE REPLI D', doc,
+            "la docstring parle encore d'un repli applique : il n'y en a plus")
 
 
 class TestParExecutionEtPasParLeTexte(unittest.TestCase):

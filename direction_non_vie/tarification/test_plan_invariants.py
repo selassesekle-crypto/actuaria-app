@@ -628,7 +628,10 @@ class TestINV5_ChaqueFamilleCertifiable(unittest.TestCase):
                 p = tarif.tarifer({"age": 40, "bonus_malus": 0.9,
                                    "garantie": "TousRisques",
                                    "antecedents_sinistres_n1": 0.0})
-                self.assertGreater(p["prime_ttc"], 0)
+                # ⚠️ La prime PURE, pas la TTC : ce plan ne declare aucun
+                # chargement, et c'est la FAMILLE DE SEVERITE que ce
+                # controle mesure -- elle vit dans la prime pure.
+                self.assertGreater(p["prime_pure"], 0)
         # défaut : gamma quand non déclaré (aucune LoB existante ne change)
         tarif_defaut = pipeline_complet(df, self._plan_severite(None))
         self.assertEqual(tarif_defaut.glm_cout.famille_severite, "gamma")
@@ -748,7 +751,12 @@ class TestINV7_TariferReproduitLeModele(unittest.TestCase):
                 msg=f"tarifer(contrat {i}).prime_pure={p['prime_pure']} ≠ "
                     f"portefeuille {attendu}")
             self.assertEqual(p["plan_empreinte"], AUTO.empreinte())   # traçabilité ACPR
-            self.assertGreater(p["prime_ttc"], p["prime_commerciale_ht"])
+            # ⚠️ Sans chargements declares, ni HT ni TTC n'existent : ce
+            # que ce controle mesure est la REPRODUCTION du modele, et
+            # elle se lit sur la prime pure.
+            self.assertIsNone(p["prime_ttc"])
+            self.assertIsNone(p["prime_commerciale_ht"])
+            self.assertGreater(p["prime_pure"], 0)
         print("    INV-7b tarifer() (livrable) reproduit la prime au centime + "
               "empreinte du plan ✅")
 
@@ -842,11 +850,12 @@ class TestINV9_DecennaleParYamlSeul(unittest.TestCase):
             'qualification_entreprise': 'Qualibat', 'nature_marche': 'Prive',
             'sinistres_3ans_anterieurs': 0,
         })
-        self.assertGreater(p['prime_ttc'], 0,
+        # ⚠️ prime commerciale : ce plan ne declare aucun chargement, et la prime PURE est la grandeur qui ne depend d'aucune declaration.
+        self.assertGreater(p['prime_pure'], 0,
             "La décennale ne se tarife pas par YAML seul — l'architecture n'y est pas.")
         self.assertEqual(p['plan_empreinte'], plan.empreinte())   # opposable : empreinte du YAML
-        print(f"    INV-9 décennale tarifée par YAML seul : prime_ttc="
-              f"{p['prime_ttc']} € (empreinte {p['plan_empreinte']}) ✅")
+        print(f"    INV-9 décennale tarifée par YAML seul : prime_pure="
+              f"{p['prime_pure']} € (empreinte {p['plan_empreinte']}) ✅")
 
     def test_le_moteur_ne_contient_aucune_connaissance_decennale(self):
         """La preuve que « sans toucher au code » est vraie : aucun fichier du
@@ -889,10 +898,11 @@ class TestINV9_DecennaleParYamlSeul(unittest.TestCase):
             'anciennete_entreprise_ans': 8, 'type_ouvrage': 'Maison',
             'qualification_entreprise': 'Qualibat', 'nature_marche': 'Public',
             'sinistres_3ans_anterieurs': 0})
-        self.assertGreater(p_auto['prime_ttc'], 0)
-        self.assertGreater(p_dec['prime_ttc'], 0)
-        print(f"    INV-9c même moteur : auto={p_auto['prime_ttc']} € · "
-              f"décennale={p_dec['prime_ttc']} € (aucune branche LoB) ✅")
+        # ⚠️ prime commerciale : ce plan ne declare aucun chargement, et la prime PURE est la grandeur qui ne depend d'aucune declaration.
+        self.assertGreater(p_auto['prime_pure'], 0)
+        self.assertGreater(p_dec['prime_pure'], 0)
+        print(f"    INV-9c même moteur : auto={p_auto['prime_pure']} € · "
+              f"décennale={p_dec['prime_pure']} € (aucune branche LoB) ✅")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -953,6 +963,43 @@ class TestContratSortieJSON(unittest.TestCase):
               "json-sérialisable et tracé ✅")
 
 
+def _verifier_tarif_sans_chargements(cas, res, nom: str) -> None:
+    """Ce qu'une LoB rend quand son plan ne declare AUCUN chargement.
+
+    ⚠️⚠️ ARBITRAGE DU 08/09/2026 -- LA PRIME PURE EST UN FAIT, LA COMMERCIALE
+    EST UNE DECISION. Ces controles assertaient `prime_ttc > 0`. Ce n'etait
+    vrai que parce que `Chargements` portait des valeurs PAR DEFAUT : frais
+    15 %, commission 10 %, marge 3 %, taxe 33 %. Le systeme prenait donc, sur
+    vingt LoB, trois decisions commerciales qui dependent du client et de son
+    reseau de distribution -- et un taux fiscal qui ne valait que pour l'auto.
+
+      *Ces defauts ont disparu. Un plan qui ne declare rien n'obtient pas un
+      prix approximatif : il n'obtient PAS DE PRIME COMMERCIALE, et le refus
+      est publie. La prime PURE, elle, sort toujours -- elle ne depend
+      d'aucune declaration.*
+
+    ⚠️ CE QUE CES CONTROLES PROUVENT EST INCHANGE : la LoB se tarife par son
+    SEUL fichier YAML, le resultat est complet et serialisable. Ce qui change,
+    c'est le niveau de prix qu'un plan muet a le droit de produire.
+
+    ⚠️ Source UNIQUE de cette verification : dix-sept redactions du meme fait
+    finiraient par en dire dix-sept choses.
+    """
+    cas.assertEqual(res['success'], True, res.get('erreur'))
+    cas.assertGreater(res['prime_pure'], 0,
+                      "la prime PURE est un fait actuariel : elle sort sans "
+                      "condition")
+    cas.assertIsNone(res['prime_commerciale_ht'],
+                     "ce plan ne declare aucun chargement : aucune prime "
+                     "commerciale ne doit sortir")
+    cas.assertIsNone(res['prime_ttc'])
+    cas.assertIn('CHARGEMENTS NON DECLARES', res['chargements'],
+                 "le refus est MUET : il se lirait comme une panne")
+    cas.assertIsInstance(json.dumps(res), str)
+    print(f"    {nom} tarifer() : success, prime_pure={res['prime_pure']} EUR "
+          f"(commerciale refusee, aucun chargement declare)")
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  MRH — 2e LoB tarifée par plan déclaratif (sur-ensemble strict de VARS_GLM['mrh'])
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -985,10 +1032,7 @@ class TestMRH_PlanDeclaratif(unittest.TestCase):
             'garantie_vol': 1, 'zone_geographique': 'Urbaine',
             'statut_occupation': 'Locataire', 'type_logement': 'Appartement',
             'valeur_mobilier': 30000, 'annee_construction': 1990})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    MRH tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'MRH')
 
     def test_age_logement_suit_l_annee_d_execution(self):
         """Correctif du bug « 2024 codé en dur » : age_logement = année COURANTE −
@@ -1049,10 +1093,7 @@ class TestRCPro_PlanDeclaratif(unittest.TestCase):
             'antecedents_sinistres_3ans': 0, 'ca_annuel_eur': 1_200_000,
             'secteur_activite': 'Conseil', 'type_garantie': 'Etendue',
             'forme_juridique': 'SAS'})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    RC Pro tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'RC Pro')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1113,10 +1154,7 @@ class TestFlotteAutomobile_PlanDeclaratif(unittest.TestCase):
             'age_moyen_flotte': 6, 'puissance_moyenne': 120, 'type_flotte': 'VUL',
             'secteur_activite': 'Transport', 'zone_circulation': 'Periurbaine',
             'telematique': 1, 'sinistres_2ans_anterieurs': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    Flotte tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'Flotte')
 
 
 def portefeuille_mrp(n=3000, seed=21):
@@ -1172,10 +1210,7 @@ class TestMRP_PlanDeclaratif(unittest.TestCase):
             'secteur_activite': 'Restauration', 'protection_incendie': 1,
             'protection_vol': 1, 'zone_geographique': 'Urbaine',
             'sinistres_3ans_anterieurs': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    MRP tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'MRP')
 
 
 def portefeuille_rcg(n=3000, seed=31):
@@ -1229,10 +1264,7 @@ class TestRCGenerale_PlanDeclaratif(unittest.TestCase):
             'chiffre_affaires_eur': 600000, 'effectif': 20, 'secteur_activite': 'BTP',
             'anciennete_entreprise_ans': 10, 'sous_traitance': 1,
             'couverture_produits': 'Export', 'sinistres_3ans_anterieurs': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    RC Générale tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'RC Générale')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1291,10 +1323,7 @@ class TestProtectionJuridique_PlanDeclaratif(unittest.TestCase):
             'niveau_couverture': 'Etendue', 'seuil_intervention_eur': 300,
             'plafond_garantie_eur': 20000, 'mediation_prealable': 0,
             'antecedents_litiges_2ans': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    Protection juridique tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'Protection juridique')
 
 
 def portefeuille_bris(n=3000, seed=51):
@@ -1348,10 +1377,7 @@ class TestBrisMachine_PlanDeclaratif(unittest.TestCase):
             'valeur_machine_eur': 50000, 'age_machine_ans': 8, 'type_machine': 'Levage',
             'heures_fonctionnement_an': 2500, 'maintenance_preventive': 1,
             'environnement': 'Chantier', 'sinistres_2ans_anterieurs': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    Bris de machine tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'Bris de machine')
 
 
 def portefeuille_immeuble(n=3000, seed=61):
@@ -1407,10 +1433,7 @@ class TestMultirisqueImmeuble_PlanDeclaratif(unittest.TestCase):
             'age_immeuble_ans': 40, 'type_immeuble': 'Commercial',
             'materiau_construction': 'Ossature_bois', 'presence_commerce_rdc': 1,
             'protection_incendie': 1, 'sinistres_2ans_anterieurs': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    Multirisque immeuble tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'Multirisque immeuble')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1470,10 +1493,7 @@ class TestRisquesAgricoles_PlanDeclaratif(unittest.TestCase):
             'surface_exploitation_ha': 80, 'type_production': 'Viticulture',
             'valeur_assuree_eur': 250000, 'exposition_grele': 'Forte',
             'filet_anti_grele': 0, 'irrigation': 1, 'sinistres_climatiques_3ans': 1})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    Risques agricoles tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'Risques agricoles')
 
 
 def portefeuille_do(n=3000, seed=81):
@@ -1530,10 +1550,7 @@ class TestResponsabiliteDirigeants_PlanDeclaratif(unittest.TestCase):
             'secteur_activite': 'Finance', 'zone_activite': 'International',
             'situation_financiere': 'Fragile', 'plafond_garantie_eur': 5000000,
             'antecedents_litiges_3ans': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    D&O tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'D&O')
 
 
 class TestValiderContre_SourceBrute(unittest.TestCase):
@@ -1611,10 +1628,7 @@ class TestRCMedicale_PlanDeclaratif(unittest.TestCase):
             'specialite_medicale': 'Chirurgie', 'type_exercice': 'Clinique',
             'actes_par_an': 2000, 'anciennete_diplome_ans': 10, 'formation_continue': 1,
             'plafond_garantie_eur': 5000000, 'antecedents_sinistres_5ans': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    RC médicale tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'RC médicale')
 
 
 def portefeuille_pe(n=3000, seed=101):
@@ -1668,10 +1682,7 @@ class TestPerteExploitation_PlanDeclaratif(unittest.TestCase):
             'secteur_activite': 'Restauration', 'duree_indemnisation_mois': 12,
             'dependance_fournisseur': 1, 'plan_continuite': 0,
             'sinistres_2ans_anterieurs': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    Perte d'exploitation tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, "Perte d'exploitation")
 
 
 def portefeuille_produit(n=3000, seed=111):
@@ -1727,10 +1738,7 @@ class TestRCProduit_PlanDeclaratif(unittest.TestCase):
             'zone_distribution': 'International', 'volume_unites_an': 50000,
             'certification_qualite': 1, 'plafond_garantie_eur': 3000000,
             'antecedents_rappels_3ans': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    RC produit tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'RC produit')
 
 
 def portefeuille_assistance(n=3000, seed=121):
@@ -1783,10 +1791,7 @@ class TestAssistance_PlanDeclaratif(unittest.TestCase):
             'type_assistance': 'Voyage', 'niveau_couverture': 'Premium',
             'zone_couverture': 'Monde', 'age_souscripteur': 45, 'composition_foyer': 3,
             'plafond_intervention_eur': 10000, 'sinistres_2ans_anterieurs': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    Assistance tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'Assistance')
 
 
 def portefeuille_ia(n=3000, seed=131):
@@ -1840,10 +1845,7 @@ class TestIndividuelleAccidents_PlanDeclaratif(unittest.TestCase):
             'pratique_sportive': 'Extreme', 'conducteur_2roues': 1,
             'capital_garanti_eur': 300000, 'couverture_deces': 1,
             'antecedents_accidents_3ans': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    Individuelle accidents tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'Individuelle accidents')
 
 
 def portefeuille_gli(n=3000, seed=141):
@@ -1897,10 +1899,7 @@ class TestGarantieLoyersImpayes_PlanDeclaratif(unittest.TestCase):
             'loyer_mensuel_eur': 1200, 'anciennete_bail_mois': 6,
             'zone_locative': 'Tendue', 'caution_solidaire': 0,
             'antecedents_impayes_2ans': 0})
-        self.assertEqual(res['success'], True)
-        self.assertGreater(res['prime_ttc'], 0)
-        self.assertIsInstance(json.dumps(res), str)
-        print(f"    GLI tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+        _verifier_tarif_sans_chargements(self, res, 'GLI')
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1921,8 +1920,13 @@ _PLAN_GOLDEN_DICT = {
     "unite_exposition": "mois",
     # ⚠️ PEUPLÉS, comme `unite_exposition` : ce golden ne scelle une partie du
     # payload que si elle porte une valeur qui puisse DÉRIVER.
+    # ⚠️ COMPLET ET DATE depuis le 08/09/2026 : une declaration a moitie
+    # est refusee, et `declare_par` / `declare_le` entrent dans la charge
+    # hachee -- deux plans dont l auteur differe ne portent pas la meme
+    # responsabilite. C est l argument du `commentaire`, hache depuis `s4`.
     "chargements": {"frais": 0.11, "commission": 0.07, "marge": 0.02,
-                    "taxes": 0.09},
+                    "taxes": 0.09, "declare_par": "sceau-schema",
+                    "declare_le": "2026-09-08"},
     "identifiant_contrat": "id_police",
     "echeance": "date_echeance",
     # ⚠️ PEUPLÉ, comme `unite_exposition`, `chargements` et `commentaire` : ce
@@ -2060,8 +2064,19 @@ class TestEmpreinteVersionneeSchema(unittest.TestCase):
         # l'audit trail les distingue.
         # ⚠️ Mesure faite AVANT le bump, comme les sept precedents : aucune
         # empreinte `s8:` persistee dans `models/` ni `data/`.
-        self.assertEqual(EMPREINTE_SCHEMA, 9)
-        self.assertEqual(emp, "s9:ac988f4b387c51b6",
+        # ⚠️⚠️ BUMP `s9` -> `s10` LE 08/09/2026, goldens et constante dans le
+        # MEME commit. Motif : le bloc `chargements` change de FORME et de SENS.
+        # Il perd ses valeurs par defaut -- une valeur par defaut EST une valeur
+        # devinee, et frais/commission/marge sont des decisions COMMERCIALES que
+        # seul le client peut prendre --, `taxes` y devient optionnel (son
+        # absence dit << le taux vient du regime fiscal >>), et il porte
+        # desormais QUI a declare, QUAND, ainsi que les EXCEPTIONS par critere
+        # et la declaration d une table par contrat. `decoupe_validation` entre
+        # au meme moment : elle decide du Gini publie a cote d un prix signe.
+        # ⚠️ Mesure faite AVANT le bump, comme les huit precedents : aucune
+        # empreinte `s9:` persistee dans `models/` ni `data/`.
+        self.assertEqual(EMPREINTE_SCHEMA, 10)
+        self.assertEqual(emp, "s10:150492a0597035ce",
             "empreinte du plan de reference gele changee : derive de structure "
             "sans bump, OU bump sans mise a jour du golden. Voir le commentaire.")
         # ⚠️⚠️ LE SECOND GOLDEN SCELLE CE QUE LE PREMIER NE PEUT PAS. Le plan
@@ -2072,7 +2087,7 @@ class TestEmpreinteVersionneeSchema(unittest.TestCase):
         # elle hache un `selon` et une liste de paires TRIEE.
         emp_regime = PlanTarifaire.depuis_dict(
             dict(_PLAN_GOLDEN_REGIME_DICT)).empreinte()
-        self.assertEqual(emp_regime, "s9:9d2147516f351436",
+        self.assertEqual(emp_regime, "s10:63c11195c7513fe1",
             "empreinte du golden a REGIME FISCAL changee : derive de la "
             "structure routee sans bump, OU bump sans mise a jour du golden.")
         self.assertNotEqual(emp, emp_regime)
