@@ -26,7 +26,13 @@ from core.conformite_reglementaire import (
 )
 from core.qualite_donnees import synthese_qualite_donnees
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
+from core.chargements_declares import (
+    chargements_du_contrat,
+    synthese_chargements,
+)
 from core.mapping_client import lignes_mapping, synthese_mapping
+from core.taxes_assurance import synthese_regime_fiscal
+from core.validation_tarif import phrase_decoupe
 from datetime import datetime
 from typing import Dict, List, NamedTuple, Optional, Tuple
 
@@ -819,6 +825,174 @@ def _bloc_mapping_html(lignes: tuple) -> str:
             f'  <div class="raisons-titre">{TITRE_MAPPING_CLIENT}</div>\n'
             f'    <ul>\n{puces}\n    </ul>\n'
             f'</div>\n')
+
+
+TITRE_TARIF = 'Tarif calcule (prime pure, et prime commerciale si declaree)'
+
+#: ⚠️⚠️ COMBIEN DE CONTRATS DANS LE DETAIL. Le total porte sur TOUT le
+#: portefeuille ; le detail en montre les premiers, dans l'ordre du fichier.
+#: *Un echantillon TIRE serait une selection non declaree ; les N premiers se
+#: reproduisent et se verifient.* Le bloc DIT combien de lignes il montre et
+#: combien le total en compte : sans cela, un lecteur additionnerait le detail
+#: en croyant retrouver le total.
+LIGNES_DETAIL_TARIF = 10
+
+
+def tarif_publie(tarif, portefeuille=None) -> dict:
+    """Le prix, aux DEUX niveaux, tel qu'il ira dans le document signe.
+
+    ⚠️⚠️ CE RAPPORT N'AVAIT JAMAIS PORTE DE PRIX. Mesure du 08/09/2026 :
+    ZERO occurrence de `prime_pure`, `prime_commerciale_ht`, `prime_ttc` ou
+    `chargements` dans les trois services de livrable. L'objet qui sait
+    calculer un prix existait, fonctionnait, et n'etait appele par aucun
+    chemin de production ni connecte a aucun livrable signe. *Le meme motif
+    que le mapping client et que `cout_par_sinistre` : un mecanisme juste,
+    jamais branche.*
+
+    ⚠️⚠️ LES DEUX NIVEAUX ENSEMBLE, ET C'EST UN ARBITRAGE. Le DETAIL par
+    contrat sert a verifier que chaque cas a du sens ; le TOTAL agrege sert a
+    juger l'impact d'ensemble et a presenter une synthese. Publier l'un sans
+    l'autre laisserait l'actuaire signer sans l'une des deux lectures dont il
+    a besoin -- et les deux se RECONCILIENT : le bloc dit sur quelle assiette
+    porte chacun.
+
+    ⚠️⚠️ RGPD, CONTRAINTE DURE : le detail porte les FACTEURS TARIFAIRES et un
+    rang dans le document, JAMAIS l'identifiant du contrat. Ce rapport sort du
+    perimetre de traitement ; un identifiant y serait une donnee personnelle
+    diffusee. `plan.identifiant_contrat` et `plan.echeance` sont donc
+    EXCLUS de la table par construction, et un controle le plante.
+
+    Rend un dict vide quand aucun tarif n'est fourni -- le rapport ne doit
+    alors RIEN gagner, ni un bloc vide, ni une phrase d'excuse.
+    """
+    if tarif is None or portefeuille is None or not len(portefeuille):
+        return {}
+    import numpy as _np
+
+    plan = tarif.plan
+    pred = tarif.predire_portefeuille(portefeuille)
+    pure = _np.asarray(pred['prime_pure'], dtype=float)
+
+    # ⚠️ LES ROLES DE DONNEES NE SONT PAS DES FACTEURS, et deux d'entre eux
+    # sont des donnees personnelles. On ne montre que ce que le plan declare
+    # comme FACTEUR tarifaire -- c'est aussi ce qui rend le detail lisible.
+    colonnes = [f.nom for f in plan.facteurs
+                if f.nom in getattr(portefeuille, 'columns', ())]
+
+    lignes = []
+    for rang in range(min(LIGNES_DETAIL_TARIF, len(portefeuille))):
+        # ⚠️⚠️ L'EXPOSITION DU CONTRAT VOYAGE AVEC LUI, ET `DC-7` L'A TROUVE.
+        # Premiere version : le contrat ne portait que ses FACTEURS, donc
+        # `tarifer()` retombait sur une annee entiere -- et le detail
+        # sur-tarifait tout contrat plus court, pendant que le TOTAL, lui,
+        # lisait la colonne. *Les deux niveaux ne se reconciliaient pas, et
+        # rien dans ce bloc ne le disait.* C'est le defaut `G.17` : une prime
+        # sans sa duree n'est pas contestable -- 1 649,30 EUR pour un an et
+        # 792,68 pour six mois sont le MEME tarif.
+        facteurs = {c: portefeuille.iloc[rang][c] for c in colonnes}
+        # ⚠️ L'EXPOSITION N'EST PAS UN FACTEUR, et la table ne la range pas
+        # comme tel : c'est un ROLE de donnees, au meme titre que
+        # l'identifiant. Elle voyage jusqu'au calcul et se publie dans sa
+        # PROPRE colonne -- melanger les deux ferait croire a une relativite
+        # tarifaire la ou il y a une duree.
+        contrat = dict(facteurs)
+        if plan.exposition in getattr(portefeuille, 'columns', ()):
+            contrat[plan.exposition] = portefeuille.iloc[rang][plan.exposition]
+        # ⚠️ Un contrat NON TARIFABLE n'est pas ecarte : il figure au
+        # detail avec ses primes a `None`. *Le faire disparaitre de la
+        # table le ferait disparaitre du document.*
+        r = tarif.tarifer(contrat)
+        lignes.append({
+            'rang': rang + 1,
+            'facteurs': facteurs,
+            'prime_pure': r.get('prime_pure'),
+            'prime_commerciale_ht': r.get('prime_commerciale_ht'),
+            'prime_ttc': r.get('prime_ttc'),
+            # ⚠️ LA DUREE QUI A SERVI, ET D'OU ELLE VIENT. Sans elle, deux
+            # lignes de prix differents peuvent etre le MEME tarif.
+            'exposition': r.get('exposition_retenue'),
+            'exposition_source': r.get('exposition_source'),
+        })
+
+    # ⚠️ LE TOTAL PORTE SUR TOUT LE PORTEFEUILLE, pas sur les lignes montrees.
+    # C'est la raison pour laquelle le bloc doit le DIRE : deux assiettes
+    # differentes sous le meme titre seraient une reconciliation impossible.
+    # ⚠️ Seules les VALEURS servent ici : l'origine et le detail du cas
+    # applique sont deja rediges par `synthese_chargements`, plus bas, source
+    # unique. Les relire pour les reformater ferait deux redactions du meme
+    # fait -- et deux redactions finissent par en dire deux choses.
+    ch = chargements_du_contrat(plan)[0]
+    total = {
+        'n_contrats': len(portefeuille),
+        'n_lignes_detail': len(lignes),
+        'somme_prime_pure': round(float(pure.sum()), 2),
+        'prime_pure_moyenne': round(float(pure.mean()), 2),
+        'somme_prime_commerciale_ht': None,
+        'somme_prime_ttc': None,
+        'n_sans_prime_commerciale': len(portefeuille) if ch is None else 0,
+    }
+    if ch is not None:
+        _ht = pure * (1 + ch['frais']) * (1 + ch['marge']) / (1 - ch['commission'])
+        total['somme_prime_commerciale_ht'] = round(float(_ht.sum()), 2)
+    return {
+        'detail': lignes,
+        'total': total,
+        'chargements': synthese_chargements(plan),
+        'regime_fiscal': synthese_regime_fiscal(plan),
+        'validation_hypothese': phrase_decoupe(plan),
+        'plan_empreinte': plan.empreinte(),
+    }
+
+
+def _bloc_tarif_html(publie: dict) -> str:
+    """Le bloc tarif en HTML -- les deux niveaux, et leur reconciliation.
+
+    ⚠️ Vide quand aucun tarif n'est fourni : un bloc vide dirait qu'il n'y a
+    pas de prix, la ou il n'y a pas eu de calcul. Ce n'est pas la meme chose.
+    """
+    if not publie:
+        return ''
+    t = publie['total']
+    entetes = ['#'] + list(publie['detail'][0]['facteurs']) + [
+        'exposition', 'prime pure', 'commerciale HT', 'TTC']         if publie['detail'] else []
+
+    def _c(v):
+        return '—' if v is None else (f'{v:,.2f}'.replace(',', ' ')
+                                      if isinstance(v, float) else str(v))
+
+    lignes = ''.join(
+        '<tr>' + ''.join(
+            f'<td>{_c(x)}</td>' for x in
+            [ligne['rang'], *ligne['facteurs'].values(),
+             ligne['exposition'], ligne['prime_pure'],
+             ligne['prime_commerciale_ht'], ligne['prime_ttc']])
+        + '</tr>\n'
+        for ligne in publie['detail'])
+    phrases = '\n'.join(
+        f'      <li>{p}</li>' for p in
+        (publie.get('chargements'), publie.get('regime_fiscal'),
+         publie.get('validation_hypothese')) if p)
+    return (
+        f'<div class="raisons-plafond">\n'
+        f'  <div class="raisons-titre">{TITRE_TARIF}</div>\n'
+        f'    <p>Total du portefeuille — <b>{t["n_contrats"]}</b> contrats : '
+        f'prime pure <b>{_c(t["somme_prime_pure"])} EUR</b> '
+        f'(moyenne {_c(t["prime_pure_moyenne"])} EUR), '
+        f'prime commerciale HT '
+        f'<b>{_c(t["somme_prime_commerciale_ht"])}</b>'
+        + (f' — {t["n_sans_prime_commerciale"]} contrat(s) sans prime '
+           f'commerciale, faute de chargements declares.'
+           if t['n_sans_prime_commerciale'] else ' EUR.')
+        + f'</p>\n'
+        f'    <p>Detail des <b>{t["n_lignes_detail"]}</b> premiers contrats '
+        f'sur {t["n_contrats"]} — le total ci-dessus porte sur TOUS les '
+        f'contrats, pas sur ces lignes seules.</p>\n'
+        f'    <table>\n      <tr>'
+        + ''.join(f'<th>{e}</th>' for e in entetes)
+        + f'</tr>\n{lignes}    </table>\n'
+        + (f'    <ul>\n{phrases}\n    </ul>\n' if phrases else '')
+        + f'    <p>Empreinte du plan : <code>{publie["plan_empreinte"]}</code>'
+        f'</p>\n</div>\n')
 
 
 def raisons_plafond(result_a6) -> tuple[str, ...]:
@@ -1783,6 +1957,11 @@ def export_html(
     narration_calculee: Optional[Tuple[str, str]] = None,
     actuaire_nom: str = '', actuaire_numero_ia: str = '',
     *, result_a5: dict | None = None,
+    # ⚠️⚠️ LE PRIX ARRIVE PAR MOT-CLE SEUL, ET EN FIN. Cette fonction est
+    # appelee avec NEUF arguments POSITIONNELS, ici et dans une trentaine de
+    # tests : la meme mesure qui a decide de la place de `result_a5` decide
+    # de celle-ci.
+    tarif=None, portefeuille=None,
 ) -> str:
     """Génère le rapport HTML tarification. Retourne str HTML ou ''.
 
@@ -1798,6 +1977,11 @@ def export_html(
     le commentaire. `generer_rapport_tarification` calcule donc UNE fois et
     transmet ; appelé seul, cet export calcule pour lui-même comme avant.
     """
+    # ⚠️ UNE SEULE FOIS : `tarif_publie` retarife dix contrats, et le HTML
+    # comme le Word doivent lire LE MEME resultat -- deux calculs seraient
+    # deux verites possibles pour le meme prix. C'est la lecon de
+    # `narration_calculee`, deux lignes plus bas dans la meme fonction.
+    _tarif_publie = tarif_publie(tarif, portefeuille)
     now    = datetime.now().strftime('%d/%m/%Y %H:%M')   # GÉNÉRÉ LE (impression)
     arr    = libelle_arrete(arrete)                       # ARRÊTÉ (réf. ou « non déclaré »)
     branche = (result_a6 or result_a3 or {}).get('branche', 'non_vie')
@@ -2174,7 +2358,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
+{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_tarif_html(_tarif_publie)}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
       {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
@@ -2388,6 +2572,9 @@ def export_word(
     narration_calculee: Optional[Tuple[str, str]] = None,
     actuaire_nom: str = '', actuaire_numero_ia: str = '',
     *, result_a5: dict | None = None,
+    # ⚠️ Meme place, meme raison qu'en HTML : les appels positionnels sont
+    # nombreux, et le prix doit pouvoir arriver sans les deplacer.
+    tarif=None, portefeuille=None,
 ) -> bytes:
     """Génère le rapport Word tarification (.docx). Retourne bytes ou b''.
 
@@ -2648,6 +2835,48 @@ def export_word(
                  col=AR).add_break()
             for _ligne in [x.strip() for x in _map_w if x and x.strip()]:
                 _run(p, '   · ' + _ligne, sz=9, col=NR).add_break()
+
+        # ⚠️⚠️ LE PRIX, DANS LES DEUX FORMATS -- et c'est la seule facon de le
+        # poser. Corriger un seul format aurait laisse la moitie du livrable
+        # signe sans le tarif : c'est exactement ce que le mapping ci-dessus a
+        # paye, et l'elasticite, et la qualite des donnees avant elles.
+        # ⚠️ LES DEUX NIVEAUX ICI AUSSI : le total du portefeuille, puis le
+        # detail des premiers contrats -- et la phrase qui dit sur quelle
+        # assiette porte chacun, sans quoi un lecteur additionnerait le detail
+        # en croyant retrouver le total.
+        _tar_w = tarif_publie(tarif, portefeuille)
+        if _tar_w:
+            _t = _tar_w['total']
+            p = doc.add_paragraph()
+            _run(p, TITRE_TARIF, bold=True, sz=10, col=NR).add_break()
+            _ht = _t['somme_prime_commerciale_ht']
+            _run(p, f"   Total du portefeuille -- {_t['n_contrats']} contrats :"
+                    f" prime pure {_t['somme_prime_pure']:,.2f} EUR"
+                    .replace(',', ' '), sz=9, col=NR).add_break()
+            _run(p, ("   prime commerciale HT : "
+                     + (f"{_ht:,.2f} EUR".replace(',', ' ') if _ht is not None
+                        else f"non calculee -- "
+                             f"{_t['n_sans_prime_commerciale']} contrat(s) "
+                             f"sans chargements declares")), sz=9,
+                 col=NR).add_break()
+            _run(p, f"   Detail des {_t['n_lignes_detail']} premiers contrats "
+                    f"sur {_t['n_contrats']} -- le total ci-dessus porte sur "
+                    f"TOUS les contrats.", sz=9, col=NR).add_break()
+            for _l in _tar_w['detail']:
+                _fac = ' · '.join(f'{k}={v}' for k, v in _l['facteurs'].items())
+                _pc = ('—' if _l['prime_commerciale_ht'] is None
+                       else f"{_l['prime_commerciale_ht']:.2f}")
+                _run(p, f"   #{_l['rang']} {_fac} · expo "
+                        f"{_l['exposition']:.4g} -> pure "
+                        f"{_l['prime_pure']:.2f} EUR, commerciale HT {_pc}",
+                     sz=8, col=NR).add_break()
+            for _phrase in (_tar_w.get('chargements'),
+                            _tar_w.get('regime_fiscal'),
+                            _tar_w.get('validation_hypothese')):
+                if _phrase:
+                    _run(p, '   · ' + _phrase, sz=8, col=NR).add_break()
+            _run(p, f"   Empreinte du plan : {_tar_w['plan_empreinte']}",
+                 sz=8, col=NR).add_break()
 
         # ⚠️⚠️ LES RÉSERVES D'A6, DANS LES DEUX FORMATS AUSSI — et ce rapport
         # était le dernier muet. Mesuré le 03/09/2026 : elles n'atteignaient
@@ -3017,6 +3246,10 @@ def generer_rapport_tarification(
     formats: List[str] = None,
     actuaire_nom: str = '', actuaire_numero_ia: str = '',
     *, result_a5: dict | None = None,
+    # ⚠️⚠️ LE TARIF, ET LE PORTEFEUILLE SUR LEQUEL IL A ETE AJUSTE.
+    # Optionnels : un rapport produit sans eux est exactement celui
+    # d'hier. Fournis, le document gagne le PRIX -- aux deux niveaux.
+    tarif=None, portefeuille=None,
 ) -> Dict[str, bytes]:
     """
     Génère tous les formats demandés en un seul appel.
@@ -3062,14 +3295,17 @@ def generer_rapport_tarification(
         html_str = export_html(result_a3, result_a4, result_a6, ref_client, arrete,
                                audit_id, narration_calculee,
                                actuaire_nom, actuaire_numero_ia,
-                               result_a5=result_a5)
+                               result_a5=result_a5,
+                               tarif=tarif, portefeuille=portefeuille)
         out['html_bytes'] = html_str.encode('utf-8') if html_str else b''
 
     if 'word' in formats:
         out['word_bytes'] = export_word(result_a3, result_a4, result_a6, ref_client,
                                         arrete, audit_id, narration_calculee,
                                         actuaire_nom, actuaire_numero_ia,
-                                        result_a5=result_a5)
+                                        result_a5=result_a5,
+                                        tarif=tarif,
+                                        portefeuille=portefeuille)
 
     if 'pdf' in formats:
         if html_str:

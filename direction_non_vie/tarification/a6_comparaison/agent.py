@@ -396,6 +396,17 @@ class AgentA6Comparaison:
         # numériques » → le modèle recalibré a la MÊME spécification que la production
         # (correctif V15 #2). None → repli sur l'ancien comportement (rétro-compat).
         plan:        Optional[Any] = None,
+        # ⚠️⚠️ LE TARIF, QU'A6 FAIT PASSER JUSQU'AU DOCUMENT SIGNE. Il ne le
+        # fabrique pas : c'est la meme doctrine que pour la relecture
+        # actuarielle et le rapport qualite -- A6 est un ARBITRE, il compare
+        # des modeles, il n'ajuste pas de tarif. `None` -> le rapport est
+        # exactement celui d'hier, sans section prix.
+        #   *L'objet qui sait calculer un prix existait et fonctionnait ; il
+        #   n'avait jamais ete branche sur un livrable signe. C'est ce chemin
+        #   qui manquait, pas le calcul.*
+        # ⚠️ `| None` et non `Optional[...]` : la forme moderne. *La dette
+        # du voisin n'autorise pas a en ajouter une.*
+        tarif:       Any | None = None,
         col_cible:   str = 'prime_pure',
         col_expo:    str = 'exposition',
         profil:      str = 'equilibre',
@@ -960,6 +971,35 @@ class AgentA6Comparaison:
             _publication_regl = publication_reglementaire(
                 _tmp_a6, result_a3, plan)
             _tmp_a6['publication_reglementaire'] = _publication_regl
+            # ⚠️⚠️ LE TARIF, AJUSTE ICI QUAND PERSONNE NE LE FOURNIT -- ET
+            # C'EST CE QUI FAIT LA DIFFERENCE ENTRE UN TUYAU ET UN
+            # BRANCHEMENT. Mesure du 08/09/2026 : `pipeline_complet` avait
+            # ZERO appelant de production (l'app Streamlit, interdite, et une
+            # demo), et les trois services de livrable ne portaient AUCUN mot
+            # de prix. Se contenter de FAIRE PASSER un tarif aurait pose un
+            # parametre que rien n'aurait rempli : *le correctif doit
+            # atteindre la surface, pas la froler.*
+            #   L'appelant qui fournit son propre tarif l'emporte -- A6 ne
+            #   recalcule alors rien, et ce qui est publie est bien ce qui a
+            #   ete signe ailleurs.
+            # ⚠️ ET L'ECHEC SE PUBLIE. Un tarif qu'on n'a pas su ajuster
+            # laisse le document SANS section prix, avec la cause au journal :
+            # il ne fabrique jamais un prix de repli.
+            _tarif_publiable = tarif
+            if _tarif_publiable is None and plan is not None:
+                try:
+                    from direction_non_vie.tarification.pipeline_tarifaire import (
+                        pipeline_complet as _pipeline_complet,
+                    )
+                    _tarif_publiable = _pipeline_complet(
+                        result_a2['dataframe'], plan,
+                        models_path=self.models_path,
+                        audit_path=self.audit_path)
+                except Exception as _e_tarif:              # noqa: BLE001
+                    logger.warning(
+                        "[%s] Tarif non ajuste, le rapport ne portera pas de "
+                        "section prix : %s", audit_id, _e_tarif)
+                    _tarif_publiable = None
             _excel_a6 = b''
             _word_a6  = b''
             _html_a6  = b''
@@ -994,6 +1034,19 @@ class AgentA6Comparaison:
                         audit_id=audit_id, formats=['html','word'],
                         actuaire_nom=actuaire_nom or '',
                         actuaire_numero_ia=actuaire_numero_ia or '',
+                        # ⚠️⚠️ LE PRIX ATTEINT ENFIN LE DOCUMENT SIGNE. Mesure
+                        # du 08/09/2026 : ZERO occurrence de `prime_pure`,
+                        # `prime_commerciale_ht`, `prime_ttc` ou `chargements`
+                        # dans les trois services de livrable, et ZERO appelant
+                        # de production de `pipeline_complet` hors de l'app
+                        # Streamlit. *L'objet qui sait faire un prix existait,
+                        # fonctionnait, et n'etait branche nulle part.*
+                        # ⚠️ A6 FAIT PASSER, IL NE FABRIQUE PAS -- la meme
+                        # doctrine que pour la relecture actuarielle juste
+                        # au-dessus. Le tarif vient de l'appelant ; sans lui,
+                        # ce rapport est exactement celui d'hier.
+                        tarif=_tarif_publiable,
+                        portefeuille=(result_a2 or {}).get('dataframe'),
                     )
                     _html_a6 = _rapports.get('html_bytes', b'')
                     _word_a6 = _rapports.get('word_bytes', b'')

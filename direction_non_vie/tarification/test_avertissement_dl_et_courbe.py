@@ -217,12 +217,20 @@ class TestAvertissementDLSurLaSurfaceSignee(unittest.TestCase):
                 if (nom and nom.startswith('synthese_')
                         and enclos(n.lineno) != '_construire_contexte_tarif'):
                     dehors.add(nom)
+        # ⚠️⚠️ DEUX DE PLUS LE 08/09/2026, ET C'EST LE LOT QUI PUBLIE LE PRIX.
+        # `synthese_chargements` et `synthese_regime_fiscal` accompagnent
+        # desormais le tarif dans le document signe : un prix sans ses
+        # hypotheses -- qui a declare les chargements, d'ou vient la taxe --
+        # n'est pas contestable. Ce test avait prevu ce jour et dit quoi
+        # faire : *un defaut connu et non traite se declare ; il ne se laisse
+        # pas oublier entre deux lots.* Le compte passe de 3 a 5.
         self.assertEqual(
-            dehors, {'synthese_elasticite', 'synthese_modele_dl',
-                     'synthese_qualite_donnees'},
+            dehors, {'synthese_chargements', 'synthese_elasticite',
+                     'synthese_modele_dl', 'synthese_qualite_donnees',
+                     'synthese_regime_fiscal'},
             f"L'assiette a change : synthese(s) hors du prompt = {sorted(dehors)}. "
             f"Si une autre a ete cablee, mettre a jour le releve et ce test.")
-        print("    A-6 3 syntheses cablees ; les 6 autres restent dans le "
+        print("    A-6 5 syntheses cablees ; les autres restent dans le "
               "prompt SEUL, et c'est declare")
 
 
