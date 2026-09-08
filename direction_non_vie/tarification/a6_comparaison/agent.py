@@ -1013,14 +1013,31 @@ class AgentA6Comparaison:
             # ⚠️ Les candidats y sont REAJUSTES sur la decoupe du plan : A4
             # ajuste sur la sienne (`random_state=42`, non declaree), et
             # asseoir une elimination publiee la-dessus rouvrirait `C-36`.
+            # ⚠️⚠️ L'ASSIETTE VIENT DU TARIF, PAS DE CE QU'ON A SOUS LA MAIN.
+            # Cette ligne remettait `result_a2['dataframe']` -- le portefeuille
+            # d'AVANT la couche qualite -- alors que le tarif s'ajuste sur
+            # `dataframe_propre`, apres exclusions (regle 1) et corrections
+            # (regle 2). Mesure du 08/09/2026 sur 2 000 lignes a 3 % de
+            # defauts : 25 lignes exclues, 35 expositions corrigees, et le
+            # verdict publie basculait de 0 survivant a 1 survivant a
+            # 622 391,70 EUR. *La comparaison tarifiait des lignes que le tarif
+            # n'avait jamais vues.*
+            #   ⚠️ Sans rapport de qualite, on remet ce qu'on a et le socle
+            #   publie un REFUS nomme : on ne devine jamais l'assiette.
             _comparaison = None
             if _tarif_publiable is not None and plan is not None:
                 try:
+                    from core.prix_compares import (
+                        assiette_du_tarif as _assiette,
+                    )
                     from direction_non_vie.tarification.comparaison_prix import (
                         comparer_les_prix as _comparer,
                     )
+                    _assiette_tarif = _assiette(_tarif_publiable)
                     _comparaison = _comparer(
-                        _tarif_publiable, result_a2['dataframe'], plan)
+                        _tarif_publiable,
+                        (result_a2['dataframe'] if _assiette_tarif is None
+                         else _assiette_tarif), plan)
                 except Exception as _e_cmp:                # noqa: BLE001
                     logger.warning(
                         "[%s] Comparaison de prix non produite : %s",

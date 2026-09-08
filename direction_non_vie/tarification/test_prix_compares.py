@@ -57,7 +57,9 @@ from core.prix_compares import (
     AdaptateurTauxFrequence,
     Candidat,
     NatureIncomparable,
+    assiette_du_tarif,
     niveau_holdout,
+    refuser_assiette_discordante,
     refuser_natures_melangees,
 )
 from core.validation_tarif import DecoupeValidation
@@ -295,6 +297,109 @@ class TestLaComparaisonBout_en_bout(unittest.TestCase):
         self.assertIsNotNone(self.tarif.glm_cout)
         print(f"    PC-12 k de production inchange : {self.k_production:.6f} "
               f"({len(c.survivants)} prix calcules entre-temps)")
+
+
+class TestLAssietteDeLaComparaison(unittest.TestCase):
+    """⚠️⚠️ `D-2` — LA COMPARAISON PORTE SUR LES LIGNES AJUSTEES, OU SUR RIEN.
+
+    ⚠️⚠️ CES CONTROLES TIENNENT UNE PROPRIETE, JAMAIS UN MONTANT -- et c'est
+    delibere. Le chantier `D-1` va changer la source dont le tarif est
+    construit : tout euro fige ici serait faux des le lot suivant. *Ce qui doit
+    rester vrai n'est pas le prix, c'est que l'assiette de la comparaison EST
+    celle du tarif.*
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        nu = PlanTarifaire.depuis_yaml(os.path.join(_PLANS, 'auto.yaml'))
+        cls.plan = dataclasses.replace(
+            nu, decoupe_validation=DecoupeValidation('positionnelle'))
+        # ⚠️ 60 defauts sur 2 000 = 3 %, SOUS le seuil d'escalade de 5 % : la
+        # couche qualite agit au lieu de bloquer, ce qui est le cas a tenir.
+        df = T.portefeuille_auto(2000, 11).reset_index(drop=True)
+        df.loc[0:14, cls.plan.exposition] = 0.0          # regle 1 : exclue
+        df.loc[15:24, cls.plan.cible_frequence] = -1.0   # regle 1 : exclue
+        df.loc[25:59, cls.plan.exposition] = 1.8         # regle 2 : corrigee
+        cls.df_defauts = df
+        cls.tarif = pipeline_complet(df, cls.plan)
+        cls.propre = cls.tarif.rapport_qualite.dataframe_propre
+
+    def test_PC16_LE_SCEAU_l_assiette_de_la_comparaison_EST_celle_du_tarif(self):
+        """⚠️⚠️ MESURE DU 08/09/2026 : sur ce portefeuille, la couche qualite
+        exclut des lignes et en corrige d'autres. Comparer sur le portefeuille
+        d'AVANT ferait tarifer des lignes que le tarif n'a jamais vues."""
+        self.assertLess(len(self.propre), len(self.df_defauts),
+                        "la couche qualite n'exclut rien ici : ce controle "
+                        "s'exercerait sur une assiette ou la violation ne "
+                        "peut pas survenir")
+        c = comparer_les_prix(self.tarif, self.df_defauts, self.plan)
+        self.assertEqual(c.resultats, (),
+                         "des prix ont ete calcules sur une assiette qui "
+                         "n'est pas celle du tarif")
+        self.assertIn('AUCUNE COMPARAISON', c.motif_absence)
+        self.assertIn(str(len(self.df_defauts)), c.motif_absence)
+        self.assertIn(str(len(self.propre)), c.motif_absence)
+        print(f"    PC-16 SCEAU : {len(self.df_defauts)} lignes remises contre "
+              f"{len(self.propre)} ajustees -> REFUS nomme")
+
+    def test_PC17_LE_MIROIR_sur_la_BONNE_assiette_la_comparaison_a_lieu(self):
+        """⚠️ Sans ce sens, un garde qui refuserait TOUT satisferait PC-16."""
+        c = comparer_les_prix(self.tarif, self.propre, self.plan)
+        self.assertEqual(c.motif_absence, '',
+                         f"la bonne assiette est refusee : {c.motif_absence}")
+        self.assertTrue(c.resultats, "aucun candidat mesure")
+        print(f"    PC-17 miroir : assiette du tarif -> "
+              f"{len(c.resultats)} candidat(s) mesure(s)")
+
+    def test_PC18_une_CORRECTION_de_valeur_est_vue_a_lignes_EGALES(self):
+        """⚠️⚠️ LE CAS QU'UN COMPTE DE LIGNES NE VOIT PAS. La regle 2 corrige
+        une valeur et GARDE la ligne : meme longueur, meme index, exposition
+        differente. Mesure : 35 expositions corrigees sur ce portefeuille."""
+        faux = self.propre.copy()
+        faux.iloc[0, faux.columns.get_loc(self.plan.exposition)] = 0.123456
+        self.assertEqual(len(faux), len(self.propre))
+        self.assertTrue(faux.index.equals(self.propre.index))
+        motif = refuser_assiette_discordante(self.tarif, faux)
+        self.assertTrue(motif, "une VALEUR modifiee passe le garde : il ne "
+                               "compare que des lignes")
+        self.assertIn(self.plan.exposition, motif)
+        print("    PC-18 valeur corrigee a lignes egales : VUE et nommee")
+
+    def test_PC19_un_tarif_SANS_rapport_qualite_est_refuse_et_c_est_DIT(self):
+        """⚠️ `None` se lit « on ne sait pas sur quoi il a ete ajuste », jamais
+        « il a ete ajuste sur tout »."""
+        orphelin = dataclasses.replace(self.tarif, rapport_qualite=None)
+        self.assertIsNone(assiette_du_tarif(orphelin))
+        c = comparer_les_prix(orphelin, self.propre, self.plan)
+        self.assertEqual(c.resultats, ())
+        self.assertIn('rapport', c.motif_absence.lower())
+        print("    PC-19 tarif sans rapport qualite : REFUS nomme")
+
+    def test_PC20_A6_remet_l_ASSIETTE_DU_TARIF_releve_par_AST(self):
+        """⚠️⚠️ LE CORRECTIF DOIT ATTEINDRE LA SURFACE. Le defaut vivait au
+        SITE D'APPEL : le garde du socle ne sert a rien si A6 continue de
+        remettre `result_a2['dataframe']` sans condition."""
+        a6 = (pathlib.Path(_RACINE) / 'direction_non_vie' / 'tarification'
+              / 'a6_comparaison' / 'agent.py').read_text(encoding='utf-8')
+        arbre = ast.parse(a6)
+        appels = [n for n in ast.walk(arbre)
+                  if isinstance(n, ast.Call)
+                  and getattr(n.func, 'id', None) == '_comparer']
+        self.assertTrue(appels, "A6 n'appelle plus la comparaison")
+        for appel in appels:
+            source = ' '.join(ast.unparse(a) for a in appel.args)
+            self.assertIn('_assiette_tarif', source,
+                          "A6 remet un portefeuille sans le rapporter a "
+                          "l'assiette du tarif")
+        print("    PC-20 A6 remet l'assiette du tarif")
+
+    def test_PC21_le_refus_d_assiette_ATTEINT_le_document(self):
+        """⚠️ Un refus qui ne sort pas du calcul ne protege personne."""
+        c = comparer_les_prix(self.tarif, self.df_defauts, self.plan)
+        html = _bloc_comparaison_html(c)
+        self.assertIn(TITRE_COMPARAISON, html)
+        self.assertIn('AUCUNE COMPARAISON', html)
+        print("    PC-21 le refus d'assiette est publie dans le document")
 
 
 class TestLeBranchement(unittest.TestCase):

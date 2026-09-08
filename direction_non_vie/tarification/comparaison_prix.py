@@ -46,6 +46,7 @@ from core.prix_compares import (
     Candidat,
     ResultatCandidat,
     niveau_holdout,
+    refuser_assiette_discordante,
     refuser_natures_melangees,
     synthese_comparaison,
 )
@@ -123,6 +124,18 @@ def comparer_les_prix(tarif, portefeuille, plan, *, bande=None,
     modèle de fréquence est remplacé, candidat par candidat.
     """
     nature = refuser_natures_melangees(candidats)
+    # ⚠️⚠️ L'ASSIETTE D'ABORD, AVANT MEME LA DECOUPE. Mesurer une decoupe sur
+    # des lignes que le tarif n'a pas vues n'aurait aucun sens : les indices
+    # porteraient sur un autre portefeuille que celui qui a produit les
+    # modeles. *Le premier appelant de production remettait ici le
+    # portefeuille d'AVANT la couche qualite ; le verdict publie basculait
+    # entierement -- 0 survivant contre 1 a 622 391,70 EUR, mesure le
+    # 08/09/2026.*
+    discordance = refuser_assiette_discordante(tarif, portefeuille)
+    if discordance:
+        return ComparaisonPrix(
+            resultats=(), nature=nature, bande=bande, synthese='',
+            motif_absence=discordance)
     decoupe = getattr(plan, 'decoupe_validation', None)
     paire = indices_validation(portefeuille, decoupe)
     if paire is None:

@@ -46,11 +46,13 @@ from __future__ import annotations
 import dataclasses
 
 import numpy as np
+import pandas as pd
 
 __all__ = [
     'CAUSE_CRITERE', 'CAUSE_SANS_PRIX', 'NATURES',
     'AdaptateurTauxFrequence', 'Candidat', 'NatureIncomparable',
-    'ResultatCandidat', 'niveau_holdout', 'refuser_natures_melangees',
+    'ResultatCandidat', 'assiette_du_tarif', 'niveau_holdout',
+    'refuser_assiette_discordante', 'refuser_natures_melangees',
     'synthese_comparaison',
 ]
 
@@ -149,6 +151,108 @@ def refuser_natures_melangees(candidats) -> str:
             f"grandeurs comme une seule. C'est l'erreur des deux bases de "
             f"Gini incompatibles, déjà trouvée et fermée dans ce dépôt.")
     return next(iter(natures))
+
+
+def assiette_du_tarif(tarif):
+    """Les lignes sur lesquelles ce tarif a RÉELLEMENT été ajusté, ou `None`.
+
+    ⚠️ Lu par `getattr`, jamais par un import : le socle ne connaît pas
+    `TarifNonVie`, qui vit dans une direction. `None` signifie « ce tarif n'a
+    pas été ajusté par `pipeline_complet` », donc **on ne sait pas** sur quelles
+    lignes il l'a été — ce n'est pas « il a été ajusté sur tout ».
+    """
+    rapport = getattr(tarif, 'rapport_qualite', None)
+    if rapport is None:
+        return None
+    return getattr(rapport, 'dataframe_propre', None)
+
+
+def _colonnes_discordantes(gauche, droite) -> list:
+    """Les colonnes dont les VALEURS diffèrent, index supposé déjà égal."""
+    ecarts = []
+    for colonne in droite.columns:
+        a, b = gauche[colonne], droite[colonne]
+        if (pd.api.types.is_numeric_dtype(a)
+                and pd.api.types.is_numeric_dtype(b)):
+            if not np.allclose(a.to_numpy(dtype=float),
+                               b.to_numpy(dtype=float), equal_nan=True):
+                ecarts.append(colonne)
+        elif not a.astype(str).equals(b.astype(str)):
+            ecarts.append(colonne)
+    return ecarts
+
+
+def refuser_assiette_discordante(tarif, portefeuille) -> str:
+    """L'assiette de la comparaison EST celle du tarif, ou il n'y a pas de prix.
+
+    ⚠️⚠️ CE QUE CE GARDE EXISTE POUR EMPÊCHER, ET C'EST MESURÉ. `pipeline_complet`
+    ajuste sur `rapport_qualite.dataframe_propre` — **après** que la couche
+    qualité a exclu les lignes impossibles (règle 1) et corrigé les implausibles
+    établies (règle 2). Le premier appelant de production, lui, remettait ici le
+    portefeuille d'AVANT cette couche.
+
+      Mesuré le 08/09/2026, 2 000 lignes portant 3 % de défauts réalistes : la
+      couche exclut **25 lignes** (`frequence_negative` 10,
+      `exposition_non_positive` 15) et **corrige 35 expositions**
+      (`exposition_sup_1`). Sur l'assiette brute, **6 candidats sur 6 sont sans
+      prix publiable, 0 survivant** ; sur l'assiette du tarif, **1 survivant à
+      622 391,70 EUR**, 2 écartés par le critère, 3 sans prix. *Le verdict
+      publié bascule entièrement.*
+
+    ⚠️⚠️ ET LES LONGUEURS NE SUFFISENT PAS. Une correction de règle 2 garde la
+    ligne et change sa VALEUR : même longueur, même index, exposition différente.
+    Un garde qui ne compterait que des lignes la laisserait passer — et le prix
+    serait mesuré sur une exposition que le tarif n'a jamais vue.
+
+    ⚠️ ON REFUSE, ON NE SUBSTITUE PAS. Remplacer en silence l'assiette par la
+    bonne cacherait l'erreur de l'appelant. *Un appelant qui se trompe d'assiette
+    doit l'apprendre.* Rend le motif publiable, ou `''` si tout concorde.
+    """
+    assiette = assiette_du_tarif(tarif)
+    if assiette is None:
+        return (
+            "AUCUNE COMPARAISON DE PRIX : ce tarif ne porte aucun rapport de "
+            "qualite, donc rien ne dit sur quelles lignes il a ete ajuste. "
+            "Comparer des prix sur des lignes que le tarif n'a pas vues "
+            "publierait des prix qui ne sont pas les siens. Un tarif ajuste "
+            "par `pipeline_complet` porte ce rapport.")
+    if list(portefeuille.columns) != list(assiette.columns):
+        manque = [c for c in assiette.columns if c not in portefeuille.columns]
+        surplus = [c for c in portefeuille.columns
+                   if c not in assiette.columns]
+        return (
+            f"AUCUNE COMPARAISON DE PRIX : le portefeuille remis n'a pas les "
+            f"memes colonnes que l'assiette d'ajustement du tarif -- "
+            f"manquante(s) {manque[:5]}, en trop {surplus[:5]}.")
+    if len(portefeuille) != len(assiette):
+        return (
+            f"AUCUNE COMPARAISON DE PRIX : le portefeuille remis porte "
+            f"{len(portefeuille)} ligne(s), le tarif a ete ajuste sur "
+            f"{len(assiette)}. La couche qualite a exclu des lignes que la "
+            f"comparaison tarifierait quand meme : les prix compares ne "
+            f"seraient pas ceux de ce tarif.")
+    if not portefeuille.index.equals(assiette.index):
+        return (
+            "AUCUNE COMPARAISON DE PRIX : le portefeuille remis a le meme "
+            "NOMBRE de lignes que l'assiette d'ajustement du tarif, mais pas "
+            "les memes. Un decompte egal ne fait pas une assiette egale.")
+    ecarts = _colonnes_discordantes(portefeuille, assiette)
+    if ecarts:
+        premiere = ecarts[0]
+        n_lignes = int((pd.to_numeric(portefeuille[premiere], errors='coerce')
+                        != pd.to_numeric(assiette[premiere], errors='coerce')
+                        ).sum()) if pd.api.types.is_numeric_dtype(
+                            assiette[premiere]) else -1
+        return (
+            f"AUCUNE COMPARAISON DE PRIX : les lignes sont les memes, mais "
+            f"{len(ecarts)} colonne(s) portent d'autres VALEURS que celles sur "
+            f"lesquelles le tarif a ete ajuste : {ecarts[:5]}"
+            + (f" ({n_lignes} ligne(s) sur '{premiere}')" if n_lignes >= 0
+               else '')
+            + ". La couche qualite corrige des valeurs sans retirer la ligne "
+              "(regle 2) : un decompte de lignes ne voit pas cette "
+              "correction.")
+    return ''
 
 
 class AdaptateurTauxFrequence:
