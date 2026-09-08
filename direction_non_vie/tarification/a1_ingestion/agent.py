@@ -38,7 +38,11 @@ from typing import Dict, Any, Optional, List, Tuple
 import numpy as np
 import pandas as pd
 from core.charts_tarif import glyphe_rag
-from core.mapping_client import MappingClient, diagnostiquer_mapping
+from core.mapping_client import (
+    MappingClient,
+    MappingIncoherent,
+    diagnostiquer_mapping,
+)
 from direction_non_vie.tarification.contrat_sortie import sortie_completee
 from core.qualite_donnees import (borne_exposition,
                                   exiger_canal_sans_objet)
@@ -762,7 +766,29 @@ class AgentA1Ingestion:
                         logger.warning(
                             f"Diagnostic de mapping non produit : {e_diag}")
 
-                if mapping_applicable:
+                # ⚠️⚠️ UNE COLLISION NE S'APPLIQUE PAS — arbitrage rendu le
+                # 08/09/2026. Le socle SAIT depuis toujours qu'un renommage
+                # qui creerait deux colonnes de meme nom est incoherent
+                # (`valider_mapping` leve) ; A1 renommait quand meme.
+                #   Mesure du 08/09/2026 sur les DEUX formes de collision --
+                #   deux sources vers une cible, et une cible qui coincide
+                #   avec une colonne deja presente : A1 rendait
+                #   `['age', 'age', 'autre']` avec `applique=True`, et le
+                #   diagnostic VOYAIT la collision sans l'empecher.
+                # *Une colonne en double n'est pas une donnee ambigue : c'est
+                # un DataFrame la ou l'aval attend une Series, et A2/A3
+                # tarifent alors sur ce que l'ordre des colonnes decide.*
+                #   ⚠️ LA REGLE EST ASYMETRIQUE, ET C'EST VOULU : une CIBLE
+                #   INCONNUE du plan se SIGNALE et s'applique (elle produit
+                #   une colonne que le plan ignore, pas une ambiguite) ; une
+                #   COLLISION se REFUSE. Deux incoherences, deux dispositions
+                #   -- c'est ce que `diagnostiquer_mapping` rend possible en
+                #   ne levant pas lui-meme.
+                _rap = mapping_info.get('rapport')
+                _collisions = tuple(getattr(_rap, 'collisions', ()) or ())
+                if _collisions:
+                    mapping_info['collisions_bloquantes'] = list(_collisions)
+                elif mapping_applicable:
                     df = df.rename(columns=mapping_applicable)
                     mapping_info['applique']              = True
                     mapping_info['nb_colonnes_renommees'] = len(mapping_applicable)
@@ -805,6 +831,25 @@ class AgentA1Ingestion:
                         f"SUGGÉRÉ mais NON ÉCRIT ({type(e).__name__}) — "
                         f"la suggestion n'existe que dans ce résultat"
                     )
+
+        # ⚠️⚠️ LA LEVÉE EST **HORS** DU `try` CI-DESSUS, ET C'EST LE POINT.
+        # Levée à l'intérieur, elle serait avalée par le `except Exception`
+        # qui déclare `echec_chargement` : la collision se lirait comme un
+        # fichier illisible, et A1 continuerait avec un df NON renommé sans
+        # que personne sache pourquoi. *Un garde-fou pose dans le bloc qui
+        # rattrape tout ne garde rien.*
+        #   La levée remonte au `try` de `run()`, qui rend le contrat de
+        #   sortie complet (`success=False`, `erreur` nommée) : A1 ne lève
+        #   jamais vers son appelant, il DÉCLARE son échec.
+        if mapping_info.get('collisions_bloquantes'):
+            raise MappingIncoherent(
+                f"Mapping du client '{client_id}' : le renommage créerait des "
+                f"colonnes en double {mapping_info['collisions_bloquantes']}. "
+                f"Aucune colonne n'a été renommée — un DataFrame à colonnes "
+                f"homonymes ferait tarifer l'aval sur l'ordre des colonnes. "
+                f"Corrigez `{client_id}_mapping.json` : deux sources ne "
+                f"peuvent pas viser la même cible, et une cible ne peut pas "
+                f"coïncider avec une colonne déjà présente.")
 
         return df, mapping_info
 
