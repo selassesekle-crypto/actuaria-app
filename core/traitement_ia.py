@@ -90,8 +90,19 @@ def constat_assistance_ia() -> dict[str, Any]:
     """Le constat technique, prêt à être porté par un registre art. 30.
 
     ⚠️ Les chiffres viennent de `core.frontiere_llm`, seule source du dépôt
-    qui connaisse les sites sortants — jamais d'une liste recopiée ici. Un
-    site ajouté demain se compte tout seul.
+    qui nomme les sites sortants — jamais d'une liste recopiée ici.
+
+    ⚠️⚠️ MAIS `SITES` EST UNE TABLE ÉCRITE À LA MAIN : un site ajouté demain
+    NE SE COMPTE PAS TOUT SEUL. Cette docstring l'affirmait, et c'était faux
+    — mesuré le 08/09/2026 : les trois sentinelles du verrou demandaient
+    toutes « chaque site DÉCLARÉ existe-t-il ? », aucune « chaque site RÉEL
+    est-il DÉCLARÉ ? ». Un fichier appelant la frontière sans figurer ici
+    aurait transmis des données à un sous-traitant **sans être déclaré au
+    registre**, et ce compte aurait sous-compté en silence.
+      *C'est `test_T1d_aucun_appelant_de_la_frontiere_n_est_absent_de_la_table`
+      qui rend ce chiffre fiable, pas cette phrase.* Le relevé au moment du
+      correctif : 14 appelants réels, 13 déclarés, le quatorzième étant le
+      fichier de test lui-même.
     """
     chemins = frontiere_llm.chemins_appelants()
     return {

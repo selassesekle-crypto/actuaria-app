@@ -47,6 +47,18 @@ def _lire(chemin):
         return f.read()
 
 
+def _est_un_test(rel: str) -> bool:
+    """⚠️ L'EXEMPTION DU BALAYAGE INVERSE (`T1d`), NOMMÉE ET ÉTROITE.
+
+    Un fichier de test n'est pas une activité de traitement : il n'a pas à
+    figurer au registre de l'article 30. Mais l'exemption doit être VISIBLE —
+    un fichier de production baptisé `test_*` s'y glisserait sinon sans que
+    personne le voie. Elle est donc citée dans le message d'échec de `T1d`.
+    """
+    dernier = rel.rsplit('/', 1)[-1]
+    return dernier.startswith('test_') or '/tests/' in f'/{rel}'
+
+
 class _Bloc:
     def __init__(self, texte, type_='text'):
         self.text = texte
@@ -116,6 +128,67 @@ class T1_LeVerrou(unittest.TestCase):
                 manquants.append(f'{rel} (n\'importe pas la frontière)')
         self.assertEqual(manquants, [], '; '.join(manquants))
         print(f'    OK T1c : les {len(SITES)} sites passent par la frontière')
+
+    def test_T1d_aucun_appelant_de_la_frontiere_n_est_absent_de_la_table(self):
+        """⚠️⚠️ LE VERROU ÉTAIT À SENS UNIQUE, ET C'EST UNE EXIGENCE LÉGALE.
+
+        `T1c` demande « chaque site DÉCLARÉ existe-t-il ? ». `T1` et `T1b`
+        demandent « quelqu'un contourne-t-il la frontière ? ». **Aucune ne
+        demandait « chaque site RÉEL est-il DÉCLARÉ ? »** — et c'est celle-là
+        qui compte pour le RGPD.
+
+        `SITES` alimente le registre de l'**article 30**
+        (`core/traitement_ia.constat_assistance_ia`). Un fichier qui
+        appellerait `frontiere_llm.appeler` sans y figurer transmettrait des
+        données à un sous-traitant **sans être déclaré au registre**, et le
+        compte publié sous-compterait en silence.
+
+        ⚠️ MESURÉ AVANT D'ÉCRIRE CE TEST (08/09/2026) : 14 fichiers appellent
+        réellement la frontière, 13 sont déclarés, et le quatorzième est
+        `core/test_frontiere_llm.py` — un test, pas un traitement. **Le
+        registre est donc juste aujourd'hui, et rien ne le maintenait juste.**
+
+        ⚠️ RELEVÉ PAR AST, PAS PAR GREP : `frontiere.appeler(...)` et un
+        `appeler` importé sont le même fait sous deux écritures. Voir
+        [releve-symbole-vs-prose].
+
+        ⚠️ L'EXEMPTION EST NOMMÉE ET ÉTROITE : un fichier de test n'est pas
+        une activité de traitement. Elle est écrite dans le message d'échec,
+        pour qu'un fichier de production nommé `test_*` ne s'y glisse pas
+        sans qu'on le voie.
+        """
+        import ast
+
+        declares = set(chemins_appelants())
+        reels = {}
+        for rel, chemin in _fichiers_python():
+            if rel in FICHIERS_AUTORISES or _est_un_test(rel):
+                continue
+            texte = _lire(chemin)
+            if 'frontiere_llm' not in texte:
+                continue
+            try:
+                arbre = ast.parse(texte)
+            except SyntaxError:
+                continue
+            for noeud in ast.walk(arbre):
+                if not isinstance(noeud, ast.Call):
+                    continue
+                fonction = noeud.func
+                nom = (fonction.attr if isinstance(fonction, ast.Attribute)
+                       else getattr(fonction, 'id', None))
+                if nom == 'appeler':
+                    reels.setdefault(rel, []).append(noeud.lineno)
+
+        absents = sorted(set(reels) - declares)
+        self.assertEqual(
+            absents, [],
+            f"site(s) qui SORTENT vers l'API sans figurer dans `SITES` : "
+            f"{ {r: reels[r] for r in absents} }. Le registre art. 30 les "
+            f"sous-compte. (Exemptions : {FICHIERS_AUTORISES} et les "
+            f"fichiers de test — un test n'est pas un traitement.)")
+        print(f'    OK T1d : les {len(reels)} appelants réels sont tous '
+              f'déclarés (relevé AST, sens INVERSE de T1c)')
 
 
 class T2_LaSourceUniqueDesModeles(unittest.TestCase):

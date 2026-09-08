@@ -304,6 +304,75 @@ class TestFuitePlantee(unittest.TestCase):
             'le denominateur `gini_parfait` depend de l ordre des lignes : '
             'tout `g_norm` en herite')
 
+    def test_AF6_une_fuite_INVISIBLE_A_PEARSON_est_quand_meme_attrapee(self):
+        """⚠️⚠️ CE QUI TIENDRAIT SI ON REMPLACAIT LA MESURE PAR UNE
+        CORRELATION LINEAIRE -- et `AF1` ne le dirait pas.
+
+        Mesure du 08/09/2026, exigence de conformite RGPD/CJUE C-236/09 : la
+        fuite franche d'`AF1` porte un **Pearson de 0,94**. Un garde-fou
+        reduit a une correlation lineaire la verrait donc, et `AF1` resterait
+        VERTE apres une regression qui viderait le controle de sa substance.
+
+        La fixture ci-dessous est monotone et TRES convexe (`y ** 6`) :
+
+            Pearson  0,4172   -> une correlation lineaire la RATERAIT
+            Spearman 0,7555   -> sous le seuil de 0,80, elle aussi
+            g_norm   1,0000   -> c'est LUI qui l'attrape
+
+        ⚠️ ET C'EST LE `g_norm` QUI FAIT LE TRAVAIL, PAS LE SPEARMAN. Mesure :
+        le Spearman vaut 0,75 sur TOUTES les fuites essayees -- binaire,
+        `exp(y)`, `log1p(y)`, `y**6` -- donc sous le seuil. Le
+        `max(spearman, gini_normalise)` du site n'est pas une precaution :
+        sans le second terme, aucune de ces fuites ne serait signalee.
+
+        ⚠️ LES DEUX SENS, comme `AF1` : le temoin de bruit pur et les
+        facteurs sains doivent rester EPARGNES. *Un controle qui signale tout
+        ne signale rien.*
+        """
+        rng = np.random.default_rng(11)
+        n = len(self.y_arr)
+        convexe = (self.y_arr ** 6) + rng.normal(0, 0.01, n)
+        temoin = rng.normal(0, 1, n)
+        df2 = self.df.copy()
+        df2['fuite_convexe_af6'] = convexe
+        df2['temoin_bruit_af6'] = temoin
+        sains = [f.nom for f in self.plan.facteurs
+                 if f.nom in df2.columns
+                 and pd.api.types.is_numeric_dtype(df2[f.nom])]
+        fuites = detecter_fuites_par_effet(
+            df2, [*sains, 'fuite_convexe_af6', 'temoin_bruit_af6'],
+            self.cible)
+
+        # ── l'ancrage : la fixture EXERCE bien le cas annonce ────────────
+        pearson = abs(float(np.corrcoef(convexe, self.y_arr)[0, 1]))
+        self.assertLess(
+            pearson, 0.80,
+            f'la fixture ne discrimine plus : son Pearson vaut {pearson:.4f}, '
+            f'une correlation lineaire l attraperait aussi et ce test ne '
+            f'prouverait rien de plus qu AF1')
+
+        # ── SENS 1 : elle est attrapee ───────────────────────────────────
+        self.assertIn(
+            'fuite_convexe_af6', fuites,
+            f'une fuite monotone de Pearson {pearson:.4f} n est PAS signalee : '
+            f'le garde-fou est retombe sur une mesure LINEAIRE, et il ne voit '
+            f'plus que les fuites qui se voient deja')
+
+        # ── SENS 2 : le bruit et les facteurs sains sont epargnes ────────
+        self.assertNotIn(
+            'temoin_bruit_af6', fuites,
+            'du BRUIT PUR est signale comme une fuite')
+        for nom in sains:
+            with self.subTest(facteur=nom):
+                self.assertNotIn(
+                    nom, fuites,
+                    f'le facteur sain « {nom} » est signale comme une fuite : '
+                    f'le controle exclurait des variables tarifaires '
+                    f'legitimes')
+        print(f'    AF6 fuite convexe : Pearson {pearson:.4f} (raterait) · '
+              f'g_norm {fuites["fuite_convexe_af6"]["gini_normalise"]:.4f} '
+              f'(attrape) · {len(sains) + 1} saines epargnees')
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
