@@ -7,9 +7,11 @@ d'ecretement >>.
 
   ***Releve AST du 08/09/2026*** : les CINQ sites de production qui appellent
   `construire_cible_severite` ne passaient JAMAIS `couts_par_sinistre`, et
-  **0 plan sur 20** declarait le champ. Mesure : deux plans n'en differant QUE
-  par lui rendent `s8:20fefd1aa55cf229` et `s8:177c126301e9fc58` -- deux
-  signatures opposables pour un tarif identique au bit pres.
+  **0 plan sur 20** declarait le champ. Mesure sur `test_plan_invariants.AUTO`,
+  le plan de reference du depot : deux plans n'en differant QUE par lui rendent
+  `s9:7ce0606a6b19e717` et `s9:a777997ee5fa2be3` -- deux signatures opposables
+  pour un tarif identique au bit pres. *(Digests relus le 08/09/2026 : le bump
+  `s8` -> `s9` de `regime_fiscal` les a deplaces.)*
 
 *Un champ qui n'agit pas ne doit pas signer.* Il agit desormais.
 

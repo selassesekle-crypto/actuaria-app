@@ -13,6 +13,13 @@ unite_exposition: annee
 cible_frequence: nb_sinistres
 cible_cout: cout_total_sinistres
 # ══════════════════════════════════════════════════════════════════════════════
+# REGIME FISCAL -- la QUALIFICATION, jamais le nombre. Le taux, sa source
+# legale et sa date de relecture vivent dans `core/taxes_assurance.py` : un
+# seul endroit a corriger a la prochaine loi de finances.
+# Seule branche des vingt dont l'article 1001 NOMME le taux (5 ter, 13,4 %).
+# Le repli de 33 % la sur-taxait de 17,28 %.
+regime_fiscal: protection_juridique
+# ══════════════════════════════════════════════════════════════════════════════
 # ROLES DE DONNEES — declares le 30/08/2026 (chantier `plan/C7`).
 # ⚠️ CE NE SONT PAS DES FACTEURS. Ils n'entrent JAMAIS dans
 # `colonnes_produites()` et ne sont jamais modelises : ils servent au

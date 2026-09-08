@@ -13,6 +13,16 @@ unite_exposition: annee
 cible_frequence: nb_sinistres
 cible_cout: cout_total_sinistres
 # ══════════════════════════════════════════════════════════════════════════════
+# REGIME FISCAL -- la QUALIFICATION, jamais le nombre. Le taux, sa source
+# legale et sa date de relecture vivent dans `core/taxes_assurance.py` : un
+# seul endroit a corriger a la prochaine loi de finances.
+# `residuel_par_elimination` : l'article 1001 ne NOMME pas cette branche ;
+# elle tombe au taux residuel de 9 % parce qu'aucun autre alinea ne la
+# reclame. C'est une DEDUCTION, pas une lecture -- a faire confirmer par un
+# fiscaliste. Le repli qui s'appliquait jusqu'ici (33 %, le taux de la RC
+# auto) sur-taxait cette branche de 22,02 %.
+regime_fiscal: residuel_par_elimination
+# ══════════════════════════════════════════════════════════════════════════════
 # ROLES DE DONNEES — declares le 30/08/2026 (chantier `plan/C7`).
 # ⚠️ CE NE SONT PAS DES FACTEURS. Ils n'entrent JAMAIS dans
 # `colonnes_produites()` et ne sont jamais modelises : ils servent au

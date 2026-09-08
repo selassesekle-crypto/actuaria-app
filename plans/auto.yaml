@@ -11,6 +11,18 @@ unite_exposition: annee
 cible_frequence: nb_sinistres
 cible_cout: cout_total_sinistres
 # ══════════════════════════════════════════════════════════════════════════════
+# REGIME FISCAL -- la QUALIFICATION, jamais le nombre. Le taux, sa source
+# legale et sa date de relecture vivent dans `core/taxes_assurance.py` : un
+# seul endroit a corriger a la prochaine loi de finances.
+# `auto_vehicule_leger` : 33 %, le taux de la RC obligatoire des vehicules
+# legers (CGI art. 1001-5 quater), applique au contrat ENTIER par
+# APPROXIMATION -- les autres garanties relevent en droit de 18 %
+# (art. 1001-5 bis). L'approximation MAJORE, elle ne sous-taxe jamais ; sa
+# methode et son amplitude mesuree sont ecrites au registre.
+# ⚠️ AUCUN EURO NE BOUGE ICI : le repli valait deja 0,33. Ce qui change,
+# c'est que le chiffre cesse d'etre nu.
+regime_fiscal: auto_vehicule_leger
+# ══════════════════════════════════════════════════════════════════════════════
 # ROLES DE DONNEES — declares le 30/08/2026 (chantier `plan/C7`).
 # ⚠️ CE NE SONT PAS DES FACTEURS. Ils n'entrent JAMAIS dans
 # `colonnes_produites()` et ne sont jamais modelises : ils servent au

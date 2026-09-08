@@ -44,6 +44,15 @@ from dataclasses import dataclass, field
 from typing import Literal, Optional, Sequence, get_args
 
 from core.derivations import sources_brutes
+from core.taxes_assurance import (
+    # ⚠️ LE PLAN DÉCLARE LA QUALIFICATION, LE REGISTRE PORTE LE NOMBRE. Le
+    # vocabulaire des régimes et la validation d'une déclaration vivent
+    # là-bas, en un seul endroit : une seconde liste ici divergerait au
+    # premier régime ajouté.
+    RegimeFiscalRoute,
+    route_depuis_dict,
+    valider_declaration,
+)
 
 TypeFacteur = Literal["continu", "categoriel", "binaire"]
 Encodage = Literal["one_hot", "label", "aucun"]
@@ -266,7 +275,15 @@ class SeuilGrave:
 #: Mesure faite AVANT le bump, comme les six precedents : aucune empreinte
 #: `s7:` persistee dans `models/` ni `data/`. Golden mis a jour dans le MEME
 #: commit.
-EMPREINTE_SCHEMA = 8
+#: ⚠️ `8` -> `9` LE 08/09/2026 : `regime_fiscal` entre dans le payload. Il
+#: decide du taux qui transforme la prime HT en prime PAYEE -- et il decide
+#: meme qu'aucune prime TTC ne sorte, quand la qualification n'est pas
+#: tranchee. C'est l'argument de `chargements` (bump `s2` -> `s3`) en plus
+#: fort : deux plans qui n'en different que par lui ne facturent pas le meme
+#: montant a l'assure. Mesure faite AVANT le bump, comme les sept precedents :
+#: aucune empreinte `s8:` persistee dans `models/` ni `data/`. Golden mis a
+#: jour dans le MEME commit.
+EMPREINTE_SCHEMA = 9
 
 # Transformations dérivées : suffixe appliqué par A2
 _SUFFIXE_TRANSFO = {"log": "log_{}", "carre": "{}_carre", "racine": "{}_racine"}
@@ -602,6 +619,23 @@ class PlanTarifaire:
     # ⚠️ Ils sont DANS L'EMPREINTE : la taxe décide de la prime que paie
     # l'assuré, donc elle est opposable. Voir `Chargements`.
     chargements: Chargements | None = None
+    # ⚠️⚠️ LE RÉGIME FISCAL — LA QUALIFICATION, JAMAIS LE NOMBRE. Le plan dit
+    # « ce contrat relève du régime auto véhicule léger » ; `core.taxes_assurance`
+    # dit « ce régime, c'est 33 % sur la RC, CGI art. 1001-5° quater ». Écrire le
+    # taux ici, ce serait vingt fichiers à corriger à la prochaine loi de
+    # finances — et vingt occasions d'en oublier un.
+    #   str  → un régime pour tout le plan (`residuel_par_elimination`, …) ;
+    #   route → la qualification dépend d'un facteur DÉCLARÉ, et se résout
+    #           CONTRAT PAR CONTRAT (`flotte_automobile` : VL et VUL à 33 %,
+    #           PL à 15 %, `Mixte` vers un REFUS de prix) ;
+    #   None → rien n'est déclaré, le repli d'aujourd'hui s'applique et il est
+    #          DIT (voir `phrase_chargements_non_declares`).
+    # ⚠️ IL EST DANS L'EMPREINTE : il décide du taux qui transforme la prime HT
+    # en prime payée, et il décide même qu'aucune prime TTC ne sorte. C'est le
+    # même argument que `chargements`, en plus fort — d'où le bump `s8` → `s9`.
+    # ⚠️ EXCLUSIF DE `chargements` : les deux portent le taux de taxe, et deux
+    # sources pour un même nombre finissent par en donner deux. Refusé au plan.
+    regime_fiscal: str | RegimeFiscalRoute | None = None
     # ⚠️⚠️ LE SEUIL DE SINISTRE GRAVE, DECLARE PAR LE CLIENT. Sans lui,
     # l'ecretement retombe sur le quantile 0,995 des couts observes -- une
     # valeur que le portefeuille se donne A LUI-MEME. Le vrai seuil vient
@@ -804,6 +838,27 @@ class PlanTarifaire:
                 f"`assiette: 'total_contrat'` — mais pas une assiette que le "
                 f"fichier ne permet pas de tenir.")
 
+        # ── LE TAUX DE TAXE N'A QU'UNE SOURCE ────────────────────────────────
+        # ⚠️⚠️ `chargements` PORTE DÉJÀ UN `taxes`, ET IL A UN DÉFAUT (0,33).
+        # Un plan qui déclarerait les deux aurait donc DEUX taux de taxe : celui
+        # du registre, sourcé et daté, et celui — souvent implicite — du bloc
+        # `chargements`. Lequel s'applique deviendrait une affaire d'ordre dans
+        # le code, c'est-à-dire invisible depuis le document signé.
+        # *Le même refus que la collision de mapping, fermée le 08/09 : quand
+        # deux déclarations se contredisent, on refuse, on ne choisit pas.*
+        if self.regime_fiscal is not None and self.chargements is not None:
+            raise ValueError(
+                f"Plan '{self.lob}' : `regime_fiscal` ET `chargements` sont "
+                f"déclarés tous les deux. Ils portent le MÊME nombre — le taux "
+                f"de taxe — et `chargements.taxes` vaut "
+                f"{self.chargements.taxes} même quand vous ne l'écrivez pas. "
+                f"Déclarez le régime (le taux vient alors du registre, avec sa "
+                f"source et sa date), OU déclarez les chargements en entier — "
+                f"pas les deux.")
+        # ⚠️ LE VOCABULAIRE ET LES DEUX SENS DU ROUTAGE SONT VÉRIFIÉS LÀ-BAS :
+        # `core.taxes_assurance` est le seul à connaître les régimes admis.
+        valider_declaration(self.regime_fiscal, self.facteurs, self.lob)
+
     def _refuser_role_fixe(self, role: str, surface: str,
                            interdits: set, coupables: list) -> None:
         """Refuse une déclaration qui ferait entrer un rôle fixe comme prédicteur.
@@ -928,6 +983,16 @@ class PlanTarifaire:
             # ⚠️ Un chargement décide du prix payé : opposable, donc haché.
             "chargements": (dataclasses_asdict(self.chargements)
                             if self.chargements else None),
+            # ⚠️ La QUALIFICATION fiscale decide du taux applique, et parfois
+            # decide qu'aucun prix TTC ne sorte. Opposable -- d'ou le bump
+            # `s8` -> `s9`. Une route est hachee sous sa forme TRIEE : c'est
+            # `route_depuis_dict` qui garantit que deux chargements du meme
+            # YAML signent pareil.
+            "regime_fiscal": (
+                {"selon": self.regime_fiscal.selon,
+                 "regimes": [list(p) for p in self.regime_fiscal.regimes]}
+                if isinstance(self.regime_fiscal, RegimeFiscalRoute)
+                else self.regime_fiscal),
             "cibles": [self.cible_frequence, self.cible_cout],
             "famille_severite": self.famille_severite,
             "identifiant_contrat": self.identifiant_contrat,
@@ -1051,6 +1116,13 @@ class PlanTarifaire:
             valeurs_absentes=d.get("valeurs_absentes"),
             chargements=(Chargements(**d["chargements"])
                          if d.get("chargements") else None),
+            # ⚠️ Une chaine reste une chaine (un regime pour tout le plan) ;
+            # un bloc devient une ROUTE TRIEE. Le tri est dans
+            # `route_depuis_dict`, pas ici : un seul endroit ou l'ordre se
+            # decide, donc une empreinte reproductible.
+            regime_fiscal=(route_depuis_dict(d["regime_fiscal"])
+                           if isinstance(d.get("regime_fiscal"), dict)
+                           else d.get("regime_fiscal")),
             seuil_grave=(SeuilGrave(**d["seuil_grave"])
                          if d.get("seuil_grave") else None),
             # ⚠️ Defaut `False` : aucun des 20 plans ne bloque aujourd'hui, et

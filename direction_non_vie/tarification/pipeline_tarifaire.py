@@ -40,6 +40,8 @@ import dataclasses
 # fausse pour qui cherche où le modèle est ajusté.*
 
 from core.plan_tarifaire import CHARGEMENTS_DEFAUT, PlanTarifaire
+from core.taxes_assurance import (TauxTaxe, regime_du_plan,
+                                  synthese_regime_fiscal)
 from core.conformite_reglementaire import construire_matrice_x, source_exposition
 from core.frequence import ajuster_glm_frequence
 from core.validation_tarif import (
@@ -109,6 +111,14 @@ class TarifNonVie:
     #: `None` = la validation n'a pas été mesurée (appel hors
     #: `pipeline_complet`) — ce n'est pas « aucun défaut ».
     validation: Any | None = None
+    #: ⚠️⚠️ D'OÙ VIENT LE TAUX DE TAXE — LE SEUL BIT QUE `chargements` PERD.
+    #: `_chargements_effectifs` résout trois origines vers un seul dictionnaire :
+    #: l'appelant, le plan, le repli. Une fois résolu, plus rien ne dit laquelle
+    #: a servi — et il le faut, parce que le régime fiscal du plan doit céder
+    #: devant un appelant qui a explicitement fourni ses chargements, et devant
+    #: lui seul. *Deviner l'origine en comparant au repli confondrait « pas
+    #: fourni » avec « fourni, égal au repli ».*
+    chargements_explicites: bool = False
 
     # ── Prédiction interne, partagée par tarifer() et le portefeuille (INV-7) ──
     def _design(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -185,6 +195,40 @@ class TarifNonVie:
             "frequence_annuelle": freq, "cout_moyen": cout,
             "prime_pure": prime_pure, "exposition": expo,
         }, index=df.index)
+
+    def _taxe_du_contrat(self, contrat: dict):
+        """Le taux de taxe applicable à CE contrat — ou le refus de le tarifer.
+
+        Rend ``(taux, refus, phrase)`` :
+          · ``taux``   le décimal à appliquer à la prime commerciale HT ;
+          · ``refus``  vrai quand aucune prime TTC ne doit être publiée ;
+          · ``phrase`` le régime appliqué avec sa source et sa date, ou le
+            motif du refus — ``None`` quand le plan ne déclare aucun régime.
+
+        ⚠️⚠️ L'ORDRE, ET POURQUOI L'APPELANT PASSE EN PREMIER. Des chargements
+        fournis explicitement sont une décision de l'appelant sur CE calcul :
+        les écraser par le registre reviendrait à ignorer un paramètre qu'on
+        accepte. Le plan ne peut pas, lui, déclarer les deux — `PlanTarifaire`
+        le refuse : deux sources pour le taux de taxe finissent par en donner
+        deux, et laquelle s'applique deviendrait une affaire d'ordre dans le
+        code, invisible depuis le document signé.
+
+        ⚠️ ET LE REFUS EST LA DIRECTION SÛRE. Une modalité hors énumération est
+        déjà refusée en amont par `anomalies_du_contrat` ; si elle arrivait
+        malgré tout — contrat sans la colonne, appel direct hors `tarifer` —
+        `regime_du_plan` rend un mixte, donc un refus. *Ne pas savoir sous
+        quelle qualification on taxe n'autorise pas à taxer quand même.*
+        """
+        _repli = float(self.chargements["taxes"])
+        if self.chargements_explicites:
+            return _repli, False, None
+        regime = regime_du_plan(self.plan, contrat)
+        if regime is None:                       # le plan ne déclare rien
+            return _repli, False, None
+        phrase = synthese_regime_fiscal(self.plan, contrat)
+        if isinstance(regime, TauxTaxe):
+            return float(regime.taux), False, phrase
+        return _repli, True, phrase
 
     def anomalies_du_contrat(self, contrat: dict) -> list:
         """Ce qui, dans ce contrat, n'est pas LISIBLE au regard du plan signé.
@@ -322,13 +366,30 @@ class TarifNonVie:
             ch = self.chargements
             pc = (prime_pure * (1 + ch["frais"]) * (1 + ch["marge"])
                   / (1 - ch["commission"]))
+            # ⚠️⚠️ LE TAUX DE TAXE SE RÉSOUT ICI, CONTRAT PAR CONTRAT — et il
+            # peut REFUSER. Sur `flotte_automobile`, la qualification fiscale
+            # suit `type_flotte` : VL et VUL relèvent de la RC à 33 %, PL de la
+            # RC à 15 %, et `Mixte` — une police qui mêle véhicules légers et
+            # poids lourds — ne reçoit AUCUNE prime TTC. *Un prix moyenné sur
+            # deux risques incomparables masquerait derrière un nombre une
+            # décision que personne n'a prise.*
+            _taux, _refus, _phrase_fiscale = self._taxe_du_contrat(contrat)
             return {
                 "success": True,
                 "frequence_annuelle": round(freq, 5),
                 "cout_moyen": round(cout, 2),
                 "prime_pure": round(prime_pure, 2),
                 "prime_commerciale_ht": round(pc, 2),
-                "prime_ttc": round(pc * (1 + ch["taxes"]), 2),
+                # ⚠️ `None` SOUS UN RÉGIME NON TRANCHÉ, ET LA CLÉ RESTE. La
+                # faire disparaître romprait le contrat de sortie pour tous les
+                # lecteurs ; à `None`, un appelant qui multiplie la valeur
+                # échoue BRUYAMMENT au lieu de publier un prix faux.
+                "prime_ttc": (None if _refus
+                              else round(pc * (1 + _taux), 2)),
+                # ⚠️ Le régime appliqué, sa source légale et sa date de
+                # relecture — ou le motif du refus. `None` quand le plan ne
+                # déclare rien : `chargements_supposes` parle alors.
+                "regime_fiscal": _phrase_fiscale,
                 # ⚠️ L'HYPOTHESE VOYAGE AVEC LE PRIX — constat `pipeline/C5`.
                 # `None` quand le plan declare : rien a signaler.
                 "chargements_supposes": phrase_chargements_non_declares(
@@ -580,13 +641,23 @@ def _chargements_effectifs(explicites, plan) -> dict[str, float]:
     """L'appelant, puis LE PLAN, puis le repli — et le repli se DIT.
 
     ⚠️⚠️ CONSTATS `pipeline/C4` + `C5`, LA MEME QUESTION. `CHARGEMENTS_DEFAUT`
-    porte `taxes: 0.33` -- le taux AUTO -- et servait de defaut aux 20 LoB,
-    alors que son propre commentaire enumerait << auto 33 %, MRH 30 %,
-    RC 9 % >>. Impact mesure sur la prime TTC : MRH +2,31 %, RC +22,02 %.
+    porte `taxes: 0.33` -- le taux de la RC auto -- et servait de defaut aux
+    20 LoB. Impact mesure sur la prime TTC : +22,02 % sur une branche au taux
+    residuel, +17,28 % sur la protection juridique.
 
     ⚠️ AUCUN TAUX N'EST INVENTE ICI. Tant qu'un plan ne declare rien, le repli
     d'aujourd'hui s'applique a l'identique -- **aucun euro ne bouge** -- mais
     `tarifer()` publie desormais que la taxe a ete SUPPOSEE.
+
+    ⚠️⚠️ LE `taxes` QU'ELLE REND PEUT NE PAS ETRE CELUI QUI S'APPLIQUE, ET
+    C'EST VOULU. Depuis le 08/09/2026, un plan declare son `regime_fiscal` et
+    le taux vient alors du registre, RESOLU PAR CONTRAT -- une flotte poids
+    lourds et une flotte legere ne portent pas la meme taxe, et un plan ne
+    peut pas rendre un nombre unique pour les deux. Cette fonction reste la
+    source des trois autres chargements et du taux de REPLI ; la resolution
+    fiscale vit dans `TarifNonVie._taxe_du_contrat`, seul endroit qui voit le
+    contrat. *Chercher ici le taux qui a servi donnerait une reponse fausse
+    sur les plans routes.*
     """
     if explicites is not None:
         return dict(explicites)
@@ -601,14 +672,39 @@ def phrase_chargements_non_declares(plan) -> str | None:
 
     ⚠️ Ne s'ajoute QUE si le plan ne declare rien : *un avertissement permanent
     est un avertissement qu'on cesse de lire.*
+
+    ⚠️⚠️ ELLE A ETE RELUE LE 08/09/2026, ET DEUX DE SES AFFIRMATIONS ETAIENT
+    FAUSSES. Elle annoncait << les taux varient par LoB (auto 33 %, MRH 30 %,
+    RC 9 %) >> : le document de reference etabli le meme jour montre que
+    l'AUTO n'a pas de taux unique -- 33 % sur la RC obligatoire, 18 % sur ses
+    autres garanties -- et que la MRH non plus : 30 % ne portent que sur sa
+    composante INCENDIE, le reste relevant du taux residuel de 9 %. *Un texte
+    qui accompagne un comportement se relit quand ce comportement change.*
+
+    ⚠️ ET ELLE DISTINGUE DESORMAIS DEUX SILENCES. Un plan qui declare son
+    `regime_fiscal` a une taxe SOURCEE, mais ses frais, sa commission et sa
+    marge restent le repli : le dire << non declare >> tout court effacerait
+    la moitie sourcee, et se taire effacerait la moitie supposee.
     """
     if getattr(plan, 'chargements', None) is not None:
         return None
-    return (f"CHARGEMENTS NON DECLARES au plan '{getattr(plan, 'lob', '?')}' : "
-            f"le repli AUTO a ete suppose, dont une taxe de "
-            f"{CHARGEMENTS_DEFAUT['taxes']:.0%}. Les taux varient par LoB "
-            f"(auto 33 %, MRH 30 %, RC 9 %) : declarez `chargements` au plan, "
-            f"sans quoi la prime TTC d'une LoB non-auto est surestimee.")
+    _lob = getattr(plan, 'lob', '?')
+    if getattr(plan, 'regime_fiscal', None):
+        return (f"CHARGEMENTS PARTIELLEMENT DECLARES au plan '{_lob}' : le "
+                f"regime fiscal est declare, donc la TAXE est sourcee et datee "
+                f"(voir `regime_fiscal`). En revanche frais "
+                f"{CHARGEMENTS_DEFAUT['frais']:.0%}, commission "
+                f"{CHARGEMENTS_DEFAUT['commission']:.0%} et marge "
+                f"{CHARGEMENTS_DEFAUT['marge']:.0%} restent le REPLI : ce sont "
+                f"des parametres commerciaux, qu'aucune source legale ne fixe.")
+    return (f"CHARGEMENTS NON DECLARES au plan '{_lob}' : le repli AUTO a ete "
+            f"suppose, dont une taxe de {CHARGEMENTS_DEFAUT['taxes']:.0%}. Ce "
+            f"taux est celui de la RC automobile obligatoire des vehicules "
+            f"legers (CGI art. 1001-5 quater) ; il ne vaut pour AUCUNE autre "
+            f"branche -- une branche au taux residuel est sur-taxee de 22,02 %, "
+            f"la protection juridique de 17,28 %. Declarez `regime_fiscal` au "
+            f"plan : la taxe viendra alors du registre, avec sa source et sa "
+            f"date de relecture.")
 
 
 def phrase_domaines_non_declares(plan) -> str | None:
@@ -870,6 +966,11 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
         # puis le repli. *Le repli n'est plus le seul chemin, et quand il
         # s'applique il est DIT — `tarifer()` le publie.*
         chargements=_chargements_effectifs(chargements, plan),
+        # ⚠️ L'ORIGINE, PAS SEULEMENT LA VALEUR. Le regime fiscal du plan cede
+        # devant un appelant qui a fourni ses chargements, et devant lui seul :
+        # sans ce bit, la resolution ne pourrait plus distinguer << rien
+        # fourni >> de << fourni, egal au repli >>.
+        chargements_explicites=chargements is not None,
         rapport_qualite=rapport_qualite)
 
     # ── CE QUE LE TARIF SAIT DE SA PROPRE QUALITÉ (lot 14) ──────────────────

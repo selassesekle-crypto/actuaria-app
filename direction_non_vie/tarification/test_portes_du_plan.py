@@ -102,6 +102,19 @@ from direction_non_vie.tarification.test_pipeline_agents import (
     _portefeuille_auto,
 )
 
+#: ⚠️⚠️ LE PLAN AUTO **SANS SON REGIME FISCAL** -- et il faut dire pourquoi.
+#: `plans/auto.yaml` declare depuis le 08/09/2026 `regime_fiscal:
+#: auto_vehicule_leger`, et `PlanTarifaire` REFUSE de porter a la fois un
+#: regime et des `chargements` : les deux fixent le taux de taxe, et deux
+#: sources pour un meme nombre finissent par en donner deux.
+#:
+#: *Les trois controles de `TestPorte1Chargements` portent sur `chargements`,
+#: pas sur le regime.* Leur donner un plan qui declare les deux ne les
+#: renforcerait pas : cela testerait le refus -- ce que `TX-9` fait deja, et
+#: mieux. On leur rend donc la precondition sous laquelle ils ont ete ecrits,
+#: sans toucher a une seule de leurs assertions.
+_PLAN_SANS_REGIME = dataclasses.replace(_PLAN_AUTO, regime_fiscal=None)
+
 _CONTRAT = {
     'age': 40, 'bonus_malus': 0.9, 'anciennete_permis': 20,
     'puissance_fiscale': 6, 'age_vehicule': 5, 'valeur_venale': 12000,
@@ -143,11 +156,13 @@ class TestPorte1Chargements(unittest.TestCase):
         `IDENTIQUE`."""
         self.assertIn('chargements',
                       {f.name for f in dataclasses.fields(PlanTarifaire)})
-        base = _PLAN_AUTO.empreinte()
+        base = _PLAN_SANS_REGIME.empreinte()
         auto = dataclasses.replace(
-            _PLAN_AUTO, chargements=Chargements(taxes=0.33)).empreinte()
+            _PLAN_SANS_REGIME,
+            chargements=Chargements(taxes=0.33)).empreinte()
         rc = dataclasses.replace(
-            _PLAN_AUTO, chargements=Chargements(taxes=0.09)).empreinte()
+            _PLAN_SANS_REGIME,
+            chargements=Chargements(taxes=0.09)).empreinte()
         self.assertNotEqual(auto, rc, "la taxe ne bouge pas l'empreinte : "
                                       "elle n'est donc pas opposable")
         self.assertNotEqual(base, auto)
@@ -184,20 +199,21 @@ class TestPorte1Chargements(unittest.TestCase):
     def test_le_repli_est_DIT_et_se_TAIT_quand_le_plan_declare(self):
         """⚠️⚠️ LES DEUX SENS. Un avertissement permanent est un avertissement
         qu'on cesse de lire."""
-        muet = phrase_chargements_non_declares(_PLAN_AUTO)
+        muet = phrase_chargements_non_declares(_PLAN_SANS_REGIME)
         self.assertIn('CHARGEMENTS NON DECLARES', muet)
         self.assertIn('33%', muet.replace(' %', '%'))
         declare = phrase_chargements_non_declares(
-            dataclasses.replace(_PLAN_AUTO, chargements=Chargements(taxes=0.09)))
+            dataclasses.replace(_PLAN_SANS_REGIME,
+                                chargements=Chargements(taxes=0.09)))
         self.assertIsNone(declare, "la phrase parle alors que le plan declare")
         print("    PTE-3 repli non declare -> DIT ; plan declarant -> silence")
 
     def test_le_plan_declarant_est_REELLEMENT_applique(self):
         """⚠️ Un champ declare que le calcul n'utiliserait pas serait un champ
         qui PROMET — le defaut que cet audit poursuit."""
-        t_auto = _tarif()
+        t_auto = _tarif(_PLAN_SANS_REGIME)
         t_rc = _tarif(dataclasses.replace(
-            _PLAN_AUTO, chargements=Chargements(taxes=0.09)))
+            _PLAN_SANS_REGIME, chargements=Chargements(taxes=0.09)))
         ttc_auto = t_auto.tarifer(_CONTRAT)['prime_ttc']
         ttc_rc = t_rc.tarifer(_CONTRAT)['prime_ttc']
         self.assertAlmostEqual(ttc_auto / ttc_rc, 1.33 / 1.09, places=4)

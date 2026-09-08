@@ -286,9 +286,13 @@ def couts_par_sinistre_du_plan(df, plan):
     les cinq sites de production qui appellent
     :func:`construire_cible_severite` ne passaient JAMAIS
     `couts_par_sinistre`, et 0 plan sur 20 déclarait le champ. L'empreinte
-    attestait donc une différence que le tarif ne portait pas — mesuré :
-    deux plans n'en différant QUE par lui rendent `s8:20fefd1aa55cf229` et
-    `s8:177c126301e9fc58` pour un tarif identique au bit près.
+    attestait donc une différence que le tarif ne portait pas — mesuré sur
+    `test_plan_invariants.AUTO`, le plan de référence du dépôt : deux plans
+    n'en différant QUE par lui rendent `s9:7ce0606a6b19e717` et
+    `s9:a777997ee5fa2be3` pour un tarif identique au bit près.
+    *(Chiffres relus le 08/09/2026 : le bump `s8` -> `s9` de `regime_fiscal`
+    les a déplacés. Un digest publié se re-mesure à chaque bump de schéma,
+    sans quoi il illustre une empreinte que plus personne ne peut obtenir.)*
       *Un champ qui n'agit pas ne doit pas signer.* Il agit désormais.
 
     ⚠️ CE QUE LE BRANCHEMENT CHANGE, MESURÉ. L'assiette « total du contrat »

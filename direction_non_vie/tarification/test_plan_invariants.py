@@ -1948,6 +1948,31 @@ _PLAN_GOLDEN_DICT = {
     "interactions": [["age", "zone"]],
 }
 
+#: ⚠️⚠️ LE SECOND GOLDEN, ET IL EXISTE PARCE QUE LE PREMIER NE PEUT PAS TOUT
+#: SCELLER. Depuis le 08/09/2026, `PlanTarifaire` REFUSE de porter à la fois
+#: `chargements` et `regime_fiscal` : les deux fixent le taux de taxe, et deux
+#: sources pour un même nombre finissent par en donner deux. Le golden
+#: ci-dessus déclare `chargements` — il ne peut donc pas, en plus, porter un
+#: régime fiscal PEUPLÉ.
+#:
+#: *Or la règle de ce fichier est explicite : « ce golden ne scelle une partie
+#: du payload que si elle porte une valeur qui puisse DÉRIVER ». Laisser
+#: `regime_fiscal` à `None` aurait scellé la présence de la clé, pas sa forme.*
+#:
+#: Ce jumeau scelle donc l'autre moitié — et il le fait sous la forme la plus
+#: structurée que le champ admette : une ROUTE, qui hache un `selon` et une
+#: liste de paires triées. Une dérive de cette structure-là est celle qui
+#: passerait le plus facilement inaperçue.
+_PLAN_GOLDEN_REGIME_DICT = {
+    **{c: v for c, v in _PLAN_GOLDEN_DICT.items() if c != "chargements"},
+    "lob": "golden_sceau_regime",
+    "regime_fiscal": {
+        "selon": "zone",
+        "regimes": {"A": "residuel_par_elimination",
+                    "B": "MIXTE_NON_TRANCHE"},
+    },
+}
+
 
 class TestEmpreinteVersionneeSchema(unittest.TestCase):
     """S3 — le versionnage de schéma de l'empreinte, et son SCEAU.
@@ -2020,15 +2045,38 @@ class TestEmpreinteVersionneeSchema(unittest.TestCase):
         # c'est le SEUL champ du plan qui decide qu'AUCUN tarif ne sort. Deux
         # plans qui n'en different que par lui ne produisent pas le meme
         # resultat : l'un rend un prix, l'autre rien. Plus opposable qu'un
-        # chargement. Mesure : `s8:340554a7c7b1518e` sans le drapeau,
-        # `s8:4f46e1eeea327003` avec -- l'audit trail les distingue enfin.
+        # chargement.
         # ⚠️ Mesure faite AVANT le bump, comme les six precedents : aucune
         # empreinte `s7:` persistee dans `models/` ni `data/`.
-        self.assertEqual(EMPREINTE_SCHEMA, 8)
-        self.assertEqual(emp, "s8:340554a7c7b1518e",
+        # ⚠️⚠️ BUMP `s8` -> `s9` LE 08/09/2026, golden et constante dans le
+        # MEME commit. Motif : `regime_fiscal` entre dans le payload -- la
+        # QUALIFICATION fiscale du contrat. Elle decide du taux qui transforme
+        # la prime HT en prime PAYEE, et elle decide meme qu'aucune prime TTC
+        # ne sorte quand la qualification n'est pas tranchee. C'est l'argument
+        # de `chargements` en plus fort : deux plans qui n'en different que par
+        # lui ne facturent pas le meme montant a l'assure. Mesure sur `AUTO`,
+        # le plan de reference de ce fichier : `s9:7ce0606a6b19e717` sans
+        # regime, `s9:1fb35088ac5d2204` avec `refus_anti_selection=True` --
+        # l'audit trail les distingue.
+        # ⚠️ Mesure faite AVANT le bump, comme les sept precedents : aucune
+        # empreinte `s8:` persistee dans `models/` ni `data/`.
+        self.assertEqual(EMPREINTE_SCHEMA, 9)
+        self.assertEqual(emp, "s9:ac988f4b387c51b6",
             "empreinte du plan de reference gele changee : derive de structure "
             "sans bump, OU bump sans mise a jour du golden. Voir le commentaire.")
-        print(f"    S3b golden scellé : {emp} ✅")
+        # ⚠️⚠️ LE SECOND GOLDEN SCELLE CE QUE LE PREMIER NE PEUT PAS. Le plan
+        # ci-dessus declare `chargements`, et `PlanTarifaire` refuse desormais
+        # de porter les deux : sans ce jumeau, `regime_fiscal` n'entrerait dans
+        # le sceau que sous sa valeur `None` -- la PRESENCE de la cle, pas sa
+        # FORME. Et c'est la forme ROUTEE qui derive le plus discretement :
+        # elle hache un `selon` et une liste de paires TRIEE.
+        emp_regime = PlanTarifaire.depuis_dict(
+            dict(_PLAN_GOLDEN_REGIME_DICT)).empreinte()
+        self.assertEqual(emp_regime, "s9:9d2147516f351436",
+            "empreinte du golden a REGIME FISCAL changee : derive de la "
+            "structure routee sans bump, OU bump sans mise a jour du golden.")
+        self.assertNotEqual(emp, emp_regime)
+        print(f"    S3b golden scellé : {emp} · regime {emp_regime} ✅")
 
     def test_comparer_empreinte_les_quatre_etats(self):
         cmp = PlanTarifaire.comparer_empreinte

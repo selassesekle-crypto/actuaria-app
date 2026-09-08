@@ -13,6 +13,27 @@ unite_exposition: annee
 cible_frequence: nb_sinistres
 cible_cout: cout_total_sinistres
 # ══════════════════════════════════════════════════════════════════════════════
+# REGIME FISCAL -- la QUALIFICATION, jamais le nombre. Le taux, sa source
+# legale et sa date de relecture vivent dans `core/taxes_assurance.py` : un
+# seul endroit a corriger a la prochaine loi de finances.
+# ⚠️⚠️ ROUTE PAR CONTRAT -- arbitrage du 08/09/2026. Le facteur
+# `type_flotte` reste inchange pour le RISQUE ; la fiscalite suit le meme
+# axe sans coincider avec lui : VL et VUL relevent de la RC a 33 %, PL de
+# la RC a 15 % (CGI art. 1001-5 quater), et `Mixte` est une police qui
+# porte LES DEUX.
+#   Un client qui mele vehicules legers et poids lourds dans une seule
+#   police ne tarife pas un risque homogene. Lui publier une prime TTC
+#   moyennee masquerait ce fait derriere un nombre : `Mixte` route donc
+#   vers un REFUS declare, qui dit pourquoi. Separer le parc en deux plans
+#   est le chemin qui rend son prix publiable.
+regime_fiscal:
+  selon: type_flotte
+  regimes:
+    VL: auto_vehicule_leger
+    VUL: auto_vehicule_leger
+    PL: auto_poids_lourd
+    Mixte: MIXTE_NON_TRANCHE
+# ══════════════════════════════════════════════════════════════════════════════
 # ROLES DE DONNEES — declares le 30/08/2026 (chantier `plan/C7`).
 # ⚠️ CE NE SONT PAS DES FACTEURS. Ils n'entrent JAMAIS dans
 # `colonnes_produites()` et ne sont jamais modelises : ils servent au
