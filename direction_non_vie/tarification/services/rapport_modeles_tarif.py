@@ -30,6 +30,12 @@ from core.chargements_declares import (
     chargements_du_contrat,
     synthese_chargements,
 )
+from core.decision_actuaire import (
+    TITRE_DECISION,
+    decision_depuis_dict,
+    divergence as divergence_actuaire,
+    synthese_decision,
+)
 from core.mapping_client import lignes_mapping, synthese_mapping
 from core.taxes_assurance import synthese_regime_fiscal
 from core.validation_tarif import phrase_decoupe
@@ -993,6 +999,27 @@ def _bloc_tarif_html(publie: dict) -> str:
         + (f'    <ul>\n{phrases}\n    </ul>\n' if phrases else '')
         + f'    <p>Empreinte du plan : <code>{publie["plan_empreinte"]}</code>'
         f'</p>\n</div>\n')
+
+
+def _bloc_decision_html(publie: str, ecart: bool) -> str:
+    """Le bloc decision en HTML. ⚠️ Il ne se tait JAMAIS.
+
+    ⚠️⚠️ C'est la seule section de ce rapport qui s'affiche meme quand il n'y
+    a rien a dire, et c'est deliberé. Toutes les autres se taisent pour ne pas
+    devenir un avertissement permanent qu'on cesse de lire. Celle-ci fait
+    l'inverse : un document SILENCIEUX sur la decision de l'actuaire se lit
+    comme un accord, et l'absence de decision n'est pas un accord.
+    """
+    if not publie:
+        return ''
+    # ⚠️ Le marqueur de DESACCORD entre dans le texte, pas seulement dans un
+    # style : un document imprime en noir et blanc, ou lu par un outil, doit
+    # porter l'ecart. *Une couleur n'est pas une information.*
+    marque = ' -- DESACCORD' if ecart else ''
+    return ('<div class="raisons-plafond">\n'
+            f'  <div class="raisons-titre">{TITRE_DECISION}{marque}</div>\n'
+            f'    <p>{publie}</p>\n'
+            '</div>\n')
 
 
 def raisons_plafond(result_a6) -> tuple[str, ...]:
@@ -1962,6 +1989,10 @@ def export_html(
     # tests : la meme mesure qui a decide de la place de `result_a5` decide
     # de celle-ci.
     tarif=None, portefeuille=None,
+    # ⚠️ La decision de l'actuaire arrive du CONTEXTE DU RUN, comme
+    # `actuaire_nom` : elle n'est ni dans le plan (elle change a chaque
+    # signature) ni calculee (c'est une decision humaine).
+    decision_actuaire=None,
 ) -> str:
     """Génère le rapport HTML tarification. Retourne str HTML ou ''.
 
@@ -1982,6 +2013,9 @@ def export_html(
     # deux verites possibles pour le meme prix. C'est la lecon de
     # `narration_calculee`, deux lignes plus bas dans la meme fonction.
     _tarif_publie = tarif_publie(tarif, portefeuille)
+    _dec = decision_depuis_dict(decision_actuaire)
+    _dec_publie = synthese_decision(
+        _dec, (result_a6 or result_a3 or {}).get('statut_rag'))
     now    = datetime.now().strftime('%d/%m/%Y %H:%M')   # GÉNÉRÉ LE (impression)
     arr    = libelle_arrete(arrete)                       # ARRÊTÉ (réf. ou « non déclaré »)
     branche = (result_a6 or result_a3 or {}).get('branche', 'non_vie')
@@ -2358,7 +2392,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_tarif_html(_tarif_publie)}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
+{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_tarif_html(_tarif_publie)}{_bloc_decision_html(_dec_publie, divergence_actuaire(_dec))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
       {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
@@ -2575,6 +2609,7 @@ def export_word(
     # ⚠️ Meme place, meme raison qu'en HTML : les appels positionnels sont
     # nombreux, et le prix doit pouvoir arriver sans les deplacer.
     tarif=None, portefeuille=None,
+    decision_actuaire=None,
 ) -> bytes:
     """Génère le rapport Word tarification (.docx). Retourne bytes ou b''.
 
@@ -2877,6 +2912,22 @@ def export_word(
                     _run(p, '   · ' + _phrase, sz=8, col=NR).add_break()
             _run(p, f"   Empreinte du plan : {_tar_w['plan_empreinte']}",
                  sz=8, col=NR).add_break()
+
+        # ⚠️⚠️ LA DECISION DE L'ACTUAIRE, DANS LES DEUX FORMATS -- et elle ne
+        # se tait JAMAIS. C'est la seule section qui s'affiche meme sans rien a
+        # dire : toutes les autres se taisent pour ne pas devenir un
+        # avertissement permanent, celle-ci fait l'inverse parce qu'un document
+        # SILENCIEUX sur la decision se lit comme un accord.
+        # ⚠️ Le rouge quand il y a DESACCORD : c'est le cas qu'un controleur
+        # cherche, et le seul que ce module existe pour rendre visible.
+        _dec_w = decision_depuis_dict(decision_actuaire)
+        _dec_w_txt = synthese_decision(
+            _dec_w, (result_a6 or result_a3 or {}).get('statut_rag'))
+        if _dec_w_txt:
+            p = doc.add_paragraph()
+            _run(p, TITRE_DECISION, bold=True, sz=10,
+                 col=(AR if divergence_actuaire(_dec_w) else NR)).add_break()
+            _run(p, '   ' + _dec_w_txt, sz=9, col=NR).add_break()
 
         # ⚠️⚠️ LES RÉSERVES D'A6, DANS LES DEUX FORMATS AUSSI — et ce rapport
         # était le dernier muet. Mesuré le 03/09/2026 : elles n'atteignaient
@@ -3250,6 +3301,7 @@ def generer_rapport_tarification(
     # Optionnels : un rapport produit sans eux est exactement celui
     # d'hier. Fournis, le document gagne le PRIX -- aux deux niveaux.
     tarif=None, portefeuille=None,
+    decision_actuaire=None,
 ) -> Dict[str, bytes]:
     """
     Génère tous les formats demandés en un seul appel.
@@ -3296,7 +3348,8 @@ def generer_rapport_tarification(
                                audit_id, narration_calculee,
                                actuaire_nom, actuaire_numero_ia,
                                result_a5=result_a5,
-                               tarif=tarif, portefeuille=portefeuille)
+                               tarif=tarif, portefeuille=portefeuille,
+                               decision_actuaire=decision_actuaire)
         out['html_bytes'] = html_str.encode('utf-8') if html_str else b''
 
     if 'word' in formats:
@@ -3305,7 +3358,8 @@ def generer_rapport_tarification(
                                         actuaire_nom, actuaire_numero_ia,
                                         result_a5=result_a5,
                                         tarif=tarif,
-                                        portefeuille=portefeuille)
+                                        portefeuille=portefeuille,
+                                        decision_actuaire=decision_actuaire)
 
     if 'pdf' in formats:
         if html_str:

@@ -224,13 +224,17 @@ class TestAvertissementDLSurLaSurfaceSignee(unittest.TestCase):
         # n'est pas contestable. Ce test avait prevu ce jour et dit quoi
         # faire : *un defaut connu et non traite se declare ; il ne se laisse
         # pas oublier entre deux lots.* Le compte passe de 3 a 5.
+        # ⚠️ UNE DE PLUS LE 08/09/2026, chantier A : `synthese_decision`
+        # accompagne le prix dans le document signe. C'est la SEULE section
+        # qui ne se tait jamais -- un document silencieux sur la decision de
+        # l'actuaire se lit comme un accord. Le compte passe de 5 a 6.
         self.assertEqual(
-            dehors, {'synthese_chargements', 'synthese_elasticite',
-                     'synthese_modele_dl', 'synthese_qualite_donnees',
-                     'synthese_regime_fiscal'},
+            dehors, {'synthese_chargements', 'synthese_decision',
+                     'synthese_elasticite', 'synthese_modele_dl',
+                     'synthese_qualite_donnees', 'synthese_regime_fiscal'},
             f"L'assiette a change : synthese(s) hors du prompt = {sorted(dehors)}. "
             f"Si une autre a ete cablee, mettre a jour le releve et ce test.")
-        print("    A-6 5 syntheses cablees ; les autres restent dans le "
+        print("    A-6 6 syntheses cablees ; les autres restent dans le "
               "prompt SEUL, et c'est declare")
 
 

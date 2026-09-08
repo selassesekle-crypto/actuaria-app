@@ -407,6 +407,11 @@ class AgentA6Comparaison:
         # ⚠️ `| None` et non `Optional[...]` : la forme moderne. *La dette
         # du voisin n'autorise pas a en ajouter une.*
         tarif:       Any | None = None,
+        # ⚠️⚠️ LA DECISION DE L'ACTUAIRE FACE AU VERDICT. A6 la FAIT
+        # PASSER, il ne la prend pas -- c'est la doctrine qu'il applique
+        # deja a la relecture actuarielle. `None` -> le document ecrit
+        # qu'AUCUNE decision n'est enregistree, jamais qu'il y a accord.
+        decision_actuaire:   Any | None = None,
         col_cible:   str = 'prime_pure',
         col_expo:    str = 'exposition',
         profil:      str = 'equilibre',
@@ -1047,6 +1052,7 @@ class AgentA6Comparaison:
                         # ce rapport est exactement celui d'hier.
                         tarif=_tarif_publiable,
                         portefeuille=(result_a2 or {}).get('dataframe'),
+                        decision_actuaire=decision_actuaire,
                     )
                     _html_a6 = _rapports.get('html_bytes', b'')
                     _word_a6 = _rapports.get('word_bytes', b'')
