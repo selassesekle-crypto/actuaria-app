@@ -1,0 +1,265 @@
+"""
+=============================================================================
+  ActuarIA — PLUSIEURS PRIX, UN SEUL CRITÈRE QUI ÉLIMINE
+=============================================================================
+
+⚠️⚠️ CE QUE CE MODULE EXISTE POUR EMPÊCHER. Comparer des prix, c'est comparer
+des **calibrations** avant de comparer des risques. Mesuré le 08/09/2026 sur
+les candidats du dépôt : le rapport prédit/observé va de **0,5508 à 1,2438**,
+un facteur **2,26**. Publier ces prix côte à côte sans rien d'autre
+présenterait un écart de calage comme un choix de tarif.
+
+LE COEFFICIENT D'ÉQUILIBRE A DEUX MÉTIERS, ET IL NE FAUT PAS LES CONFONDRE
+  · celui de PRODUCTION est calculé sur le portefeuille complet, pour que la
+    prime totale reproduise la charge totale — c'est `INV-8`, un invariant du
+    dépôt. **Il ne bouge pas d'un centime.**
+  · celui de MESURE, `k_train`, est gelé sur le train déclaré et appliqué au
+    holdout. Il ne touche **jamais** un prix publié.
+
+  *Les geler tous les deux aurait fait qu'un tarif livré ne s'équilibre plus
+  sur les données qui l'ont ajusté : un euro aurait bougé pour un besoin de
+  mesure, pas pour une décision de tarif.*
+
+E2 — LE SEUL CRITÈRE QUI ÉLIMINE
+  Σ prime prédite (× `k_train`) / Σ charge observée, **sur le holdout**. Un
+  modèle dont le calage ne transfère pas échoue ici, et il est ÉCARTÉ avec son
+  motif publié. Mesure du 08/09/2026, six candidats réajustés sur une découpe
+  déclarée : cinq entre 0,9377 et 1,0086, et `xgboost_tweedie` à **0,8257** —
+  celui-là même dont le `k_train` vaut **1,4280** quand les autres sont à
+  1,000. *Les deux nombres disent la même chose par deux angles.*
+
+⚠️⚠️ LA BANDE NE S'INVENTE PAS. Sans bande déclarée, E2 est **mesuré et
+publié**, mais il n'élimine personne — et le document le dit. C'est le patron
+de `refus_anti_selection` : une règle qui bloque se déclare, elle ne se devine
+pas. *Et un seuil qui bascule avec la taille de l'échantillon mesure du bruit
+— la gate l'a déjà démontré une fois sur ce dépôt.*
+
+⚠️ CE QUI EST COMPARÉ : la FRÉQUENCE de chaque candidat, multipliée par un
+modèle de coût PARTAGÉ. Mesuré : il n'existe qu'un seul modèle de sévérité
+dans toute la chaîne. Comparer autre chose supposerait des modèles de coût qui
+n'existent pas — et le document doit dire ce qu'il compare.
+=============================================================================
+"""
+
+from __future__ import annotations
+
+import dataclasses
+
+import numpy as np
+
+__all__ = [
+    'CAUSE_CRITERE', 'CAUSE_SANS_PRIX', 'NATURES',
+    'AdaptateurTauxFrequence', 'Candidat', 'NatureIncomparable',
+    'ResultatCandidat', 'niveau_holdout', 'refuser_natures_melangees',
+    'synthese_comparaison',
+]
+
+#: ⚠️⚠️ TROIS NATURES, ET ELLES NE SE COMPARENT PAS ENTRE ELLES. Un modèle de
+#: fréquence rend un taux annuel par unité d'exposition ; un modèle de prime
+#: pure rend un montant ; un modèle de coût rend une sévérité. Les additionner
+#: dans un même tableau referait l'erreur des deux bases de Gini
+#: incompatibles, déjà trouvée et fermée ailleurs dans ce chantier.
+#:
+#: ⚠️ MESURÉ LE 08/09/2026 : les sept candidats classés par A6 sont TOUS de
+#: nature `frequence` — y compris `xgboost_tweedie`, dont l'objectif est
+#: `reg:tweedie` mais qui est **ajusté sur `nb_sinistres`**. *Le nom trompe,
+#: la construction non.* Le seul vrai modèle de prime pure du dépôt est le
+#: `tweedie` d'A3, et il n'entre pas dans le classement.
+#:
+#: Ce garde ne bloque donc rien aujourd'hui — et c'est exactement sa valeur :
+#: il tient AVANT que la faute arrive. Le jour où quelqu'un change une cible
+#: (`a4:697` bascule de `poisson` à `tweedie` selon la cible), le catalogue
+#: mélangerait deux natures sans un mot.
+NATURES = ('frequence', 'prime_pure', 'cout_moyen')
+
+
+class NatureIncomparable(Exception):
+    """Deux candidats de natures différentes dans la même comparaison."""
+
+
+@dataclasses.dataclass(frozen=True)
+class Candidat:
+    """Un modèle candidat, avec la nature DÉCLARÉE de ce qu'il prédit."""
+    nom: str
+    nature: str
+    source: str = ''          # 'A3', 'A4', 'A5' — d'où vient la famille
+
+    def __post_init__(self):
+        if self.nature not in NATURES:
+            raise ValueError(
+                f"candidat '{self.nom}' : nature '{self.nature}' inconnue — "
+                f"attendu l'une de {', '.join(NATURES)}. La nature n'est pas "
+                f"une étiquette : elle dit ce que `predict` rend, et deux "
+                f"natures ne se comparent pas.")
+        if not str(self.nom or '').strip():
+            raise ValueError("candidat : `nom` est obligatoire.")
+
+
+#: ⚠️⚠️ DEUX CAUSES DE MISE À L'ÉCART, ET ELLES NE SONT PAS DE MÊME NATURE.
+#: `critere_E2` est un CRITÈRE : le candidat sait produire un prix, et ce prix
+#: échoue à la bande déclarée. `sans_prix` est une IMPOSSIBILITÉ : le candidat
+#: ne produit pas de prix du tout — une fréquence négative ou non finie ne
+#: fait pas un prix cher, elle ne fait pas un prix.
+#:
+#: *E2 reste le SEUL critère éliminatoire. Refuser de publier un nombre qui
+#: n'en est pas un n'est pas un second critère : c'est le refus de publier.*
+#:
+#: ⚠️ ET CE N'EST PAS THÉORIQUE. Mesuré le 08/09/2026 : `gbm`, `lightgbm` et
+#: `catboost` rendent des fréquences NÉGATIVES sur ce portefeuille (77, 129 et
+#: 15 contrats sur 2 500). Leur objectif est une régression non bornée sur une
+#: cible à beaucoup de zéros. A4 le sait — il écrête à zéro en **cinq
+#: endroits** (`a4:1225, 1249, 1279, 1454, 1455`) pour calculer ses métriques.
+#: *Son Gini décrit donc un modèle écrêté, pendant que le modèle brut ne sait
+#: pas tarifer.*
+CAUSE_CRITERE = 'critere_E2'
+CAUSE_SANS_PRIX = 'sans_prix'
+
+
+@dataclasses.dataclass(frozen=True)
+class ResultatCandidat:
+    """Ce qu'un candidat rend, et ce que la mesure en dit."""
+    candidat: Candidat
+    k_train: float
+    niveau_holdout: float
+    ecarte: bool
+    motif: str = ''
+    somme_prime_pure: float | None = None
+    cause: str = ''
+
+
+def refuser_natures_melangees(candidats) -> str:
+    """Refuse une comparaison qui mélangerait deux natures. Rend la nature.
+
+    ⚠️⚠️ LES DEUX SENS, comme pour le routage fiscal : une comparaison à
+    natures mélangées est refusée, ET une comparaison homogène passe. Un garde
+    qui refuserait tout satisferait le premier sens sans rien protéger.
+    """
+    natures = {c.nature for c in candidats}
+    if not natures:
+        raise NatureIncomparable(
+            "comparaison de prix : aucun candidat. Il n'y a rien à comparer, "
+            "et le document doit le dire plutôt que d'afficher un tableau "
+            "vide.")
+    if len(natures) > 1:
+        detail = ', '.join(f"{c.nom}={c.nature}" for c in candidats)
+        raise NatureIncomparable(
+            f"comparaison de prix : natures MÉLANGÉES ({detail}). Un modèle "
+            f"de fréquence rend un taux, un modèle de prime pure rend un "
+            f"montant : les mettre dans le même tableau ferait lire deux "
+            f"grandeurs comme une seule. C'est l'erreur des deux bases de "
+            f"Gini incompatibles, déjà trouvée et fermée dans ce dépôt.")
+    return next(iter(natures))
+
+
+class AdaptateurTauxFrequence:
+    """Fait parler à un candidat le contrat que `TarifNonVie` attend.
+
+    ⚠️⚠️ POURQUOI IL EXISTE, MESURÉ. `TarifNonVie._taux_frequence` appelle
+    `predict(Xc, offset=...)` — une signature que **seul statsmodels** porte.
+    Essayé le 08/09/2026 avec un candidat A4 : `TypeError:
+    _ModeleFrequenceExposition.predict() got an unexpected keyword argument
+    'offset'`. C'est le seul blocage technique du branchement, et il est
+    étroit.
+
+    ⚠️ L'OFFSET EST IGNORÉ, ET C'EST CORRECT : le candidat rend DÉJÀ un taux
+    annuel par unité d'exposition — `λ(X) = E[N | X, expo=1]` — exactement la
+    grandeur que `_taux_frequence` obtient d'un GLM en annulant son offset.
+    *Ce n'est pas une approximation, c'est la même quantité par deux chemins.*
+
+    ⚠️ ET IL REFUSE UNE AUTRE NATURE. Envelopper un modèle de prime pure ici
+    ferait lire un montant comme un taux, puis le remultiplier par
+    l'exposition et par le coût moyen : un prix faux d'un facteur inconnu,
+    sans un mot.
+    """
+
+    def __init__(self, modele, features, candidat: Candidat):
+        if candidat.nature != 'frequence':
+            raise NatureIncomparable(
+                f"candidat '{candidat.nom}' de nature '{candidat.nature}' : "
+                f"cet adaptateur ne sait rendre qu'un TAUX de fréquence. "
+                f"L'envelopper ferait lire un {candidat.nature} comme un "
+                f"taux, puis le remultiplier par l'exposition et par le coût "
+                f"moyen.")
+        self.modele = modele
+        self.features = tuple(features)
+        self.candidat = candidat
+
+    def predict(self, Xc, offset=None, **_):
+        X = (Xc[list(self.features)]
+             if hasattr(Xc, 'columns') else Xc)
+        return np.asarray(self.modele.predict(X), dtype=float)
+
+
+def niveau_holdout(pred_train, y_train, expo_train,
+                   pred_holdout, y_holdout, expo_holdout) -> tuple:
+    """E2 — le calage du train tient-il sur le holdout ?
+
+    Rend ``(k_train, niveau)`` :
+      · ``k_train`` Σ sinistres observés / Σ prédits, **sur le train** ;
+      · ``niveau``  Σ (prédit × `k_train`) / Σ observés, **sur le holdout**.
+
+    ⚠️⚠️ `k_train` EST GELÉ, JAMAIS RECALCULÉ SUR LE HOLDOUT. Le recalculer
+    ferait sortir `niveau = 1` pour **n'importe quel** candidat, par
+    construction : c'est le piège que trois analyses indépendantes ont
+    identifié le même jour. *Un critère qui vaut toujours 1 ne mesure rien.*
+
+    ⚠️ Ce `k_train` n'est PAS le coefficient d'équilibre de production. Celui-
+    là reste calculé sur le portefeuille complet (`INV-8`) et ne bouge pas.
+    Confondre les deux ferait qu'un tarif livré ne s'équilibre plus sur les
+    données qui l'ont ajusté.
+    """
+    def _somme(pred, expo):
+        return float((np.asarray(pred, dtype=float)
+                      * np.asarray(expo, dtype=float)).sum())
+
+    somme_tr = _somme(pred_train, expo_train)
+    obs_tr = float(np.asarray(y_train, dtype=float).sum())
+    if somme_tr <= 0 or obs_tr <= 0:
+        return float('nan'), float('nan')
+    k = obs_tr / somme_tr
+    obs_te = float(np.asarray(y_holdout, dtype=float).sum())
+    if obs_te <= 0:
+        return k, float('nan')
+    return k, _somme(pred_holdout, expo_holdout) * k / obs_te
+
+
+def synthese_comparaison(resultats, bande=None, nature=None) -> str:
+    """La phrase publiable — source UNIQUE de cette rédaction.
+
+    ⚠️⚠️ ELLE DIT CE QU'ELLE COMPARE, et c'est la moitié du travail. Ce sont
+    des fréquences multipliées par un modèle de coût PARTAGÉ, mesurées sur un
+    holdout déclaré, par des candidats RÉAJUSTÉS sur ce train — pas les
+    modèles d'A4, qui sont ajustés sur une découpe qui leur est propre.
+    """
+    survivants = [r for r in resultats if not r.ecarte]
+    ecartes = [r for r in resultats if r.ecarte]
+    # ⚠️⚠️ LES DEUX CAUSES SE COMPTENT SEPAREMENT DANS LE DOCUMENT. Un
+    # candidat ecarte par E2 sait tarifer et tarife mal ; un candidat sans
+    # prix ne tarife pas. Les additionner ferait lire six echecs de meme
+    # nature la ou il y en a deux especes.
+    par_critere = [r for r in ecartes if r.cause == CAUSE_CRITERE]
+    sans_prix = [r for r in ecartes if r.cause == CAUSE_SANS_PRIX]
+    tete = (
+        f"COMPARAISON DE {len(resultats)} CANDIDAT(S) de nature "
+        f"{nature or '?'} : {len(survivants)} retenu(s), "
+        f"{len(par_critere)} ecarte(s) par le critere de niveau, "
+        f"{len(sans_prix)} sans prix publiable. Ce qui est compare : la "
+        f"FREQUENCE de "
+        f"chaque candidat, multipliee par un modele de cout PARTAGE -- il "
+        f"n'existe qu'un seul modele de severite dans la chaine. Les "
+        f"candidats sont REAJUSTES sur la decoupe declaree au plan, et non "
+        f"repris d'A4, qui ajuste sur une decoupe qui lui est propre.")
+    if bande is None:
+        tete += (
+            " /!\\ AUCUNE BANDE DE NIVEAU DECLAREE : le critere E2 est MESURE "
+            "et publie, mais il n'ecarte personne. Une regle qui bloque se "
+            "declare au plan, elle ne se devine pas.")
+    else:
+        tete += (f" Bande de niveau declaree : [{bande[0]:.4g} ; "
+                 f"{bande[1]:.4g}] sur le holdout, coefficient gele sur le "
+                 f"train.")
+    for r in ecartes:
+        niveau = ('non mesurable' if r.niveau_holdout != r.niveau_holdout
+                  else f"{r.niveau_holdout:.4f}")
+        tete += (f" ECARTE -- {r.candidat.nom} (niveau {niveau}) : {r.motif}.")
+    return tete

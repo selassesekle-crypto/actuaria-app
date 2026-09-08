@@ -1005,6 +1005,27 @@ class AgentA6Comparaison:
                         "[%s] Tarif non ajuste, le rapport ne portera pas de "
                         "section prix : %s", audit_id, _e_tarif)
                     _tarif_publiable = None
+            # ⚠️⚠️ LA COMPARAISON DE PRIX, CALCULEE ICI QUAND ELLE EST
+            # POSSIBLE. Elle rend immediatement un REFUS motive si le plan ne
+            # declare pas sa decoupe de validation -- sans rien ajuster, donc
+            # sans cout. *Publier des prix sans le filtre de niveau
+            # reviendrait a publier des prix non filtres.*
+            # ⚠️ Les candidats y sont REAJUSTES sur la decoupe du plan : A4
+            # ajuste sur la sienne (`random_state=42`, non declaree), et
+            # asseoir une elimination publiee la-dessus rouvrirait `C-36`.
+            _comparaison = None
+            if _tarif_publiable is not None and plan is not None:
+                try:
+                    from direction_non_vie.tarification.comparaison_prix import (
+                        comparer_les_prix as _comparer,
+                    )
+                    _comparaison = _comparer(
+                        _tarif_publiable, result_a2['dataframe'], plan)
+                except Exception as _e_cmp:                # noqa: BLE001
+                    logger.warning(
+                        "[%s] Comparaison de prix non produite : %s",
+                        audit_id, _e_cmp)
+                    _comparaison = None
             _excel_a6 = b''
             _word_a6  = b''
             _html_a6  = b''
@@ -1053,6 +1074,7 @@ class AgentA6Comparaison:
                         tarif=_tarif_publiable,
                         portefeuille=(result_a2 or {}).get('dataframe'),
                         decision_actuaire=decision_actuaire,
+                        comparaison_prix=_comparaison,
                     )
                     _html_a6 = _rapports.get('html_bytes', b'')
                     _word_a6 = _rapports.get('word_bytes', b'')

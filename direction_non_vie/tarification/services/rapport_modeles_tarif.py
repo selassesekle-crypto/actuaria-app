@@ -1001,6 +1001,54 @@ def _bloc_tarif_html(publie: dict) -> str:
         f'</p>\n</div>\n')
 
 
+TITRE_COMPARAISON = ('Prix des candidats retenus, et coefficient de calage '
+                     'applique a chacun')
+
+
+def _bloc_comparaison_html(comparaison) -> str:
+    """La liste BRUTE des prix des survivants, et rien de plus.
+
+    ⚠️⚠️ PAS DE CLASSEMENT, PAS DE NOTE, PAS DE RECOMMANDATION -- arbitrage du
+    08/09/2026. Une note globale sur des criteres commerciaux recreerait la
+    compensation qu'un critere eliminatoire existe pour interdire : un bon
+    score rachetant une disqualification. L'actuaire lit les prix et tranche.
+
+    ⚠️⚠️ ET `k_train` EST LA, PARCE QUE C'EST LE SEUL NOMBRE QUE LE MECANISME
+    FABRIQUE PUIS EFFACE. Le prix affiche est le prix APRES correction : un
+    candidat corrige par 1,43 et un autre par 1,00 produisent, apres calage,
+    des prix qui se ressemblent. Ne pas le montrer, ce n'est pas laisser
+    l'actuaire juger seul -- c'est publier un prix corrige sans dire de
+    combien. *Ce n'est pas de l'aide a la decision, c'est de la
+    non-dissimulation d'une operation deja faite.*
+    """
+    if comparaison is None:
+        return ''
+    if getattr(comparaison, 'motif_absence', ''):
+        return ('<div class="raisons-plafond">\n'
+                f'  <div class="raisons-titre">{TITRE_COMPARAISON}</div>\n'
+                f'    <p>{comparaison.motif_absence}</p>\n'
+                '</div>\n')
+    lignes = ''.join(
+        f'<tr><td>{r.candidat.nom}</td>'
+        f'<td>{r.somme_prime_pure:,.2f}</td>'.replace(',', ' ')
+        + f'<td>{r.k_train:.4f}</td><td>{r.niveau_holdout:.4f}</td></tr>\n'
+        for r in comparaison.survivants)
+    ecartes = ''.join(
+        f'      <li>{r.candidat.nom} : {r.motif}</li>\n'
+        for r in comparaison.ecartes)
+    return (
+        '<div class="raisons-plafond">\n'
+        f'  <div class="raisons-titre">{TITRE_COMPARAISON}</div>\n'
+        f'    <p>{comparaison.synthese}</p>\n'
+        '    <table>\n      <tr><th>candidat</th>'
+        '<th>prime pure du portefeuille</th>'
+        '<th>coefficient de calage (train)</th>'
+        '<th>niveau sur holdout</th></tr>\n'
+        f'{lignes}    </table>\n'
+        + (f'    <ul>\n{ecartes}    </ul>\n' if ecartes else '')
+        + '</div>\n')
+
+
 def _bloc_decision_html(publie: str, ecart: bool) -> str:
     """Le bloc decision en HTML. ⚠️ Il ne se tait JAMAIS.
 
@@ -1993,6 +2041,9 @@ def export_html(
     # `actuaire_nom` : elle n'est ni dans le plan (elle change a chaque
     # signature) ni calculee (c'est une decision humaine).
     decision_actuaire=None,
+    # ⚠️ La comparaison arrive DEJA FAITE : ce service rend un document,
+    # il n'ajuste pas de modeles.
+    comparaison_prix=None,
 ) -> str:
     """Génère le rapport HTML tarification. Retourne str HTML ou ''.
 
@@ -2392,7 +2443,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_tarif_html(_tarif_publie)}{_bloc_decision_html(_dec_publie, divergence_actuaire(_dec))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
+{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_tarif_html(_tarif_publie)}{_bloc_comparaison_html(comparaison_prix)}{_bloc_decision_html(_dec_publie, divergence_actuaire(_dec))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
       {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
@@ -2610,6 +2661,7 @@ def export_word(
     # nombreux, et le prix doit pouvoir arriver sans les deplacer.
     tarif=None, portefeuille=None,
     decision_actuaire=None,
+    comparaison_prix=None,
 ) -> bytes:
     """Génère le rapport Word tarification (.docx). Retourne bytes ou b''.
 
@@ -2920,6 +2972,30 @@ def export_word(
         # SILENCIEUX sur la decision se lit comme un accord.
         # ⚠️ Le rouge quand il y a DESACCORD : c'est le cas qu'un controleur
         # cherche, et le seul que ce module existe pour rendre visible.
+        # ⚠️⚠️ LA COMPARAISON, DANS LES DEUX FORMATS. Quatre fois ce depot a
+        # paye l'asymetrie -- le mapping, l'elasticite, la qualite des
+        # donnees, les reserves d'A6 : chacun avait atteint UN format.
+        # ⚠️ `k_train` figure au meme titre que le prix : c'est le seul nombre
+        # que le mecanisme fabrique puis efface du prix affiche.
+        if comparaison_prix is not None:
+            p = doc.add_paragraph()
+            _run(p, TITRE_COMPARAISON, bold=True, sz=10, col=NR).add_break()
+            if getattr(comparaison_prix, 'motif_absence', ''):
+                _run(p, '   ' + comparaison_prix.motif_absence, sz=9,
+                     col=NR).add_break()
+            else:
+                _run(p, '   ' + comparaison_prix.synthese, sz=9,
+                     col=NR).add_break()
+                for _r in comparaison_prix.survivants:
+                    _run(p, f"   {_r.candidat.nom} : prime pure "
+                            f"{_r.somme_prime_pure:,.2f} EUR".replace(',', ' ')
+                            + f" · calage {_r.k_train:.4f} · niveau holdout "
+                              f"{_r.niveau_holdout:.4f}",
+                         sz=8, col=NR).add_break()
+                for _r in comparaison_prix.ecartes:
+                    _run(p, f"   ECARTE {_r.candidat.nom} : {_r.motif}",
+                         sz=8, col=AR).add_break()
+
         _dec_w = decision_depuis_dict(decision_actuaire)
         _dec_w_txt = synthese_decision(
             _dec_w, (result_a6 or result_a3 or {}).get('statut_rag'))
@@ -3302,6 +3378,7 @@ def generer_rapport_tarification(
     # d'hier. Fournis, le document gagne le PRIX -- aux deux niveaux.
     tarif=None, portefeuille=None,
     decision_actuaire=None,
+    comparaison_prix=None,
 ) -> Dict[str, bytes]:
     """
     Génère tous les formats demandés en un seul appel.
@@ -3349,7 +3426,8 @@ def generer_rapport_tarification(
                                actuaire_nom, actuaire_numero_ia,
                                result_a5=result_a5,
                                tarif=tarif, portefeuille=portefeuille,
-                               decision_actuaire=decision_actuaire)
+                               decision_actuaire=decision_actuaire,
+                               comparaison_prix=comparaison_prix)
         out['html_bytes'] = html_str.encode('utf-8') if html_str else b''
 
     if 'word' in formats:
@@ -3359,7 +3437,8 @@ def generer_rapport_tarification(
                                         result_a5=result_a5,
                                         tarif=tarif,
                                         portefeuille=portefeuille,
-                                        decision_actuaire=decision_actuaire)
+                                        decision_actuaire=decision_actuaire,
+                                        comparaison_prix=comparaison_prix)
 
     if 'pdf' in formats:
         if html_str:
