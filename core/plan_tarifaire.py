@@ -777,6 +777,33 @@ class PlanTarifaire:
                     f"garder en prédicteur ferait expliquer le coût par le "
                     f"coût. Elle porte un RÔLE, jamais un facteur.")
 
+        # ── UNE ASSIETTE QU'ON NE PEUT PAS TENIR NE SE DÉCLARE PAS ───────────
+        # ⚠️⚠️ LE GARDE CROISÉ QUI MANQUAIT. `SeuilGrave` documente que
+        # déclarer `assiette='par_sinistre'` EXIGE `cout_par_sinistre` —
+        # « sans les montants individuels, l'assiette ne peut pas être tenue ».
+        # Rien ne le vérifiait, et `par_sinistre` est la valeur PAR DÉFAUT :
+        # un plan qui déclare un `seuil_grave` sans nommer son assiette y
+        # tombait donc, et l'écrêtement portait en réalité sur le TOTAL du
+        # contrat pendant que le document signé annonçait le contraire.
+        #   Mesuré le 08/09/2026 : 0 plan sur 20 déclare un `seuil_grave`, donc
+        #   aucun n'est aujourd'hui en défaut — mais la première déclaration
+        #   serait fausse, et sur une branche à sinistres multiples (flottes,
+        #   RC pro, décennale) l'assiette « total » rate 87 % des vrais graves
+        #   à 8 sinistres/contrat (mesure versionnée, `core/severite.py`).
+        # *Un seuil qui ne porte pas sur ce qu'il annonce n'est pas un seuil.*
+        _sg = self.seuil_grave
+        if _sg is not None and getattr(_sg, 'assiette', None) == 'par_sinistre' \
+                and not self.cout_par_sinistre:
+            raise ValueError(
+                f"Plan '{self.lob}' : `seuil_grave.assiette = 'par_sinistre'` "
+                f"exige que le plan déclare `cout_par_sinistre` — le nom de la "
+                f"colonne portant les montants de sinistres INDIVIDUELS. Sans "
+                f"eux, l'écrêtement porterait sur le TOTAL du contrat : il "
+                f"n'écrêterait pas les graves, il écrêterait les nombreux. "
+                f"Déclarez la colonne, ou déclarez "
+                f"`assiette: 'total_contrat'` — mais pas une assiette que le "
+                f"fichier ne permet pas de tenir.")
+
     def _refuser_role_fixe(self, role: str, surface: str,
                            interdits: set, coupables: list) -> None:
         """Refuse une déclaration qui ferait entrer un rôle fixe comme prédicteur.

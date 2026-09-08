@@ -40,7 +40,7 @@ from statsmodels.genmod import families as _families
 # `.n_retenus`, `.seuil` — sans jamais écrire son nom. *L'exporter est ce qui
 # permet de l'annoter ; ne pas dire pourquoi la ferait passer pour un oubli.*
 __all__ = ["CibleSeverite", "ModeleCout", "ajuster_glm_cout",
-           "construire_cible_severite",
+           "construire_cible_severite", "couts_par_sinistre_du_plan",
            "synthese_assiette_ecretement"]
 
 
@@ -276,6 +276,55 @@ def seuil_declare(plan) -> float | None:
     """
     declare = getattr(plan, 'seuil_grave', None)
     return None if declare is None else float(declare.montant)
+
+
+def couts_par_sinistre_du_plan(df, plan):
+    """Les montants de sinistres INDIVIDUELS, tels que le plan les déclare.
+
+    ⚠️⚠️ POURQUOI ELLE EXISTE — le champ `plan.cout_par_sinistre` était HACHÉ
+    DANS L'EMPREINTE OPPOSABLE ET BRANCHÉ À RIEN. Relevé AST du 08/09/2026 :
+    les cinq sites de production qui appellent
+    :func:`construire_cible_severite` ne passaient JAMAIS
+    `couts_par_sinistre`, et 0 plan sur 20 déclarait le champ. L'empreinte
+    attestait donc une différence que le tarif ne portait pas — mesuré :
+    deux plans n'en différant QUE par lui rendent `s8:20fefd1aa55cf229` et
+    `s8:177c126301e9fc58` pour un tarif identique au bit près.
+      *Un champ qui n'agit pas ne doit pas signer.* Il agit désormais.
+
+    ⚠️ CE QUE LE BRANCHEMENT CHANGE, MESURÉ. L'assiette « total du contrat »
+    ne fait pas dériver le seuil avec la fréquence : elle le fait dériver AVEC
+    ELLE. Mesure du 08/09/2026 sur 4 000 contrats synthétiques —
+
+        sin./contrat   seuil « total »   seuil « par sinistre »
+                 1,1            40 807                   31 128
+                 4,0            70 233                   35 615
+                 8,0           105 015                   33 875
+
+    Le seuil « par sinistre » reste stable ; l'autre suit le nombre de
+    sinistres du contrat. *Il n'écrête pas les graves, il écrête les
+    nombreux.* Et l'effet ne se lit PAS sur la sévérité écrêtée (−1,5 à
+    −3,7 %) : il se lit sur la charge grave à réintégrer,
+    `prime_grave_unitaire`, qui passe de +25 % à +269 %.
+
+    ⚠️ ELLE NE DEVINE RIEN, ET SON ABSENCE N'EST PAS UNE ERREUR. Sans plan,
+    ou sans déclaration, elle rend ``None`` et
+    :func:`construire_cible_severite` retombe sur l'assiette « total du
+    contrat » — le comportement d'aujourd'hui, inchangé pour les 20 plans
+    livrés. Mais une colonne DÉCLARÉE et ABSENTE du fichier lève : c'est une
+    déclaration que le fichier ne tient pas, et la taire écrêterait sous une
+    règle que l'actuaire croit appliquée.
+    """
+    nom = getattr(plan, 'cout_par_sinistre', None) if plan is not None else None
+    if not nom:
+        return None
+    if df is None or nom not in getattr(df, 'columns', ()):
+        raise ValueError(
+            f"Le plan déclare `cout_par_sinistre = '{nom}'` et cette colonne "
+            f"est ABSENTE du fichier. L'assiette « par sinistre » ne peut pas "
+            f"être tenue : l'écrêtement porterait sur le TOTAL du contrat "
+            f"pendant que le plan signé annonce le contraire.")
+    return [np.asarray(m if m is not None else (), dtype=float).ravel()
+            for m in df[nom]]
 
 
 def phrase_seuil_suppose(cible: CibleSeverite, plan=None) -> str | None:

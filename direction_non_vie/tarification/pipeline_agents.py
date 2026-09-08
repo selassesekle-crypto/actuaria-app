@@ -78,7 +78,12 @@ import pandas as pd
 
 from core.plan_tarifaire import PlanTarifaire
 from core.qualite_donnees import preambule_qualite
-from core.severite import CibleSeverite, construire_cible_severite, seuil_declare
+from core.severite import (
+    CibleSeverite,
+    construire_cible_severite,
+    couts_par_sinistre_du_plan,
+    seuil_declare,
+)
 from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
@@ -271,9 +276,13 @@ def _vue_sinistres(
     écrêté). A4/A5 peuvent alors l'utiliser sans savoir comment elle est faite.
     """
     df = result_a2["dataframe"]
+    # ⚠️ MEME SOURCE QUE LE SEUIL : l'ASSIETTE du seuil vient du plan aussi.
+    # `cout_par_sinistre` etait hache dans l'empreinte opposable et branche a
+    # rien -- 5 sites de production, 0 passage (releve AST du 08/09/2026).
     cible = construire_cible_severite(
         df[plan.cible_cout], df[plan.cible_frequence], df[plan.exposition],
-        seuil=seuil_declare(plan))
+        seuil=seuil_declare(plan),
+        couts_par_sinistre=couts_par_sinistre_du_plan(df, plan))
     df_sin = df[cible.masque].copy().reset_index(drop=True)
     df_sin[CIBLE_COUT] = cible.severite
     return {**result_a2, "dataframe": df_sin}, cible

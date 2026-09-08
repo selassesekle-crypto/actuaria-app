@@ -59,7 +59,8 @@ from core.qualite_donnees import preambule_qualite
 # famille Gamma EN DUR faute de pouvoir les atteindre. *Deux chemins qui
 # ajustent la meme grandeur avec deux codes finissent par diverger.*
 from core.severite import (ModeleCout, ajuster_glm_cout,
-                           construire_cible_severite, seuil_declare)
+                           construire_cible_severite,
+                           couts_par_sinistre_du_plan, seuil_declare)
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 
 # ⚠️ Le journal de la zone, au nom de la famille `actuaria.*` déjà en place
@@ -821,9 +822,13 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
     # ⚠️ Meme source que A3 : un seuil declare au plan l'emporte sur le
     # quantile. Ici l'assiette est le portefeuille COMPLET (modele de
     # production), la ou A3 apprend sur le train (modele de validation).
+    # ⚠️ L'ASSIETTE DU SEUIL VIENT DU PLAN, comme le seuil lui-meme. Sans les
+    # montants individuels, l'ecretement porte sur le TOTAL du contrat : il
+    # n'ecrete pas les graves, il ecrete les nombreux.
+    _cps = couts_par_sinistre_du_plan(X, plan)
     cible_sev = construire_cible_severite(
         cout_total, y_freq, expo, quantile_ecretement=quantile_ecretement,
-        seuil=seuil_declare(plan))
+        seuil=seuil_declare(plan), couts_par_sinistre=_cps)
     prime_grave_unitaire = cible_sev.prime_grave_unitaire
 
     # ── GLM COÛT MOYEN — FAMILLE DÉCLARÉE DANS LE PLAN ──────────────────────
@@ -914,9 +919,15 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
             # sous-jeu : sinon on validerait un modèle qui n'écrête pas la
             # même chose que celui qu'on livre.
             def _cible(indices):
+                # ⚠️ L'assiette suit le sous-jeu : les montants individuels
+                # sont alignes POSITIONNELLEMENT sur les contrats, donc ils
+                # se decoupent avec eux. Les passer entiers tarifierait le
+                # mauvais contrat -- le socle le refuse d'ailleurs.
                 return construire_cible_severite(
                     X[col_cout].iloc[indices], y_freq.iloc[indices],
-                    expo.iloc[indices], seuil=cible_sev.seuil_ecretement)
+                    expo.iloc[indices], seuil=cible_sev.seuil_ecretement,
+                    couts_par_sinistre=(None if _cps is None
+                                        else [_cps[i] for i in indices]))
 
             _disc_s = None
             _cible_tr, _cible_te = _cible(_tr), _cible(_te)

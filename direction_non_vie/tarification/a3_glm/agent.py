@@ -143,8 +143,9 @@ from core.frequence import ajuster_glm_frequence
 # ⚠️ LE Gini DU SOCLE — une seule formule pour tout le dépôt (lot 3).
 from core.validation_tarif import gini_lorenz as gini_socle
 from core.severite import (ajuster_glm_cout, construire_cible_severite,
-                           phrase_aucun_grave, phrase_seuil_suppose,
-                           seuil_declare, synthese_assiette_ecretement)
+                           couts_par_sinistre_du_plan, phrase_aucun_grave,
+                           phrase_seuil_suppose, seuil_declare,
+                           synthese_assiette_ecretement)
 
 # ⚠️⚠️ CONSTAT `a2/C15` — LE FILTRE GLOBAL D'AVERTISSEMENTS EST RETIRÉ.
 # `warnings.filterwarnings('ignore')` posé ICI, au niveau module, s'appliquait
@@ -1355,12 +1356,22 @@ class AgentA3GLM:
         # sur le TRAIN et applique au TEST (jamais recalcule, piege V9) -- et
         # cette supposition est DITE dans le livrable.
         _seuil_plan = seuil_declare(getattr(self, '_plan_run', None))
+        # ⚠️⚠️ L'ASSIETTE DU SEUIL VIENT DU PLAN, ELLE AUSSI. Le champ
+        # `cout_par_sinistre` etait hache dans l'empreinte opposable et
+        # branche a rien (releve AST du 08/09/2026 : 5 sites de production,
+        # 0 passage). Sans les montants individuels, le seuil porte sur le
+        # TOTAL du contrat : il n'ecrete pas les graves, il ecrete les
+        # nombreux. *Une empreinte qui atteste un champ inerte n'atteste
+        # rien.* Absent du plan -> `None`, et le comportement ne bouge pas.
+        _plan_run = getattr(self, '_plan_run', None)
         cible_tr = construire_cible_severite(
             df_train[col_cout], df_train[col_freq], df_train[col_expo],
-            seuil=_seuil_plan)
+            seuil=_seuil_plan,
+            couts_par_sinistre=couts_par_sinistre_du_plan(df_train, _plan_run))
         cible_te = construire_cible_severite(
             df_test[col_cout], df_test[col_freq], df_test[col_expo],
-            seuil=_seuil_plan or cible_tr.seuil_ecretement)
+            seuil=_seuil_plan or cible_tr.seuil_ecretement,
+            couts_par_sinistre=couts_par_sinistre_du_plan(df_test, _plan_run))
 
         df_sin_train = df_train[cible_tr.masque].copy().reset_index(drop=True)
         df_sin_test  = df_test[cible_te.masque].copy().reset_index(drop=True)
