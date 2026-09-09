@@ -476,10 +476,46 @@ def _methodes_bloquees(methodes: Iterable[str], primes_dispo: bool) -> Tuple[str
                         & METHODES_REQUERANT_PRIMES))
 
 
-def _normaliser_primes(primes, n_annees: int, rapport: Dict) -> Optional[np.ndarray]:
-    """Vecteur de primes → ndarray de longueur n_annees (tronqué / complété)."""
+def _normaliser_primes(primes, n_annees: int, rapport: Dict,
+                       annee_min: Optional[int] = None) -> Optional[np.ndarray]:
+    """Primes → ndarray de longueur n_annees, RATTACHE AUX ANNEES.
+
+    Deux formes acceptees. Une TABLE (`annee_survenance`, `prime`) est
+    reindexee sur le repere du triangle : chaque prime rejoint SON annee.
+    Un vecteur nu conserve le comportement historique — il n'a pas d'axe,
+    on ne peut que le tronquer ou le completer, et c'est dit.
+    """
     if primes is None:
         return None
+
+    # ⚠️⚠️ UNE TABLE PORTE SON AXE : on l'utilise. Le chemin precedent
+    # recevait deja un vecteur POSITIONNEL et se contentait de le tronquer
+    # ou de le completer de zeros, sans jamais rapprocher les annees. Une
+    # annee manquante decalait toute l'exposition a partir d'elle, et
+    # l'alerte emise annoncait « vecteur plus court » — ce qui fait croire
+    # que seule la DERNIERE annee est touchee. Elle etait pire qu'aucune.
+    if isinstance(primes, pd.DataFrame) and 'annee_survenance' in primes.columns:
+        if annee_min is None:
+            rapport['alertes'].append(
+                "⚠️ Table de primes fournie sans axe d'années connu — "
+                "l'exposition ne peut pas être rattachée aux années du "
+                "triangle. Primes IGNORÉES : mieux vaut aucune exposition "
+                "qu'une exposition décalée.")
+            return None
+        idx = list(range(int(annee_min), int(annee_min) + int(n_annees)))
+        serie = primes.set_index('annee_survenance')['prime'].reindex(idx)
+        manquantes = [a for a, v in zip(idx, serie) if pd.isna(v)]
+        if manquantes:
+            rapport['alertes'].append(
+                f"⚠️ Aucune prime pour {manquantes} — ces années sont "
+                f"traitées SANS exposition (0). Les autres restent "
+                f"alignées sur LEUR année.")
+        hors = sorted({int(a) for a in primes['annee_survenance']} - set(idx))
+        if hors:
+            rapport['alertes'].append(
+                f"⚠️ Primes hors du périmètre du triangle ({hors}) — "
+                f"ignorées.")
+        return serie.fillna(0.0).to_numpy(dtype=float)
     p = np.asarray(pd.Series(primes).values, dtype=float).ravel()
     if len(p) >= n_annees:
         return p[:n_annees]
@@ -659,7 +695,7 @@ def construire_triangles(
             f"construit.")
 
     n_annees, n_dev = reference.shape
-    primes_norm = _normaliser_primes(primes, n_annees, rapport)
+    primes_norm = _normaliser_primes(primes, n_annees, rapport, annee_min)
     dispo   = primes_norm is not None
     requis  = primes_requises(methodes_demandees)
     bloquees = _methodes_bloquees(methodes_demandees, dispo)

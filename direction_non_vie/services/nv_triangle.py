@@ -344,11 +344,20 @@ def preparer_triangles(
 
     sep = _etape_separation(df, seuil_llt, base_classement, rapport)
 
+    # ⚠️⚠️ L'AXE D'ANNEES DECLARE PAR L'APPELANT ATTEIGNAIT LE
+    # DIAGNOSTIC, ET PAS LA CONSTRUCTION. `annee_debut` ne servait
+    # qu'a etiqueter les annees dans les messages du module 6 ; la
+    # construction, elle, ne le recevait pas, si bien que `annee_min`
+    # restait None des que la source etait une MATRICE — le cas
+    # courant. Une table de primes portant ses annees ne pouvait donc
+    # pas etre rattachee, alors meme que l'appelant avait declare le
+    # repere. Le module 4 le traite en priorite basse : une annee
+    # deduite d'un tableau long reste prioritaire sur celle-ci.
     retenus, total, grands = _etape_construction(
         df, df_charges, sep, rapport,
         primes=primes_vec, methodes_demandees=methodes_demandees,
         mode_paiements=mode_paiements, mode_charges=mode_charges,
-        base_reference=triangle_reference)
+        base_reference=triangle_reference, annee_min=annee_debut)
 
     if retenus.methodes_bloquees:
         rapport['alertes'].append(
@@ -424,7 +433,24 @@ def _preparer_primes(primes, chemin_mapping_primes: Optional[str], rapport: Dict
     if isinstance(df, pd.DataFrame) and 'prime' in df.columns:
         colonnes = ['annee_survenance', 'prime']
         agrege = df[colonnes].groupby('annee_survenance', as_index=False)['prime'].sum()
-        return agrege['prime'].to_numpy(dtype=float), rap
+        # ⚠️⚠️ ON REND LA TABLE, PAS UN VECTEUR POSITIONNEL. Aplatir ici
+        # perdait l'axe des annees : `_normaliser_primes` tronquait ou
+        # completait de zeros SANS JAMAIS rapprocher les annees du repere
+        # du triangle. Une annee manquante decalait toute l'exposition a
+        # partir d'elle ; une table commencant plus tot etait tronquee.
+        # Mesure sur RAA : Best Estimate −24,2 % (trou), et +8,4 % EN
+        # SILENCE (table commencant deux ans plus tot). ⚠️ LE SENS DE
+        # L'ERREUR N'EST PAS FIXE : il depend des primes, donc aucun
+        # controle de vraisemblance sur le BE ne pouvait l'attraper.
+        #
+        # ⚠️ L'ASYMETRIE AVEC LE VOISIN EST LE REVELATEUR :
+        # `deriver_charges_depuis_provisions`, dix fonctions plus haut,
+        # ecrit que « les provisions sont alignees sur l'ANNEE REELLE,
+        # jamais positionnellement : un decalage produirait des charges
+        # silencieusement fausses ». La meme exigence n'etait pas tenue
+        # pour les primes. L'alignement appartient au module qui connait
+        # `annee_min` — pas a celui-ci.
+        return agrege, rap
     rapport['alertes'].append(
         "[mapping] table de primes sans colonne 'prime' exploitable — primes ignorées.")
     return None, rap
