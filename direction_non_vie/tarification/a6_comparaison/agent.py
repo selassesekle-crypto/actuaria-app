@@ -1000,14 +1000,32 @@ class AgentA6Comparaison:
             # ⚠️ ET L'ECHEC SE PUBLIE. Un tarif qu'on n'a pas su ajuster
             # laisse le document SANS section prix, avec la cause au journal :
             # il ne fabrique jamais un prix de repli.
+            # ⚠️⚠️ LA SOURCE DU TARIF EST LE PORTEFEUILLE CLIENT, PAS LA SORTIE
+            # D'A2. Cette ligne remettait `result_a2['dataframe']` a
+            # `pipeline_complet`, qui fait lui-meme A2 : A2 tournait DEUX FOIS,
+            # et il n'est pas idempotent. Mesure du 08/09/2026 : 2 997 contrats
+            # sur 3 000 changeaient de prix, jusqu'a 51,90 %, pour un TOTAL
+            # identique a +0,0000 % -- le coefficient d'equilibre masquait tout.
+            # *L'ecran (`actuaria_app`) et le document signe ne donnaient pas le
+            # meme prix pour le meme contrat ; ils partagent desormais la meme
+            # construction.*
+            #   ⚠️ SANS `result_a1`, PAS DE TARIF, ET LA CAUSE VA AU JOURNAL --
+            #   la doctrine deja posee juste au-dessus. Se rabattre sur A2
+            #   refabriquerait exactement le defaut que ce lot ferme.
             _tarif_publiable = tarif
+            _source_tarif = (result_a1 or {}).get('dataframe')
             if _tarif_publiable is None and plan is not None:
                 try:
+                    if _source_tarif is None:
+                        raise ValueError(
+                            "aucun `result_a1` : le portefeuille client n'est "
+                            "pas disponible, et la sortie d'A2 n'en tient pas "
+                            "lieu (A2 tournerait deux fois)")
                     from direction_non_vie.tarification.pipeline_tarifaire import (
                         pipeline_complet as _pipeline_complet,
                     )
                     _tarif_publiable = _pipeline_complet(
-                        result_a2['dataframe'], plan,
+                        _source_tarif, plan,
                         models_path=self.models_path,
                         audit_path=self.audit_path)
                 except Exception as _e_tarif:              # noqa: BLE001

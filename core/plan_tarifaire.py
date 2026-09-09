@@ -992,6 +992,30 @@ class PlanTarifaire:
         """Colonnes que le fichier client DOIT contenir."""
         return tuple(f.nom for f in self.facteurs)
 
+    def colonnes_derivees(self) -> tuple[str, ...]:
+        """Colonnes qu'A2 CRÉE et qu'un fichier client ne contient jamais.
+
+        ⚠️⚠️ CE SONT DES TÉMOINS : leur présence dans un portefeuille prouve
+        qu'A2 y a **déjà** tourné. `pipeline_complet` s'en sert pour refuser une
+        entrée déjà transformée — parce qu'**A2 n'est pas idempotent** :
+        réappliqué à sa propre sortie il change `bonus_malus`, `valeur_venale`,
+        `risque_historique`, `log_valeur_venale` et `inter_age_bonus_malus`
+        (mesuré le 08/09/2026). *Deux chemins de production ajustaient ainsi
+        deux tarifs différents : 2 997 contrats sur 3 000 divergeaient de plus
+        d'un centime, jusqu'à 51,90 %, pour un TOTAL identique au dix-millième
+        — le coefficient d'équilibre rééquilibrait tout.*
+
+        ⚠️ PILOTÉ PAR LE PLAN, AUCUNE LISTE EN DUR. C'est le même contrat que
+        celui qu'A3 attend et que la conformité autorise : `colonnes_produites`
+        moins `colonnes_sources`. Mesuré sur les 20 plans : **tous** portent au
+        moins un témoin (minimum 3, `mrh`), et la sortie d'A1 n'en porte aucun.
+
+        ⚠️ UNE COLONNE CLIENTE PORTANT L'UN DE CES NOMS DÉCLENCHERAIT LE REFUS,
+        et c'est voulu : A2 l'écraserait en silence. Mieux vaut la nommer.
+        """
+        return tuple(sorted(set(self.colonnes_produites())
+                            - set(self.colonnes_sources())))
+
     def colonnes_obligatoires(self) -> tuple[str, ...]:
         """Les trois colonnes sans lesquelles aucun GLM ne se calibre.
 

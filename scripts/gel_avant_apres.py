@@ -132,8 +132,12 @@ def produire_la_chaine() -> dict:
             generer_graphiques=True)
     except ImportError as erreur:
         print(f'  ⚠ A5 hors assiette : torch absent ({erreur})', flush=True)
+    # ⚠️⚠️ `result_a1` EST CE QUI DONNE SON PRIX AU DOCUMENT. A6 batit le tarif
+    # a partir du portefeuille CLIENT ; sans cet argument il n'en batit aucun et
+    # le dit au journal. Il remettait auparavant la sortie d'A2, ce qui faisait
+    # tourner A2 deux fois -- 2 997 contrats sur 3 000 changeaient de prix.
     r6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp').run(
-        result_a2=r2, result_a3=r3, result_a4=r4,
+        result_a1=r1, result_a2=r2, result_a3=r3, result_a4=r4,
         result_a5=r5 if r5.get('success') else None,
         col_cible='nb_sinistres', plan=plan, environnement='production',
         profil_valide_par='Gel', generer_graphiques=True,

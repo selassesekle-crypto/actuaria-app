@@ -857,6 +857,31 @@ def _refuser_frequence_sans_sinistre(y_freq, lob, col_freq):
         f"l'absence d'experience.")
 
 
+class PortefeuilleDejaTransformeBloquant(Exception):
+    """L'entrée porte déjà les colonnes qu'A2 crée : A2 tournerait deux fois.
+
+    ⚠️⚠️ MESURÉ, ET IL DÉPLAÇAIT UN PRIX PAR CONTRAT. `pipeline_complet` fait
+    lui-même la qualité PUIS A2 : son entrée est un portefeuille CLIENT. Deux
+    appelants de production ne lui donnaient pas la même chose —
+    `actuaria_app:3574` la sortie d'**A1**, `a6_comparaison/agent.py` la sortie
+    d'**A2**. Or **A2 n'est pas idempotent** : réappliqué à sa propre sortie il
+    change `bonus_malus`, `valeur_venale`, `risque_historique`,
+    `log_valeur_venale` et `inter_age_bonus_malus`.
+
+      Mesure du 08/09/2026, 3 000 lignes : **2 997 contrats sur 3 000**
+      divergeaient de plus d'un centime, médiane **+0,43 EUR**, maximum
+      **263,70 EUR**, jusqu'à **51,90 %** en relatif. ⚠️⚠️ **Et le TOTAL était
+      identique à +0,0000 %** — le coefficient d'équilibre ramène les deux à la
+      charge observée. *Aucun contrôle agrégé ne pouvait voir cette
+      divergence : elle vit entièrement dans la répartition.*
+
+    ⚠️ ON REFUSE, ON NE RATTRAPE PAS. Rendre A2 idempotent bénirait la double
+    application ; deviner l'état de l'entrée reviendrait à choisir un tarif à la
+    place de l'appelant. *Le contrat de cette fonction est un portefeuille
+    client, et il se dit.*
+    """
+
+
 class DonneeIllisibleBloquante(Exception):
     """Une valeur illisible sur un rôle que le GLM consomme — constat
     `pipeline/C8`.
@@ -929,6 +954,23 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
     # divergence impossible plutôt que seulement évitable.*
     # ⚠️ Ce lot ne branche PAS le chemin agent — c'est l'étape 1-B, et elle
     # déplace un prix. **Extraire et brancher sont deux décisions.**
+    # ⚠️⚠️ AVANT TOUT LE RESTE : L'ENTREE EST-ELLE UN PORTEFEUILLE CLIENT ?
+    # Cette fonction fait elle-meme la qualite PUIS A2. Lui remettre une sortie
+    # d'A2 fait tourner A2 deux fois -- et A2 n'est PAS idempotent. Le refus se
+    # pose ici, avant la couche qualite, parce qu'un dataframe deja transforme
+    # traverserait tout le reste sans rien declencher.
+    _temoins = [c for c in plan.colonnes_derivees() if c in portefeuille.columns]
+    if _temoins:
+        raise PortefeuilleDejaTransformeBloquant(
+            f"Tarification REFUSEE pour le plan '{plan.lob}' : le portefeuille "
+            f"remis porte deja {len(_temoins)} colonne(s) que A2 CREE -- "
+            f"{_temoins[:6]}. Cette fonction attend un portefeuille CLIENT "
+            f"(sortie d'A1) : elle fait elle-meme la qualite puis A2. Lui "
+            f"remettre une sortie d'A2 ferait tourner A2 deux fois, et A2 "
+            f"n'est pas idempotent -- mesure du 08/09/2026 : 2 997 contrats "
+            f"sur 3 000 changeaient de prix, jusqu'a 51,90 %, pour un total "
+            f"identique. Si l'une de ces colonnes vient vraiment du fichier "
+            f"client, renommez-la : A2 l'ecraserait en silence.")
     rapport_qualite = preambule_qualite(
         portefeuille, plan, qualite_validee_par=qualite_validee_par,
         # ⚠️⚠️ CONSTAT `pipeline/C9` — DEUX HORODATAGES, DEUX FUSEAUX.
