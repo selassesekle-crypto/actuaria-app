@@ -45,6 +45,7 @@ from .n2_hypotheses_clm  import verifier_hypotheses_clm
 from .n2_hypotheses_bfcc import verifier_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import verifier_hypotheses_bootstrap
 from .n2_hypotheses_munich import MESSAGE_H4, verifier_hypotheses_munich
+from .geometrie_triangle import analyser_geometrie
 from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif, s2_non_calculable
 # Alias VOLONTAIRE — ne pas « nettoyer » : `generer_graphiques` est aussi un
 # PARAMÈTRE public de run() (compatibilité ancienne API, cf. plus bas). Sans
@@ -576,6 +577,31 @@ class AgentA7Provisionnement:
                 # AVEC exposition, rien ne change du tout.
                 methodes_demandees = ('bornhuetter_ferguson', 'cape_cod'),
             )
+
+            # ⚠️⚠️ LA GEOMETRIE SE LIT AVANT TOUT CALCUL. Toute la couche N3
+            # repose sur une convention jamais ecrite : l'indice de ligne et
+            # celui de colonne avancent au MEME PAS, si bien que `i + j < n`
+            # est la zone observee. Quand c'est faux -- survenance annuelle,
+            # developpement trimestriel -- le module calcule quand meme et se
+            # tait. Mesure sur un 8x32 dont la reserve vraie est 3 316 654 EUR :
+            # il lit 36 cellules sur 144 et publie 1 364 690 EUR, soit -58,9 %.
+            # Multiplier par DIX les 108 autres ne deplace pas un centime.
+            # ⚠️ L'ANALYSE EST ASYMETRIQUE : un triangle dont le developpement
+            # ne depasse pas la survenance n'est PAS touche. C'est la forme
+            # normale, tronquee comprise, et aucun dossier d'aujourd'hui ne
+            # doit bouger pour un defaut qui ne le concerne pas.
+            _geo = analyser_geometrie(C)
+            if _geo['infos']:
+                n1_rapport.setdefault('infos', []).extend(_geo['infos'])
+            if _geo['transforme']:
+                C = _geo['triangle']
+                if C_engage is not None:
+                    # ⚠️ LE TRIANGLE DES CHARGES SUIT LE MEME SORT, sinon les
+                    # deux cessent d'etre comparables et Munich CL rapproche
+                    # deux geometries differentes.
+                    C_engage = analyser_geometrie(C_engage)['triangle']
+            else:
+                C = _geo['triangle']
 
             n, m = C.shape
             n1   = {
