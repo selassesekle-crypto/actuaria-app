@@ -59,7 +59,8 @@ from .n5_excel          import export_excel
 from .n5_rapport        import export_word, export_html
 # La narration est produite ICI, une seule fois, et transmise aux deux
 # formats — voir le commentaire à son point de génération.
-from .n5_rapport        import (ARRETE_ABSENT, _generer_narration, _lob,
+from .n5_rapport        import (ARRETE_ABSENT, MARQUEUR_ECHEC_RAPPORT,
+                                _generer_narration, _lob,
                                 session_rasterisation,
                                 avec_mention_provenance,
                                 controle_narration)
@@ -310,6 +311,21 @@ def _produire_livrable(nom: str, fabrique, **kwargs):
         # Sans ce contrôle, elle passerait pour un succès.
         logger.error(f"N5 {nom} : {len(octets)} octets — repli, pas un livrable")
         return octets, f"vide: {len(octets)} octets"
+
+    # ⚠️⚠️ LA TAILLE NE DISTINGUE PAS UNE PAGE D'ERREUR D'UN RAPPORT.
+    # `n5_rapport.MARQUEUR_ECHEC_RAPPORT` existe PRECISEMENT pour cela —
+    # « ce que ni la taille ni la validite du HTML ne permettent », dit son
+    # commentaire — et le releve de ses lecteurs de production en donnait
+    # ZERO : seuls les tests le lisaient. Le repli hors message pese 73
+    # caracteres et le seuil est de 512 : un message d'exception de 439
+    # caracteres suffisait a le faire passer pour un livrable, avec
+    # `erreur = None` et un appelant qui recevait un succes.
+    if nom == 'html' and octets:
+        _tete = (octets[:96] if isinstance(octets, str)
+                 else octets[:96].decode('utf-8', 'ignore'))
+        if MARQUEUR_ECHEC_RAPPORT in _tete:
+            logger.error("N5 html : page d'erreur, pas un rapport")
+            return octets, "echec: repli de rendu (page d erreur)"
     logger.info(f"N5 {nom} : {len(octets):,} octets")
     return octets, None
 

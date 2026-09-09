@@ -442,6 +442,16 @@ def nulle_parametrique(
         C, np.asarray(facteurs, dtype=float))
     if n_obs - n_params <= 0 or phi <= 0 or not cellules:
         return None
+    # ⚠️ UN phi QUASI NUL DECRIT UN TRIANGLE SANS DISPERSION : le tirage de
+    # Poisson y demande une esperance infinie, et `rng.poisson` leve
+    # « lam value too large ». Mesure : sur un triangle exactement conforme
+    # au motif chain-ladder, phi vaut 7,3e-29 ; l'exception etait rattrapee
+    # plus haut et les QUATRE hypotheses du Bootstrap sortaient NON
+    # TESTABLE, `percentiles_publiables` restant a True. La degradation
+    # etait honnete — aucune valeur inventee — mais elle passait par une
+    # PANNE. Il n'y a alors AUCUNE heterogeneite a tester : on se retire.
+    if phi < 1e-12 or (float(np.nanmax(m_fit)) / phi) > 1e15:
+        return None
 
     rng = np.random.default_rng(graine)
     n, m = C.shape

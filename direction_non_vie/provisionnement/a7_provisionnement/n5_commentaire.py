@@ -1037,11 +1037,25 @@ def _s6_incertitude(n3: Dict, n4: Dict) -> str:
     sig_mack     = n4.get('sigma_mack', 0)
     p90_mack_nat = mack.get('reserve_p90', 0)
     sig_mack_nat = mack.get('sigma_total', 0)
-    p90_boot     = boot.get('p90', 0)
-    p995_boot    = boot.get('p99_5', 0)
+    # ⚠️⚠️ LES PERCENTILES BOOTSTRAP PASSENT PAR LA PORTE DE N4, PAS PAR
+    # `n3` EN DIRECT. Quand BOOT-H3 est NON VALIDEE, la gouvernance pose
+    # `percentiles_publiables = False` et `reserve_p90_boot` ressort a
+    # None : le garde-fou mord. Ce bloc-ci lisait `n3['bootstrap']['p90']`
+    # sans passer par lui, si bien que le MEME document ecrivait deux fois
+    # « les percentiles Bootstrap (P75/P90/P99.5) ne sont pas publies »
+    # PUIS les publiait quelques milliers de caracteres plus loin. Mesure :
+    # P90 = 3 129 736 EUR et P99,5 imprimes porte fermee. Le P75, lui,
+    # etait bien absent — ce qui rendait la contradiction plus difficile a
+    # voir, pas moins reelle.
+    _p90_gouv    = n4.get('reserve_p90_boot')
+    _p995_gouv   = n4.get('reserve_p99_5_boot')
+    p90_boot     = _p90_gouv if _p90_gouv is not None else 0
+    p995_boot    = _p995_gouv if _p995_gouv is not None else 0
     p995_mack    = mack.get('reserve_p99_5', 0)
     sig_boot     = boot.get('std_bootstrap') or 0
-    boot_ok      = bool(boot.get('disponible', True)) and (boot.get('be_bootstrap', 0) or 0) > 0
+    boot_ok      = (bool(boot.get('disponible', True))
+                    and (boot.get('be_bootstrap', 0) or 0) > 0
+                    and _p90_gouv is not None)
 
     # Assemblé HORS de la liste : une concaténation implicite dans une
     # collection cache une virgule oubliée (ISC004).
@@ -1078,7 +1092,18 @@ def _s6_incertitude(n3: Dict, n4: Dict) -> str:
             f"σ bootstrap {_e(sig_boot)}, centré sur la réserve Bootstrap."
         )
     else:
-        lignes.append("  • Bootstrap ODP : non disponible sur ce triangle.")
+        # ⚠️ DEUX ABSENCES DIFFERENTES, DEUX PHRASES DIFFERENTES. « Non
+        # disponible » dit que le Bootstrap n'a pas tourne ; « retires par
+        # la gouvernance » dit qu'il a tourne et qu'une hypothese a ferme
+        # la porte. Les confondre ferait passer un retrait DECIDE pour une
+        # panne.
+        if (boot.get("be_bootstrap", 0) or 0) > 0 and _p90_gouv is None:
+            lignes.append(
+                "  • Bootstrap ODP : percentiles retires par la "
+                "gouvernance des hypotheses (BOOT-H3) — voir section 6.")
+        else:
+            lignes.append(
+                "  • Bootstrap ODP : non disponible sur ce triangle.")
 
     if p995_mack > 0 and p995_boot > 0:
         ecart_p995 = abs(p995_mack - p995_boot) / max(p995_mack, 1e-9) * 100

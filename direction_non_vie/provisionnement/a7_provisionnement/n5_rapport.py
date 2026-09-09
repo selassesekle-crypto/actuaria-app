@@ -3676,7 +3676,20 @@ def export_html(
             + b['relecture_actuaire']
             + b['pied_info'] + '<br>'
             '    <span style="font-size:6.5pt;color:#8A9AB0;">'
-            'Rapport établi conformément à l\'Art. 77 et 105 de la Directive Solvabilité II '
+            # ⚠️⚠️ CE PIED CITAIT « Art. 77 et 105 de la Directive », et le
+            # contrôle `references_hors_liste` — construit APRES qu'une
+            # citation fausse eut ete payee a vingt endroits — refuse 105 :
+            # il n'est pas dans `ARTICLES_AUTORISES`. Il ne le voyait pas,
+            # parce que son assiette etait la NARRATION du modele, pas le
+            # document. L'article 105 de la Directive decrit bien les
+            # modules du SCR, donc la citation n'etait pas necessairement
+            # fausse — mais ce rapport n'applique PAS l'art. 105 : il
+            # applique l'art. 77 (meilleure estimation, Directive) et
+            # l'art. 115 (SCR provisions, Reglement delegue). On nomme les
+            # deux avec LEUR texte, ce qui leve en outre l'ambiguite que le
+            # depot a deja payee entre Directive et Reglement.
+            'Rapport établi conformément à l\'Art. 77 de la Directive '
+            '2009/138/CE et à l\'Art. 115 du Règlement délégué (UE) 2015/35, '
             'et au Guide Institut des Actuaires 2023</span><br>'
             '    <span class="confidentiel-footer">CONFIDENTIEL — USAGE STRICTEMENT ACTUARIEL</span>\n'
             '  </div>\n'
