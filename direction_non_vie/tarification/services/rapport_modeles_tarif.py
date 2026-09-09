@@ -39,6 +39,7 @@ from core.decision_actuaire import (
 from core.mapping_client import lignes_mapping, synthese_mapping
 from core.taxes_assurance import synthese_regime_fiscal
 from core.conditions_mesure import phrase_conditions_de_mesure
+from core.origine_du_prix import phrase_origine_du_prix
 from core.validation_tarif import phrase_decoupe
 from datetime import datetime
 from typing import Dict, List, NamedTuple, Optional, Tuple
@@ -845,7 +846,7 @@ TITRE_TARIF = 'Tarif calcule (prime pure, et prime commerciale si declaree)'
 LIGNES_DETAIL_TARIF = 10
 
 
-def tarif_publie(tarif, portefeuille=None) -> dict:
+def tarif_publie(tarif, portefeuille=None, modele_recommande=None) -> dict:
     """Le prix, aux DEUX niveaux, tel qu'il ira dans le document signe.
 
     ⚠️⚠️ CE RAPPORT N'AVAIT JAMAIS PORTE DE PRIX. Mesure du 08/09/2026 :
@@ -947,6 +948,14 @@ def tarif_publie(tarif, portefeuille=None) -> dict:
         'chargements': synthese_chargements(plan),
         'regime_fiscal': synthese_regime_fiscal(plan),
         'validation_hypothese': phrase_decoupe(plan),
+        # ⚠️⚠️ D'OU VIENT CE PRIX -- et l'ecart avec ce que le classement
+        # recommande, quand il y en a un. Mesure du 09/09/2026 sur le document
+        # reellement produit : le bloc prix ne disait RIEN de son origine, et
+        # aucune phrase ne le reliait au modele retenu. *Le document ne mentait
+        # pas, il se taisait -- et un silence entre deux sections se lit comme
+        # un lien.*
+        'origine': phrase_origine_du_prix(
+            getattr(plan, 'famille_severite', None), modele_recommande),
         'plan_empreinte': plan.empreinte(),
     }
 
@@ -977,7 +986,8 @@ def _bloc_tarif_html(publie: dict) -> str:
         for ligne in publie['detail'])
     phrases = '\n'.join(
         f'      <li>{p}</li>' for p in
-        (publie.get('chargements'), publie.get('regime_fiscal'),
+        (publie.get('origine'), publie.get('chargements'),
+         publie.get('regime_fiscal'),
          publie.get('validation_hypothese')) if p)
     return (
         f'<div class="raisons-plafond">\n'
@@ -2108,7 +2118,12 @@ def export_html(
     # comme le Word doivent lire LE MEME resultat -- deux calculs seraient
     # deux verites possibles pour le meme prix. C'est la lecon de
     # `narration_calculee`, deux lignes plus bas dans la meme fonction.
-    _tarif_publie = tarif_publie(tarif, portefeuille)
+    # ⚠️⚠️ LE MODELE RECOMMANDE VOYAGE JUSQU'AU BLOC PRIX. Sans lui, l'alerte
+    # de divergence ne pourrait JAMAIS se declencher : ce serait un garde-fou
+    # dont l'assiette est vide -- le defaut que ce chantier traque partout.
+    _recommande = ((result_a6 or {}).get('modele_production') or {}).get(
+        'modele')
+    _tarif_publie = tarif_publie(tarif, portefeuille, _recommande)
     _dec = decision_depuis_dict(decision_actuaire)
     _dec_publie = synthese_decision(
         _dec, (result_a6 or result_a3 or {}).get('statut_rag'))
@@ -2979,7 +2994,9 @@ def export_word(
         # detail des premiers contrats -- et la phrase qui dit sur quelle
         # assiette porte chacun, sans quoi un lecteur additionnerait le detail
         # en croyant retrouver le total.
-        _tar_w = tarif_publie(tarif, portefeuille)
+        _tar_w = tarif_publie(
+            tarif, portefeuille,
+            ((result_a6 or {}).get('modele_production') or {}).get('modele'))
         if _tar_w:
             _t = _tar_w['total']
             p = doc.add_paragraph()
@@ -3005,7 +3022,11 @@ def export_word(
                         f"{_l['exposition']:.4g} -> pure "
                         f"{_l['prime_pure']:.2f} EUR, commerciale HT {_pc}",
                      sz=8, col=NR).add_break()
-            for _phrase in (_tar_w.get('chargements'),
+            # ⚠️ L'ORIGINE EN TETE, ET DANS LES DEUX FORMATS : elle dit d'ou
+            # vient le montant qu'on vient de lire, et signale le cas ou le
+            # modele recommande n'est pas celui qui l'a produit.
+            for _phrase in (_tar_w.get('origine'),
+                            _tar_w.get('chargements'),
                             _tar_w.get('regime_fiscal'),
                             _tar_w.get('validation_hypothese')):
                 if _phrase:
