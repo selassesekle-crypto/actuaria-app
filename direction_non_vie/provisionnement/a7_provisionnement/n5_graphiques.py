@@ -3,7 +3,17 @@
 #  n5_graphiques.py  —  Graphiques Plotly (style dashboard ActuarIA)
 # =============================================================================
 #
-#  14 graphiques professionnels :
+#  Graphiques professionnels — LA LISTE CI-DESSOUS EST CELLE QUI EST
+#  PRODUITE, et le COMPTE a quitté cette prose.
+#
+#  ⚠️⚠️ ELLE ANNONÇAIT « 14 graphiques » ET LE COMPTE ÉTAIT JUSTE — par
+#  COMPENSATION. Quatre figures énumérées n'existaient plus (G7 SCR par
+#  composante, G8 H1 Indépendance, G11 Ultimates projetés, G13 Paiements
+#  cumulés) et quatre produites n'étaient pas énumérées (g15 à g18).
+#  Quatre retirées, quatre ajoutées : le nombre survivait précisément
+#  parce qu'il ne décrivait plus rien. C'est le cas d'école du compte
+#  recopié — on retire le compte, on garde la liste.
+#
 #
 #  G1  — Heatmap triangle de développement (zone connue + projection)
 #  G2  — Courbes de cadence cumulées par année (style image fournie)
@@ -11,14 +21,21 @@
 #  G4  — IBNR par année (barres verticales + courbe cumulée, dégradé couleur)
 #  G5  — Convergence des méthodes + BE S2 + IC Mack
 #  G6  — Distribution Bootstrap (histogramme + P50/P90/P99.5)
-#  G7  — SCR par composante (donut, style image fournie)
-#  G8  — H1 Indépendance (corrélations Spearman par paire)
 #  G9  — H2 Stabilité (heatmap écarts facteurs individuels vs CL)
 #  G10 — H3 LR a priori par année mature vs référence marché
-#  G11 — Ultimates projetés vs dernière diagonale
 #  G12 — Sensibilités du BE (tornado chart)
-#  G13 — Paiements cumulés par année de survenance
 #  G14 — Back-testing : boni/mali de liquidation
+#  G15 — Exposition par année de survenance
+#  G16 — Incréments de paiement
+#  G17 — Linéarité des facteurs
+#  G18 — Résidus
+#
+#  ⚠️ LES NUMEROS SAUTENT, ET C'EST VOULU. G7 (SCR par composante), G8
+#  (H1 Indépendance), G11 (Ultimates projetés) et G13 (Paiements cumulés)
+#  ont été retirés — G8 au lot C3b, remplacé par un tableau. Renuméroter
+#  ferait désigner à « Figure 7 » deux choses différentes selon la
+#  version du rapport, et les figures sont citées par leur numéro dans
+#  le HTML comme dans le Word.
 #
 #  Palette ActuarIA
 #  ─────────────────
@@ -1555,7 +1572,9 @@ def generer_graphiques(
     exposition=None,
 ) -> Dict:
     """
-    Génère les 14 graphiques ActuarIA.
+    Génère les graphiques ActuarIA — le compte se lit dans le code, il ne
+    se recopie pas : c'est en le recopiant que l'en-tête a pu annoncer 14
+    figures dont quatre n'existaient plus.
 
     ⚠️ ILS ÉTAIENT 14 JUSQU'AU LOT C3b. Quatre sont partis : g7 (donut SCR,
     mauvais encodage et étiquette fausse), g13 (le triangle une troisième

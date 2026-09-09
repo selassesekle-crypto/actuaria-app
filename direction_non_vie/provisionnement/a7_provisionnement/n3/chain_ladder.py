@@ -120,7 +120,12 @@ def calculer_facteurs(
     -------
     facteurs : np.ndarray  shape (m-1,)
         Vecteur des facteurs agrégés f_0, ..., f_{m-2}.
-        Tous ≥ 1.0 (un triangle cumulé ne peut que croître).
+        ⚠️ PAS TOUS ≥ 1.0 — et c'est une DECISION, pas un accident. Un
+        facteur < 1 signale un recours ou une subrogation, et le module
+        les CONSERVE en les signalant (« facteur(s) < 1.0 conservé(s) »)
+        au lieu de les écraser à 1. Mesuré sur un triangle à recours :
+        0,997 en dernière colonne. La phrase « un triangle cumulé ne peut
+        que croître » décrivait donc l'inverse du comportement retenu.
     facteurs_indiv : List[List[float]]
         facteurs_indiv[j] = liste des f[i,j] = C[i,j+1]/C[i,j]
         pour les i tels que i+j+1 < n et C[i,j] > 0.

@@ -75,10 +75,12 @@ silencieusement une autre donnée est pire qu'une qui refuse. Le repli sur la
 courbe embarquée est une décision d'AGENT, prise par l'appelant, qui sait ce
 qu'il publie.
 
-⚠️ DOUBLON TEMPORAIRE ASSUMÉ. `a7_provisionnement/config/rfr_eiopa.py` porte
-encore sa propre courbe et son propre garde-fou d'unité. Ce lot (R1) ne
-bascule AUCUN consommateur : il pose le référentiel et rien d'autre, pour que
-zéro euro bouge. Le doublon disparaît en R2, quand A7 bascule.
+⚠️ LE DOUBLON A DISPARU EN R2, ET CETTE PHRASE LUI A SURVECU. Elle annonçait
+que `a7_provisionnement/config/rfr_eiopa.py` portait « encore sa propre courbe
+et son propre garde-fou d'unité ». Il n'en porte plus : son en-tête déclare
+lui-même que les trente taux et le garde-fou « ont disparu d'ici », et il est
+désormais un adaptateur pur. Mesuré : écart maximal 0.0 sur les 150 maturités
+entre les deux chemins. Un référentiel unique, et une seule courbe.
 
 RÉFÉRENCES
   ⚠️ CE BLOC PORTAIT LA MÊME ERREUR QUE LE POINT (A), DANS L'ORDRE INVERSE —

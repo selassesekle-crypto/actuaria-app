@@ -244,5 +244,62 @@ class T5_Une_Panne_N_Est_Pas_Verte(unittest.TestCase):
         print('    OK L7-11 les branches de succes gardent leur VERT')
 
 
+# =============================================================================
+#  T6 - L'ENUMERATION DES FIGURES DECRIT CE QUI EST PRODUIT
+# =============================================================================
+
+class T6_L_Enumeration_Est_Celle_Produite(unittest.TestCase):
+    """⚠️ LE CAS D'ECOLE DU NOMBRE RECOPIE. L'en-tete annoncait
+    « 14 graphiques » et le compte etait JUSTE -- par COMPENSATION. Quatre
+    figures enumerees n'existaient plus (G7 SCR par composante, G8 H1
+    Independance, G11 Ultimates projetes, G13 Paiements cumules) et quatre
+    produites n'etaient pas enumerees (G15 a G18). Quatre retirees, quatre
+    ajoutees : le nombre survivait PRECISEMENT parce qu'il ne decrivait
+    plus rien."""
+
+    @staticmethod
+    def _src():
+        import direction_non_vie.provisionnement.a7_provisionnement.n5_graphiques as G
+        return io.open(G.__file__, encoding='utf-8').read()
+
+    def test_toute_figure_enumeree_existe_et_reciproquement(self):
+        # ⚠️ L'ASSIETTE EST L'EN-TETE, la ou vit l'enumeration. Les
+        # marqueurs de section qui DOCUMENTENT un retrait -- « G8 --
+        # RETIRE AU LOT C3b » -- emploient la MEME forme : les compter
+        # comme des entrees ferait echouer le test sur ce qui est
+        # justement bien fait. L'en-tete s'arrete au premier import.
+        s = self._src()
+        _lignes = s.split(chr(10))
+        _fin = next((i for i, l in enumerate(_lignes)
+                     if l.startswith(('import ', 'from '))), len(_lignes))
+        entete = chr(10).join(_lignes[:_fin])
+        enum = set(re.findall(r'^#  (G[0-9]+)\s+\u2014', entete, re.M))
+        prod = set('G' + m for m in re.findall(r'^def g([0-9]+)_', s, re.M))
+        self.assertTrue(enum, "l'en-tete n'enumere plus aucune figure")
+        self.assertEqual(
+            sorted(enum - prod, key=lambda x: int(x[1:])), [],
+            'figures ENUMEREES et non produites : %s'
+            % sorted(enum - prod, key=lambda x: int(x[1:])))
+        self.assertEqual(
+            sorted(prod - enum, key=lambda x: int(x[1:])), [],
+            'figures PRODUITES et non enumerees : %s'
+            % sorted(prod - enum, key=lambda x: int(x[1:])))
+        print('    OK L11-1 %d figures : enumeration == production'
+              % len(prod))
+
+    def test_aucun_compte_fixe_ne_survit_hors_citation(self):
+        """Quatre figures ayant ete retirees et quatre ajoutees, aucun
+        nombre ecrit ne peut rester vrai. Seule la CITATION du defaut, qui
+        le documente, a le droit de porter l'ancien compte."""
+        for ligne in self._src().split(chr(10)):
+            if 'graphiques' not in ligne:
+                continue
+            if 'ANNON' in ligne or 'ETAIT JUSTE' in ligne:
+                continue
+            self.assertNotIn(
+                '14 graphiques', ligne,
+                'un compte fixe survit : %r' % ligne.strip()[:70])
+        print('    OK L11-2 aucun compte fixe hors citation du defaut')
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

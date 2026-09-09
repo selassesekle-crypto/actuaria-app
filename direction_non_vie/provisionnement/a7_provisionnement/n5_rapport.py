@@ -3763,8 +3763,12 @@ def export_html(
         # Le repli porte un MARQUEUR reconnaissable. Sans lui, cette page d'erreur
         # est un HTML valide qu'un appelant ne distingue pas d'un rapport : c'est
         # ainsi qu'un import manquant a produit 88 octets pendant que la gate
-        # entière passait au vert. `export_word`, qui appelle cette fonction,
-        # refuse désormais de mettre en page un repli — il en aurait fait un PDF
+        # entière passait au vert. ⚠️ ET LA PHRASE QUI SUIVAIT ETAIT FAUSSE :
+        # elle affirmait qu'`export_word` « appelle cette fonction » et refuse
+        # de mettre en page un repli. `export_word` n'appelle PAS `export_html`
+        # — zéro occurrence sur ses 470 lignes. Le marqueur est desormais lu
+        # par `agent._produire_livrable`, qui declare le repli au lieu de le
+        # laisser passer pour un livrable ; c'est LUI le lecteur, pas le Word.
         # volumineux et parfaitement valide de la page d'erreur.
         return (MARQUEUR_ECHEC_RAPPORT + '<html><body><h1>Erreur : '
                 + str(e) + '</h1></body></html>')

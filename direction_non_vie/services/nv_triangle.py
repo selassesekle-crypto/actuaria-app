@@ -37,8 +37,12 @@
 #  gouvernance « la qualité doit-elle colorer un dossier ? » est une décision de
 #  phase 3, la coupler ici la préempterait par effet de bord ; (2) le contrôle C1
 #  du module 6 a un défaut CONNU — il compte toute baisse > 1 % comme une
-#  violation et bascule en ROUGE dès 3, si bien qu'un recours légitime (≥ 2 %)
-#  coûte systématiquement 15 points à une donnée saine. `diagnostic_statut_le_
+#  violation. ⚠️ MAIS LE CHIFFRE DE CETTE PHRASE ETAIT FAUX : mesuré sur un
+#  triangle à recours de 2 % portant 18 décroissances, C1 rend AMBRE et 12
+#  points sur 15 — TROIS points perdus, pas quinze, pour un score global de
+#  97/100 et un statut VERT. La raison de ne pas coupler reste valable ; son
+#  ordre de grandeur ne l'était pas, et c'était la 2ᵉ des 2 raisons données.
+#  `diagnostic_statut_le_
 #  plus_severe` est calculé et exposé pour que le couplage se fasse EN UNE LIGNE
 #  le jour où la gouvernance tranchera et où C1 sera corrigé.
 #
