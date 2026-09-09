@@ -86,6 +86,10 @@ import numpy as np
 
 from .config.lob_config import get_lob_config, get_sigma_eiopa, reference_s2
 from .methodes_be       import _CLES_N3, _LIBELLE_METHODE
+# ⚠️ LE SEUIL VIENT DE SA SOURCE, PAS D'UN LITTERAL. `backtesting` le
+# declare avec sa provenance (« guide IA 2023 ») ; N4 en recopiait la
+# valeur pour decider d'une RECOMMANDATION publiee.
+from .n3.backtesting import SEUIL_ROUGE
 from .n2_hypotheses import mention_variante_cl
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from core.courbe_rfr import diagnostic_peremption as peremption_referentiel
@@ -1490,12 +1494,26 @@ class BestEstimateS2:
             except: return 0
 
         # Recommandation rupture sinistralité (back-testing rouge récent)
+        #
+        # ⚠️ QUATRIEME COPIE DU SEUIL ROUGE — les trois autres etaient dans
+        # `backtesting` (la source) et deux fois dans le renderer. Celle-ci
+        # decide d'une RECOMMANDATION publiee, pas d'une couleur.
+        #
+        # ⚠️⚠️ ET « RECENTES » ETAIT L'ANNEE 2020, ECRITE EN DUR. Le seuil ne
+        # suivait ni la date d'arrete ni la profondeur du triangle : en
+        # 2030, un dossier aurait encore qualifie de « recentes » les dix
+        # millesimes depuis 2020 et recommande un chargement prudentiel sur
+        # tous. Les annees recentes se comptent depuis la FIN du triangle.
         bt_tableau = n3.get('backtesting', {}).get('tableau', [])
+        _annees_bt = [_safe_year(str(r.get('annee_label', r.get('annee', '0'))))
+                      for r in bt_tableau if isinstance(r, dict)]
+        _derniere = max((a for a in _annees_bt if a), default=0)
+        _seuil_recent = (_derniere - 2) if _derniere else 0
         annees_rouge_recentes = [
             r.get('annee_label', r.get('annee', '')) for r in bt_tableau
             if isinstance(r, dict) and r.get('mature', True)
-            and abs(float(r.get('ecart_pct_n1', 0) or 0)) >= 15.0
-            and _safe_year(str(r.get('annee_label', r.get('annee', '0')))) >= 2020
+            and abs(float(r.get('ecart_pct_n1', 0) or 0)) >= SEUIL_ROUGE
+            and _safe_year(str(r.get('annee_label', r.get('annee', '0')))) >= _seuil_recent
         ]
         if annees_rouge_recentes:
             recommandations.append(
@@ -1503,7 +1521,7 @@ class BestEstimateS2:
                 f"({', '.join(str(a) for a in annees_rouge_recentes[:3])}) — "
                 "écart back-testing > 15% sur N-1. Analyser la cause (inflation judiciaire, "
                 "changement de portefeuille) et envisager un chargement prudentiel "
-                "sur les années 2020+ avant inscription au bilan S2."
+                f"sur les années {_seuil_recent}+ avant inscription au bilan S2."
             )
 
         # ── Avis actuariel global ─────────────────────────────────────────────

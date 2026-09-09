@@ -50,6 +50,9 @@ from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif, s2_non_calc
 # PARAMÈTRE public de run() (compatibilité ancienne API, cf. plus bas). Sans
 # alias, le paramètre (un bool) masque la fonction dans le corps de run() et
 # l'appel lève TypeError: 'bool' object is not callable → aucun graphique.
+# ⚠️ L'AUDIT TRAIL PASSE PAR LE REFERENTIEL, COMME LES QUATRE LIVRABLES.
+# `reserve` rend le montant ou None ; `motif_exclusion` rend la raison.
+from .methodes_be       import motif_exclusion, reserve
 from .n5_graphiques     import generer_graphiques as _generer_graphiques
 from .n5_commentaire    import generer_commentaire
 from .n5_excel          import export_excel
@@ -1605,8 +1608,23 @@ class AgentA7Provisionnement:
                 'cl':          n3['chain_ladder']['reserve_totale'],
                 'mack':        n3['mack']['reserve_best_estimate'],
                 'mack_sigma':  n3['mack']['sigma_total'],
-                'bf':          n3['bf']['reserve_totale'],
-                'cc':          n3['cape_cod']['reserve_totale'],
+                # ⚠️⚠️ `None` ET NON ZERO. « Non calculable faute
+                # d'exposition » et « reserve de zero euro » sont deux
+                # affirmations differentes, et la seconde est FAUSSE.
+                # C'est la regle de `methodes_be.reserve`, appliquee par les
+                # QUATRE livrables — qui ecrivent tous « non calculee » —
+                # et l'audit trail y derogeait. Or c'est le seul artefact
+                # ECRIT SUR DISQUE a chaque run, et celui dont l'empreinte
+                # SHA-256 scelle le dossier remis a l'ACPR.
+                # ⚠️ L'ASYMETRIE INTERNE ETAIT LE REVELATEUR : le meme bloc
+                # publie `munich_cl_disponible`, et aucun drapeau pour BF
+                # ni Cape Cod.
+                'bf':          reserve(n3, 'bornhuetter_ferguson'),
+                'cc':          reserve(n3, 'cape_cod'),
+                'bf_motif':    (None if reserve(n3, 'bornhuetter_ferguson') is not None
+                                else motif_exclusion(n4, 'bornhuetter_ferguson')),
+                'cc_motif':    (None if reserve(n3, 'cape_cod') is not None
+                                else motif_exclusion(n4, 'cape_cod')),
                 'boot_be':     n3['bootstrap'].get('be_bootstrap', 0),
                 'boot_p90':    n3['bootstrap'].get('p90', 0),
                 'boot_p99_5':  n3['bootstrap'].get('p99_5', 0),

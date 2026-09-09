@@ -339,14 +339,14 @@ def glm_apc_poisson(
     if n < 5 or m < 5:
         return {
             'success': False, 'disponible': False,
-            'statut': 'VERT',
+            'statut': 'NON TESTABLE',
             'erreur':  f"Triangle trop petit ({n}×{m}) — minimum 5×5",
             'message': "Triangle insuffisant pour le GLM Poisson APC.",
         }
 
     if not STATSMODELS_OK:
         return {
-            'success': False, 'disponible': False, 'statut': 'VERT',
+            'success': False, 'disponible': False, 'statut': 'NON TESTABLE',
             'glm_disponible': False,
             'erreur':  "statsmodels non disponible",
             'message': "GLM Poisson APC indisponible (statsmodels absent).",
@@ -356,7 +356,7 @@ def glm_apc_poisson(
         cols = _to_long(C)
         if len(cols['Y']) < 8:
             return {
-                'success': False, 'disponible': True, 'statut': 'VERT',
+                'success': False, 'disponible': True, 'statut': 'NON TESTABLE',
                 'erreur':  f"Trop peu de cellules ({len(cols['Y'])})",
                 'message': "Triangle insuffisant pour l'ajustement.",
             }
@@ -455,7 +455,7 @@ def glm_apc_poisson(
     except Exception as e:
         logger.error(f"GLM Poisson APC échoué : {e}", exc_info=True)
         return {
-            'success': False, 'disponible': True, 'statut': 'VERT',
+            'success': False, 'disponible': True, 'statut': 'NON TESTABLE',
             'erreur':  str(e),
             'message': f"GLM Poisson APC échoué : {e}",
         }

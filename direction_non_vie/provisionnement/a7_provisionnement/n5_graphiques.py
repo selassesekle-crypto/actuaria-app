@@ -219,14 +219,22 @@ def g2_cadences_developpement(
 
         # Projection (pointillés)
         if k_i < m - 1 and pct_dev[i] < 0.99:
-            x_proj = [f"{(k_i+1)*12}M"]
-            y_proj = [round(pct_dev[i], 4)]
-            for j2 in range(k_i + 1, m):
-                cum_j2 = float(np.prod([facteurs_cum[j3]
-                                        for j3 in range(k_i, j2)]
-                                       if j2 > k_i else [1.0]))
+            # ⚠️⚠️ LA FRACTION DEVELOPPEE A LA COLONNE j EST 1/f_cum[j] — la
+            # definition meme de `calculer_pct_developpe`. L'ecriture
+            # precedente multipliait les facteurs CUMULES entre eux : des le
+            # PREMIER point projete, le produit valait exactement
+            # f_cum[k_i], donc pct_dev[i] × f_cum[k_i] = 1,0, ecrete a 1,0.
+            # Toutes les annees non developpees apparaissaient donc a 100 %
+            # une periode apres leur derniere observation. Mesure sur RAA,
+            # annee 9 : publie [0,1121 1,0 1,0 …] pour une vraie cadence
+            # [0,1121 0,3362 0,5459 0,6938 0,8129 0,9050 …]. Un actuaire qui
+            # lit cette figure conclut que son portefeuille se solde
+            # integralement en un an. Section 2 du HTML et du Word.
+            x_proj, y_proj = [], []
+            for j2 in range(k_i, m):
                 x_proj.append(f"{(j2+1)*12}M")
-                y_proj.append(round(min(pct_dev[i] * cum_j2, 1.0), 4))
+                y_proj.append(round(min(1.0 / facteurs_cum[j2], 1.0), 4)
+                               if facteurs_cum[j2] > 0 else 1.0)
 
             fig.add_trace(go.Scatter(
                 x=x_proj, y=y_proj,

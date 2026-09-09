@@ -369,12 +369,12 @@ def barnett_zehnwirth_ptf(
         logger.info("BZ-PTF : produire_reserve=True ignoré (réserve = étape 2b, non implémentée).")
 
     if n < 5 or m < 5:
-        return {'success': False, 'disponible': False, 'statut': 'VERT',
+        return {'success': False, 'disponible': False, 'statut': 'NON TESTABLE',
                 'erreur': f"Triangle trop petit ({n}×{m}) — minimum 5×5",
                 'message': "Triangle insuffisant pour le PTF log-normal."}
 
     if not STATSMODELS_OK:
-        return {'success': False, 'disponible': False, 'statut': 'VERT',
+        return {'success': False, 'disponible': False, 'statut': 'NON TESTABLE',
                 'erreur': "statsmodels non disponible",
                 'message': "B&Z PTF indisponible (statsmodels absent)."}
 
@@ -395,7 +395,7 @@ def barnett_zehnwirth_ptf(
             }
 
         if len(dat['y']) < max(2 * n, 12):
-            return {'success': False, 'disponible': True, 'statut': 'VERT',
+            return {'success': False, 'disponible': True, 'statut': 'NON TESTABLE',
                     'n_exclues': dat['n_exclues'], 'n_obs': dat['n_obs'],
                     'erreur': f"Trop peu de cellules exploitables ({len(dat['y'])})",
                     'message': "Triangle insuffisant pour un ajustement PTF stable."}
@@ -494,5 +494,5 @@ def barnett_zehnwirth_ptf(
 
     except Exception as e:
         logger.error(f"Barnett-Zehnwirth PTF échoué : {e}", exc_info=True)
-        return {'success': False, 'disponible': True, 'statut': 'VERT',
+        return {'success': False, 'disponible': True, 'statut': 'NON TESTABLE',
                 'erreur': str(e), 'message': f"B&Z PTF échoué : {e}"}

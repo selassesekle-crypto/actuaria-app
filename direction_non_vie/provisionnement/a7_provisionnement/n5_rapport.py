@@ -46,6 +46,14 @@ from .n3.benktander import lignes_benktander_rapport
 # commentaire actuariel par Claude n'a donc JAMAIS pu être produit, et le
 # message accusait l'API d'une panne qui était dans le code.
 from .n3.bf_cape_cod import libelle_loss_ratio
+# ⚠️⚠️ LES SEUILS DU BACK-TESTING ONT UNE SOURCE, ET C'EST `backtesting`.
+# Ils y sont declares AVEC leur provenance (« guide IA 2023 ») puis etaient
+# reecrits en litteraux DEUX fois dans ce renderer : le tableau et la
+# couleur du document se reglaient sur des COPIES, si bien qu'une revision
+# du guide aurait touche le calcul et pas l'affichage. Mesure du defaut :
+# porter ces copies de 15/8 a 25/18 passe les 225 tests du fichier
+# livrables SANS EN FAIRE TOMBER UN SEUL.
+from .n3.backtesting import SEUIL_ROUGE, SEUIL_AMBRE
 # Source UNIQUE du NOM de l'approche publiée dans `reserve_p*` — la même que
 # l'Excel et le commentaire. Ces libellés étaient écrits en dur dans les deux
 # formats de ce fichier, et « (retenue) » y était cloué sur le composé.
@@ -2670,7 +2678,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     bt_score  = _s(bt.get('score_qualite', '—'))
     # Recalculer depuis le tableau réel pour cohérence
     _bt_tab = bt.get('tableau', [])
-    _SR, _SA = 15.0, 8.0
+    _SR, _SA = SEUIL_ROUGE, SEUIL_AMBRE
     _nr1 = _na1 = _nr2 = _na2 = 0
     for _r in _bt_tab:
         if not isinstance(_r, dict) or not _r.get('mature', True): continue
@@ -3027,7 +3035,7 @@ def _build_bt_table(bt: Dict, horizon: str) -> str:
         )
 
     hor_label  = 'N-1' if horizon == 'n1' else 'N-2'
-    seuil_r, seuil_a = 15.0, 8.0
+    seuil_r, seuil_a = SEUIL_ROUGE, SEUIL_AMBRE
 
     html = (
         '<table class="premium"><thead><tr>'
