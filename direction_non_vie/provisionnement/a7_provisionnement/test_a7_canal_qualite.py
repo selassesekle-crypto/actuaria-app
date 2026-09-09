@@ -140,7 +140,17 @@ class T2_Un_Controle_Rouge_Est_Publie(unittest.TestCase):
         """⚠️ LA CONTRE-EPREUVE. Une section vide ne vaut pas une section qui
         DECLARE l absence : un CAC ne distingue pas « rien a signaler » de
         « rien n a ete regarde »."""
-        lignes = lignes_qualite_donnees(_run(RAA)['n1'])
+        # ⚠️ « PROPRE » A CHANGE DE SENS AU LOT 12. En branchant
+        # `methodes_demandees`, la preparation annonce desormais que
+        # Bornhuetter-Ferguson et Cape Cod ne pourront pas s'executer
+        # faute d'exposition : RAA SANS primes porte deux alertes, et
+        # elles sont justes. Le triangle propre est donc celui qui porte
+        # AUSSI son exposition. C'est la gate qui l'a signale, sur
+        # l'instantane gele, et l'assertion reste entiere.
+        _expo = np.full(len(RAA),
+                        float(np.nanmean(np.asarray(RAA, float)[:, 0]))
+                        * 8.0)
+        lignes = lignes_qualite_donnees(_run(RAA, primes=_expo)['n1'])
         self.assertTrue(
             any('Aucune alerte' in l for l in lignes),
             'sur un triangle propre, la section doit DECLARER l absence : %s'

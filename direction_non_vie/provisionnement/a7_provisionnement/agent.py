@@ -433,7 +433,24 @@ class AgentA7Provisionnement:
         # 344 118 octets — 1,07 Mo avec les figures réelles. Les écrire à
         # CHAQUE run, y compris aux 1 232 tests de la gate, coûterait un
         # gigaoctet par passage pour des dossiers que personne ne relira.
-        # L'application l'active ; la gate ne le paie pas.
+        #
+        # ⚠️⚠️ DEFAUT DORMANT : AUCUN APPELANT NE L'ACTIVE A CE JOUR. Cette
+        # ligne affirmait « l'application l'active ; la gate ne le paie
+        # pas ». La seconde moitie est vraie, la premiere ne l'est pas :
+        # le mot `archiv` n'apparait pas UNE SEULE FOIS dans
+        # `actuaria_app.py`, et le releve de `archiver=` sur tout le depot
+        # ne trouve que cet agent, son voisin A6 et des fichiers de test.
+        # Le dossier scelle SHA-256 -- quatre fichiers ecrits, empreintes
+        # dans l'audit trail, detection d'un octet altere -- ne s'execute
+        # donc JAMAIS en production. La conservation du dossier repose
+        # encore entierement sur le clic de telechargement de l'actuaire,
+        # ce que le lot qui a cree l'archivage designait precisement comme
+        # le defaut a fermer.
+        # ⚠️ A6 porte la meme option et l'annonce honnetement : « {} si
+        # archiver=False (defaut dormant) ». C'est l'asymetrie entre les
+        # deux voisins qui a rendu ce constat visible.
+        # ⚠️ ACTIVER l'archivage aux sites de production releve de
+        # l'application, hors de ce perimetre. Signale, non ouvert.
         archiver:         bool          = False,
         # ── Compatibilité ancienne API ────────────────────────────────────────
         triangle                        = None,
@@ -544,6 +561,20 @@ class AgentA7Provisionnement:
                 triangle_reference = triangle_reference,
                 lob                = lob,
                 annee_debut        = annee_debut,
+                # ⚠️⚠️ A7 SAIT QUELLES METHODES IL VA TENTER, ET IL NE LE
+                # DISAIT PAS. `methodes_demandees` existe pour que N1
+                # previenne, DES LA PREPARATION, que Bornhuetter-Ferguson
+                # et Cape Cod ne pourront pas tourner faute d'exposition.
+                # Il n'etait jamais transmis : `primes_requises` valait
+                # False et `methodes_bloquees` la liste vide a TOUS les
+                # runs, si bien que l'alerte n'a jamais pu se declencher.
+                # ⚠️ EFFET MESURE, ET IL EST BORNE : sans exposition, le
+                # statut N1 passe de VERT a AMBRE (RAA et GenIns). Le
+                # statut RAG global, lui, NE BOUGE PAS -- il etait deja
+                # AMBRE et ROUGE sur ces deux triangles, un dossier
+                # mono-methode ne pouvant pas sortir VERT par construction.
+                # AVEC exposition, rien ne change du tout.
+                methodes_demandees = ('bornhuetter_ferguson', 'cape_cod'),
             )
 
             n, m = C.shape

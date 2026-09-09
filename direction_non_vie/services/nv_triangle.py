@@ -314,6 +314,12 @@ def preparer_triangles(
     nom_onglet: Optional[str] = None,
     chemin_mapping: Optional[str] = None,
     chemin_mapping_primes: Optional[str] = None,
+    # ⚠️ DORMANT : AUCUN APPELANT DE PRODUCTION NE LE FOURNIT. La separation
+    # grands sinistres / attritionnels (module 5, 313 lignes) ne s'execute
+    # donc jamais : `preparer_pour_agent` ne transmet pas ce parametre et
+    # `separation` vaut None a tous les runs. Le mecanisme est ecrit et
+    # teste ; il attend un seuil que seul l'actuaire peut fixer, et une
+    # porte d'entree dans `run()` pour le recevoir. Signale, non ouvert.
     seuil_llt: Optional[float] = None,
     base_classement: str = 'auto',
     triangle_reference: str = 'paiements',

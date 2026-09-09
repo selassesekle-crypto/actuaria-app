@@ -468,7 +468,24 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         f"Clark LDF : {_f(clark.get('reserve_be_clark'))} | courbe={clark.get('courbe_choisie', '—')} | AIC={clark.get('aic_optimal', '—')}"
         + ('' if (clark.get('structure_monotone') or {}).get('compatible', True)
            else ' | NON PUBLIEE : structure incompatible (facteur de developpement < 1)'),
-        f"BEST ESTIMATE S2 : {_f(BE)} | CV={_pct(CV)}",
+        # ⚠️⚠️ CE N'EST PAS UNE ETIQUETTE DE CELLULE, C'EST LE PROMPT.
+        # `_construire_contexte` construit le message envoye au modele.
+        # Lui annoncer « BEST ESTIMATE S2 » sur une valeur BRUTE revient a
+        # lui dicter la phrase qu'il ecrira dans la narration signee, et
+        # cette narration est ensuite recopiee dans les quatre formats.
+        # L'actualisation a la courbe RFR est operee EN AVAL par A10 : le
+        # HTML, le Word et le commentaire le disent tous les trois.
+        # ⚠️ TROUVE PAR LE SCEAU DE CE LOT, PAS PAR MOI : le correctif que
+        # j'avais ecrit ne visait que le classeur, sur la foi de l'audit
+        # qui ne cite que lui. Le controle a elargi l'assiette aux trois
+        # modules de livrable et a rendu ce site-ci.
+        # ⚠️ DEUX AUTRES SITES SIGNALES, NON TOUCHES : `actuaria_app.py`
+        # (deux fois) -- l'application Streamlit disparait a la migration
+        # et n'est pas dans ce perimetre -- et
+        # `direction_sante_prevoyance/services/m_rapport_prov_prev.py`,
+        # qui est une autre direction.
+        (f"BEST ESTIMATE (brut, actualisation S2 en aval par A10) : "
+         f"{_f(BE)} | CV={_pct(CV)}"),
         "",
         "=== INCERTITUDE ===",
         f"σ Mack={_f(SIG)} | P75={_f(P75)} | P90={_f(P90)} | P99.5={_f(P99)}",
@@ -2384,26 +2401,36 @@ def _build_blocks(n1, n2, n3, n4, narration, source_narration, lob, cli, arr, dt
     # intersection vide, le repli « non calculée » était pris à tous les
     # coups. L'Excel publiait le motif détaillé, le HTML jamais — deux formats,
     # deux informations, sur le même fait.
-    rows_m = [(_m, libelle(_m), reserve(n3, _m), pw.get(_m, 0), '—')
+    # ⚠️⚠️ « SCORE » ETAIT LE MAUVAIS NOM D'UNE COLONNE VIVANTE. `scores_
+    # confiance` a ete retire avec l'ancienne H3 et l'en-tete lui a survecu.
+    # J'ai d'abord SUPPRIME la colonne, sur la foi de l'audit qui la dit
+    # morte « dans le HTML, le Word et l'Excel ». MESURE sur un run RAA :
+    # elle porte « α = 0,4327 » sur la ligne Benktander, « AIC = 5M » sur
+    # Clark, « p < 0,0001 » sur le GLM Poisson APC -- la statistique qui
+    # DISTINGUE chacune de ces trois methodes informatives. Seules les dix
+    # lignes des methodes principales et le total y portent un tiret.
+    # La colonne reste ; c'est son EN-TETE qui devient vrai. Le 5-uplet, lui,
+    # part : sa valeur etait « — » en dur et le calcul de `s_txt` juste
+    # au-dessous ne pouvait produire que « — ».
+    rows_m = [(_m, libelle(_m), reserve(n3, _m), pw.get(_m, 0))
               for _m in ORDRE_AFFICHAGE]
     tbl = (
         '<table class="premium"><thead><tr>'
         '<th>Méthode</th>'
         '<th class="right">Réserve IBNR</th>'
         '<th class="center">Poids BE</th>'
-        '<th class="center">Score</th>'
+        '<th class="center">Détail</th>'
         '<th class="center">Statut</th>'
         '</tr></thead><tbody>'
     )
-    for _cle_m, nom, res, pds, score in rows_m:
-        s_txt = str(score) + ' / 100' if score != '—' else '—'
+    for _cle_m, nom, res, pds in rows_m:
         tbl += (
             '<tr><td class="label">' + nom + '</td>'
             '<td class="right"><span class="mono">'
             + (_f(res) if res is not None
                else motif_exclusion(n4, _cle_m)) + '</span></td>'
             '<td class="center">' + _pct(pds * 100) + '</td>'
-            '<td class="center">' + s_txt + '</td>'
+            '<td class="center">—</td>'
             '<td class="center">' + _badge_statut(nom, pds) + '</td></tr>'
         )
     # Benktander — INFORMATIF, poids nul par construction : il est déjà un
@@ -3439,6 +3466,30 @@ def export_html(
     try:
         n1=n1 or {}; n2=n2 or {}; n3=n3 or {}; n4=n4 or {}
 
+        # ⚠️⚠️ UN APPELANT NE DOIT PAS POUVOIR FABRIQUER UN RAPPORT A PARTIR
+        # DE RIEN. En echec, `run()` rend `html_bytes = b''` ; l'application
+        # teste la VERITE de cette valeur, `b''` est faux, la branche `else`
+        # est prise et `export_html` est appele sur des dictionnaires VIDES.
+        # Mesure en recopiant cette branche : 41 368 caracteres, huit
+        # sections, bloc SCR, bloc incertitude, tableau des methodes -- tout
+        # a zero ou a tiret, « Best Estimate (brut) 0 EUR », la mention
+        # CONFIDENTIEL presente DEUX fois, et NI « ECHEC » NI « non
+        # calculable » nulle part. Un dossier de 41 000 caracteres remis a
+        # un commissaire aux comptes.
+        # ⚠️ LE MODULE AVAIT LUI-MEME SIGNALE CE DEFAUT, en toutes lettres :
+        # « Produire un rapport LA OU LE RUN A ECHOUE est un defaut de
+        # l'application, PRE-EXISTANT et hors de ce lot. » Le remede le plus
+        # sur n'est pas cote application : c'est ici, a la porte.
+        if not (n2 or n3 or n4):
+            logger.error('export_html : n2, n3 et n4 sont tous vides — '
+                         'aucun calcul a publier, repli marque.')
+            return (MARQUEUR_ECHEC_RAPPORT
+                    + '<html><body><h1>Rapport non produit</h1>'
+                    + '<p>Aucun resultat de calcul n\'a ete transmis '
+                    + '(N2, N3 et N4 vides). Ce document n\'est PAS un '
+                    + 'rapport actuariel : le run a echoue avant N5.</p>'
+                    + '</body></html>')
+
         dt      = datetime.now().strftime('%d/%m/%Y')
         # ⚠️ PLUS DE `arrete or dt` : la date du jour ne se fait plus
         # passer pour l'arrete. Voir ARRETE_ABSENT.
@@ -4044,7 +4095,9 @@ def export_word(n1, n2, n3, n4,
         doc.add_page_break()
 
         _h('2. Résultats par méthode actuarielle'); _sep()
-        _tbl(['Méthode','Réserve IBNR','Poids BE','Score','Statut'],
+        # ⚠️ « Score » retiree : elle valait « — » partout depuis le retrait
+        # de `scores_confiance`. Meme geste que dans le HTML.
+        _tbl(['Méthode','Réserve IBNR','Poids BE','Statut'],
              # ⚠️ DEUX MENSONGES ICI, PAS UN (lot C3a). Le « 0 € » d'une
              # méthode non calculable, et surtout un « ✓ Inclus » ÉCRIT EN
              # DUR : sans exposition, le Word affirmait que
@@ -4054,11 +4107,11 @@ def export_word(n1, n2, n3, n4,
              [[libelle(_m),
                (_f(reserve(n3, _m)) if reserve(n3, _m) is not None
                 else motif_exclusion(n4, _m)),
-               _pct(pw.get(_m, 0)*100), '—',
+               _pct(pw.get(_m, 0)*100),
                ('σ (volatilité)' if _m == 'mack'
                 else '✓ Inclus' if pw.get(_m, 0) > 0 else '⊘ Exclu')]
               for _m in ORDRE_AFFICHAGE] + [
-              ['BEST ESTIMATE (brut)',_f(BE),'100 %','—','→ A10 (actualisation)']],ws=[4.5,3.5,2.5,2.5,3.0])
+              ['BEST ESTIMATE (brut)',_f(BE),'100 %','→ A10 (actualisation)']],ws=[4.5,3.5,2.5,5.5])
 
         # Benktander — MÊME SOURCE que le HTML et l'Excel, comme Munich.
         _lg_gb = lignes_benktander_rapport(n3, n4)
@@ -4116,6 +4169,15 @@ def export_word(n1, n2, n3, n4,
             if ligne.get('puissance_phrase'):
                 texte = texte + ' ' + ligne['puissance_phrase']
             rows_h.append([ligne['libelle'], ligne['statut'], '—', texte])
+        # ⚠️ « Score » RESTE ICI, ET C'EST MESURE. R2-C19 affirme que cette
+        # colonne vaut « — » dans le HTML, le Word ET l'Excel. C'est vrai du
+        # tableau des METHODES ; c'est FAUX de celui-ci. DEUX boucles
+        # alimentent `rows_h` : celle de H1/H2, juste au-dessus, y ecrit une
+        # VRAIE valeur -- mesure sur RAA, H1 rend 69/100 et H2 rend 0/100 --
+        # et seule celle-ci ecrit le tiret en dur. Retirer la colonne
+        # detruisait deux valeurs reelles et rendait les lignes
+        # irregulieres. Le tiret des 19 lignes de cette boucle-ci est un
+        # defaut a instruire, PAS une colonne morte a supprimer.
         if rows_h: _tbl(['Hypothèse','Résultat','Score','Message'],rows_h,ws=[4.5,2.5,1.2,7.8])
         # Les deux graphiques que le guide nomme (§9.d.ii et §9.d.iii) sont
         # dans la section qui s'appelle « Validation des hypothèses ».

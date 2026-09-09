@@ -426,7 +426,13 @@ def bootstrap_odp(
         ⚠️ Toujours utiliser la variante 'standard' pour le Bootstrap,
         indépendamment de la variante CL retenue pour les ultimates.
     n_sim : int
-        Nombre de simulations (défaut 1000, recommandé 5000 pour S2).
+        Nombre de simulations. Défaut : `N_SIM_DEFAUT`.
+        ⚠️ CETTE LIGNE ANNONCAIT « défaut 1000, recommandé 5000 pour S2 ».
+        `N_SIM_DEFAUT` vaut 10 000 — dix fois le chiffre annoncé, et déjà
+        deux fois au-dessus de la recommandation que la phrase formulait.
+        L'en-tête du module argumente ce choix et précise que « 5 000 est
+        le PLANCHER d'une recommandation, pas un optimum ». On ne recopie
+        plus la valeur : on nomme la constante.
     seed : int
         Graine aléatoire pour la reproductibilité.
     annee_base : int

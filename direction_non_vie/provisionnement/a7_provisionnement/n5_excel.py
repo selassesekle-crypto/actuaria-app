@@ -201,7 +201,18 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_generation,
     _row_h(ws, 1, 24)
 
     # Bloc BE S2
-    _titre_section(ws, 3, 1, "BEST ESTIMATE S2 (Art. 77)", 6)
+    # ⚠️⚠️ « BEST ESTIMATE S2 » PROMETTAIT UNE ACTUALISATION QUI N'A PAS EU
+    # LIEU. La doctrine du module est explicite et ecrite dans les trois
+    # autres formats : le Best Estimate au sens de l'Art. 77 est la valeur
+    # ACTUALISEE, et l'actualisation a la courbe RFR est operee EN AVAL par
+    # A10. Le HTML et le Word ecrivent « Best Estimate (brut) », le
+    # commentaire « BEST ESTIMATE -- RESERVE BRUTE (Art. 77 ; actualisation
+    # S2 par A10) ». Le classeur etait le seul des quatre a annoncer « S2 »
+    # sur une valeur brute, et c'est le format qu'on ouvre pour recopier un
+    # chiffre dans un etat reglementaire.
+    _titre_section(ws, 3, 1,
+                   "BEST ESTIMATE — RÉSERVE BRUTE "
+                   "(Art. 77 ; actualisation S2 en aval par A10)", 6)
     be     = n4['best_estimate']
     statut = n4['statut']
     kpis = [
@@ -513,7 +524,8 @@ def _ong4_methodes(wb, n3, n4):
         c = ws.cell(row=row_be, column=col_be)
         c.fill   = _fill(NAVY)
         c.border = _border_thin()
-    ws.cell(row=row_be, column=1, value="BEST ESTIMATE S2").font = _font(bold=True, color=GOLD, size=11)
+    ws.cell(row=row_be, column=1,
+            value="BEST ESTIMATE (brut)").font = _font(bold=True, color=GOLD, size=11)
     ws.cell(row=row_be, column=1).fill      = _fill(NAVY)
     ws.cell(row=row_be, column=1).alignment = _align()
     c_be = ws.cell(row=row_be, column=2, value=be)

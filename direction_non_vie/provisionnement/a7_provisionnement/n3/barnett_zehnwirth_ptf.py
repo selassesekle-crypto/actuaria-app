@@ -332,6 +332,12 @@ def _scan_candidats(dat: Dict, ruptures_dev: Optional[List[int]], annee_debut: i
 
 def barnett_zehnwirth_ptf(
     C                    : np.ndarray,
+    # ⚠️ DORMANT : `run()` n'expose aucun parametre pour DECLARER une
+    # rupture. En production ce module ne TESTE donc aucune rupture posee
+    # par l'actuaire -- il se borne a produire une liste de candidats. Le
+    # test de tendance existe et il est juste ; il lui manque son entree.
+    # Signale, non ouvert : recevoir une rupture declaree est une porte a
+    # ouvrir dans `run()`, pas une correction.
     ruptures_calendaires : Optional[List[int]] = None,
     ruptures_dev         : Optional[List[int]] = None,
     produire_reserve     : bool = False,

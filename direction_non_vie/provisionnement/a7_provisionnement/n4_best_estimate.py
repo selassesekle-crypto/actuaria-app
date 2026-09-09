@@ -1383,6 +1383,27 @@ class BestEstimateS2:
                 f"raccourcir la fenêtre de régression."
             )
 
+        # ⚠️⚠️ LE BIAIS DE RECENTRAGE ETAIT CALCULE ET JETE. `bootstrap_odp`
+        # le publie avec son repere -- le guide observe « la moyenne n'est
+        # pas tres differente » de la reserve Chain Ladder avant recentrage,
+        # +2,5 % sur son propre exemple -- et le releve de ses lecteurs de
+        # production en donnait ZERO. Or un ecart bien plus grand n'est plus
+        # une correction de troncature : c'est le signe que les gardes
+        # d'increment mordent, donc qu'un parametre en amont est faux.
+        # C'est ainsi qu'un phi 5,8 fois trop grand produisait +79,4 % sur
+        # RAA. Mesure sur RAA aujourd'hui : 15,42 %, six fois le repere,
+        # et rien ne le disait.
+        _biais = (n3.get('bootstrap') or {}).get('biais_recentrage_pct')
+        if _biais is not None and abs(float(_biais)) > 0.025:
+            recommandations.append(
+                f"Recentrage du Bootstrap : {float(_biais) * 100:.2f} % "
+                f"d'ecart entre la moyenne simulee et la reserve Chain "
+                f"Ladder de reference, contre un repere de 2,5 % (guide "
+                f"IA 2023). Au-dela, l'ecart ne corrige plus une "
+                f"troncature : il signale que les gardes d'increment "
+                f"mordent. Verifier la sur-dispersion et les increments "
+                f"negatifs avant de publier les percentiles.")
+
         # Recommandation back-testing si dispo
         bt_statut_val = n3.get('backtesting', {}).get('statut', '')
         if bt_statut_val == 'ROUGE':
