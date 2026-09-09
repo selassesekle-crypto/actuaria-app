@@ -197,6 +197,11 @@ from core.elasticite import (
     sensibilite_tarifaire,
 )
 # ⚠️ LE Gini DU SOCLE — une seule formule pour tout le dépôt (lot 3).
+from core.conditions_mesure import (
+    REGLE_ALEATOIRE,
+    REGLE_TEMPORELLE,
+    ConditionsDeMesure,
+)
 from core.validation_tarif import gini_lorenz as gini_socle
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -1538,6 +1543,10 @@ class AgentA4ML:
                 'dataframe':       df,
                 'branche':         sous_branche,
                 'col_cible':       col_cible,   # cible sur laquelle CES modeles ML sont ajustes (A6 filtre dessus)
+                # ⚠️ Sur quelle decoupe ces scores ont ete mesures. A6 les
+                # range cote a cote ; sans ce champ, le document ne peut pas
+                # dire d'ou ils viennent.
+                'conditions_mesure': getattr(self, '_conditions_mesure', None),
                 'statut_rag':      statut_rag,
                 'modeles':         self.modeles,
                 'metriques':       self.metriques,
@@ -1794,6 +1803,18 @@ class AgentA4ML:
                 X, y, weights,
                 test_size=0.20, random_state=42, shuffle=True
             )
+
+        # ── LES CONDITIONS DE MESURE, DECLAREES ICI ET NULLE PART AILLEURS ──
+        # ⚠️⚠️ MEME RAISON QUE LE DIAGNOSTIC JUSTE EN DESSOUS : le decoupage
+        # vient d'avoir lieu, la coupure est connue. Les redériver depuis
+        # `run()` recopierait le mecanisme qu'on surveille. *Le classement
+        # d'A6 range ces scores cote a cote ; le document doit dire sur quelle
+        # decoupe ils ont ete mesures, et qu'aucun plan ne la declare.*
+        self._conditions_mesure = ConditionsDeMesure(
+            agent='A4',
+            regle=(REGLE_TEMPORELLE if _col_temp is not None
+                   else REGLE_ALEATOIRE),
+            colonne=_col_temp, n_train=len(X_train), n_test=len(X_test))
 
         # ── L'ÉVALUATION SERA-T-ELLE POSSIBLE ? ──────────────────────────────
         # ⚠️⚠️ CALCULÉ ICI, PAS DANS `run()`, ET C'EST DÉLIBÉRÉ. Le découpage

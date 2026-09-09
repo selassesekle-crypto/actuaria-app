@@ -139,6 +139,11 @@ from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
 )
+from core.conditions_mesure import (
+    REGLE_ALEATOIRE,
+    REGLE_TEMPORELLE,
+    ConditionsDeMesure,
+)
 from core.frequence import ajuster_glm_frequence
 # ⚠️ LE Gini DU SOCLE — une seule formule pour tout le dépôt (lot 3).
 from core.validation_tarif import gini_lorenz as gini_socle
@@ -761,6 +766,10 @@ class AgentA3GLM:
                 # exactement ce que cet audit poursuit depuis le début.
                 # `None` quand l'évaluation est possible.
                 'diagnostic_evaluation': _diag_eval,
+                # ⚠️ Sur quelle decoupe ces Gini ont ete mesures. A6 les range
+                # a cote de ceux d'A4 et d'A5 : le document doit dire d'ou ils
+                # viennent, et qu'aucun plan ne declare cette decoupe.
+                'conditions_mesure': getattr(self, '_conditions_mesure', None),
                 'modeles':      self.modeles,
                 'metriques':    self.metriques,
                 'predictions':  self.predictions,
@@ -1009,6 +1018,16 @@ class AgentA3GLM:
             )
             df_train = df_train.reset_index(drop=True)
             df_test  = df_test.reset_index(drop=True)
+
+        # ⚠️⚠️ LES CONDITIONS DE MESURE, DECLAREES LA OU LA DECOUPE A LIEU.
+        # A6 range le Gini de ces GLM a cote de ceux d'A4 et d'A5 ; sans cette
+        # declaration, le document signe ne dit pas sur quelle decoupe ils ont
+        # ete mesures, ni qu'aucun plan ne la declare.
+        self._conditions_mesure = ConditionsDeMesure(
+            agent='A3',
+            regle=(REGLE_TEMPORELLE if _col_temp is not None
+                   else REGLE_ALEATOIRE),
+            colonne=_col_temp, n_train=len(df_train), n_test=len(df_test))
 
         return df_train, df_test, vars_pred
 

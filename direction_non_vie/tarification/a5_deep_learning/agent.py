@@ -59,6 +59,11 @@ from core.conformite_reglementaire import (
     alerte_ancrage_hors_cible,
 )
 # ⚠️ LE Gini DU SOCLE — une seule formule pour tout le dépôt (lot 3).
+from core.conditions_mesure import (
+    REGLE_ALEATOIRE,
+    REGLE_TEMPORELLE,
+    ConditionsDeMesure,
+)
 from core.validation_tarif import gini_lorenz as gini_socle
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -842,6 +847,9 @@ class AgentA5DeepLearning:
                 'dataframe':           df,
                 'branche':             sous_branche,
                 'col_cible':           col_cible,   # cible sur laquelle CES modeles DL sont ajustes (A6 filtre dessus)
+                # ⚠️ Sur quelle decoupe, et sur quelle assiette d'apprentissage
+                # REELLE : A5 reserve une part de validation, les autres non.
+                'conditions_mesure': getattr(self, '_conditions_mesure', None),
                 'statut_rag':          statut_rag,
                 'modeles':             self.modeles,
                 'metriques':           self.metriques,
@@ -996,6 +1004,22 @@ class AgentA5DeepLearning:
                 train_test_split(
                     X_raw_tv, y_tv, expo_tv, test_size=0.15, random_state=42
                 )
+
+        # ⚠️⚠️ LES CONDITIONS DE MESURE, ET ICI ELLES DISENT UNE ASYMETRIE.
+        # `n_train` est l'assiette d'APPRENTISSAGE REELLE, apres la part de
+        # validation reservee a l'arret anticipe : mesure par execution sur
+        # 2 000 lignes, A5 apprend sur 1 360 quand A3 et A4 en ont 1 600 --
+        # 68 % contre 80 %, pour un holdout IDENTIQUE (400/400 lignes
+        # communes). *A6 range leurs Gini cote a cote sans que rien ne le
+        # dise.* On ne les egalise pas -- egaliser changerait les ajustements
+        # d'A3/A4, donc le modele retenu, pour une symetrie cosmetique. On le
+        # publie.
+        self._conditions_mesure = ConditionsDeMesure(
+            agent='A5',
+            regle=(REGLE_TEMPORELLE if _col_temp is not None
+                   else REGLE_ALEATOIRE),
+            colonne=_col_temp, n_train=len(X_raw_train),
+            n_validation=len(X_raw_val), n_test=len(X_raw_test))
 
         # ⚠️ UNE VALIDATION TROP PETITE NE SE TAIT PAS. Sous ce seuil, l'arrêt
         # anticipé se règle sur du bruit — on le DIT plutôt que de revenir en

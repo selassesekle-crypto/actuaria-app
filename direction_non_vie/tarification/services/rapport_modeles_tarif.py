@@ -38,6 +38,7 @@ from core.decision_actuaire import (
 )
 from core.mapping_client import lignes_mapping, synthese_mapping
 from core.taxes_assurance import synthese_regime_fiscal
+from core.conditions_mesure import phrase_conditions_de_mesure
 from core.validation_tarif import phrase_decoupe
 from datetime import datetime
 from typing import Dict, List, NamedTuple, Optional, Tuple
@@ -999,6 +1000,47 @@ def _bloc_tarif_html(publie: dict) -> str:
         + (f'    <ul>\n{phrases}\n    </ul>\n' if phrases else '')
         + f'    <p>Empreinte du plan : <code>{publie["plan_empreinte"]}</code>'
         f'</p>\n</div>\n')
+
+
+TITRE_CONDITIONS = ('Conditions de mesure du classement : sur quelle decoupe '
+                    'ces scores ont ete etablis')
+
+
+def _bloc_conditions_html(conditions) -> str:
+    """Sur quelle découpe le classement a été établi. Il ne se tait JAMAIS.
+
+    ⚠️⚠️ LE PREMIER DU CLASSEMENT DEVIENT LE MODÈLE DE PRODUCTION, et le
+    document ne disait pas sur quelles lignes son score avait été mesuré.
+    Mesure du 08/09/2026 : les mêmes six candidats notés sur deux découpes
+    80/20 des mêmes données voient **3 à 5 modèles sur 6 changer de rang**, et
+    leur Gini varier d'un facteur allant jusqu'à **3,8**.
+
+    ⚠️ ET IL DIT AUSSI L'ASSIETTE D'APPRENTISSAGE DE CHACUN — A5 en réserve une
+    part pour son arrêt anticipé, A3 et A4 non : 68 % contre 80 %, mesuré, pour
+    un holdout identique. *Ranger leurs scores côte à côte sans le dire fait
+    lire comme comparable ce qui ne l'est pas tout à fait.*
+
+    ⚠️ Sans condition remontée il ne disparaît pas : il écrit qu'aucune n'a été
+    déclarée. Un bloc absent se lirait « rien à signaler ».
+    """
+    lignes = [c for c in (conditions or []) if c is not None]
+    if not conditions:
+        return ''
+    corps = ''.join(
+        f'<tr><td>{c.agent}</td>'
+        f'<td>{"temporelle sur " + str(c.colonne) if c.colonne else "aleatoire (graine 42)"}</td>'
+        f'<td>{c.n_train}</td><td>{100 * c.part_apprentissage:.1f} %</td>'
+        f'<td>{c.n_test}</td></tr>\n'
+        for c in sorted(lignes, key=lambda x: x.agent))
+    return (
+        '<div class="raisons-plafond">\n'
+        f'  <div class="raisons-titre">{TITRE_CONDITIONS}</div>\n'
+        f'    <p>{phrase_conditions_de_mesure(lignes)}</p>\n'
+        + ('    <table>\n      <tr><th>agent</th><th>decoupe</th>'
+           '<th>lignes d apprentissage</th><th>part</th>'
+           '<th>lignes de mesure</th></tr>\n'
+           f'{corps}    </table>\n' if corps else '')
+        + '</div>\n')
 
 
 TITRE_COMPARAISON = ('Prix des candidats retenus, et coefficient de calage '
@@ -2044,6 +2086,9 @@ def export_html(
     # ⚠️ La comparaison arrive DEJA FAITE : ce service rend un document,
     # il n'ajuste pas de modeles.
     comparaison_prix=None,
+    # ⚠️ Les conditions de mesure arrivent DEJA DECLAREES par les agents : ce
+    # service rend un document, il ne redérive aucune découpe.
+    conditions_mesure=None,
 ) -> str:
     """Génère le rapport HTML tarification. Retourne str HTML ou ''.
 
@@ -2443,7 +2488,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_tarif_html(_tarif_publie)}{_bloc_comparaison_html(comparaison_prix)}{_bloc_decision_html(_dec_publie, divergence_actuaire(_dec))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
+{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_tarif_html(_tarif_publie)}{_bloc_conditions_html(conditions_mesure)}{_bloc_comparaison_html(comparaison_prix)}{_bloc_decision_html(_dec_publie, divergence_actuaire(_dec))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
       {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
@@ -2662,6 +2707,9 @@ def export_word(
     tarif=None, portefeuille=None,
     decision_actuaire=None,
     comparaison_prix=None,
+    # ⚠️ Les conditions de mesure arrivent DEJA DECLAREES par les agents : ce
+    # service rend un document, il ne redérive aucune découpe.
+    conditions_mesure=None,
 ) -> bytes:
     """Génère le rapport Word tarification (.docx). Retourne bytes ou b''.
 
@@ -2977,6 +3025,26 @@ def export_word(
         # donnees, les reserves d'A6 : chacun avait atteint UN format.
         # ⚠️ `k_train` figure au meme titre que le prix : c'est le seul nombre
         # que le mecanisme fabrique puis efface du prix affiche.
+        # ⚠️⚠️ LES CONDITIONS DE MESURE, DANS LES DEUX FORMATS. Cinq fois ce
+        # depot a paye l'asymetrie -- le mapping, l'elasticite, la qualite des
+        # donnees, les reserves d'A6, la comparaison de prix : chacun avait
+        # atteint UN format. *Le classement decide du modele de production ;
+        # ses conditions de mesure ne peuvent pas n'atteindre que le HTML.*
+        if conditions_mesure:
+            p = doc.add_paragraph()
+            _run(p, TITRE_CONDITIONS, bold=True, sz=10, col=NR).add_break()
+            _cm = [c for c in conditions_mesure if c is not None]
+            _run(p, '   ' + phrase_conditions_de_mesure(_cm), sz=9,
+                 col=NR).add_break()
+            for _c in sorted(_cm, key=lambda x: x.agent):
+                _ou = (f"temporelle sur '{_c.colonne}'" if _c.colonne
+                       else 'aleatoire (graine 42)')
+                _run(p, f"   {_c.agent} : decoupe {_ou} -- apprentissage sur "
+                        f"{_c.n_train} ligne(s) "
+                        f"({100 * _c.part_apprentissage:.1f} %), mesure sur "
+                        f"{_c.n_test}",
+                     sz=8, col=NR).add_break()
+
         if comparaison_prix is not None:
             p = doc.add_paragraph()
             _run(p, TITRE_COMPARAISON, bold=True, sz=10, col=NR).add_break()
@@ -3379,6 +3447,9 @@ def generer_rapport_tarification(
     tarif=None, portefeuille=None,
     decision_actuaire=None,
     comparaison_prix=None,
+    # ⚠️ Les conditions de mesure arrivent DEJA DECLAREES par les agents : ce
+    # service rend un document, il ne redérive aucune découpe.
+    conditions_mesure=None,
 ) -> Dict[str, bytes]:
     """
     Génère tous les formats demandés en un seul appel.
@@ -3427,7 +3498,8 @@ def generer_rapport_tarification(
                                result_a5=result_a5,
                                tarif=tarif, portefeuille=portefeuille,
                                decision_actuaire=decision_actuaire,
-                               comparaison_prix=comparaison_prix)
+                               comparaison_prix=comparaison_prix,
+                               conditions_mesure=conditions_mesure)
         out['html_bytes'] = html_str.encode('utf-8') if html_str else b''
 
     if 'word' in formats:
@@ -3438,7 +3510,8 @@ def generer_rapport_tarification(
                                         tarif=tarif,
                                         portefeuille=portefeuille,
                                         decision_actuaire=decision_actuaire,
-                                        comparaison_prix=comparaison_prix)
+                                        comparaison_prix=comparaison_prix,
+                                        conditions_mesure=conditions_mesure)
 
     if 'pdf' in formats:
         if html_str:

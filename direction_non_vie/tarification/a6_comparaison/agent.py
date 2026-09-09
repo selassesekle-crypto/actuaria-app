@@ -1101,6 +1101,15 @@ class AgentA6Comparaison:
                         # frôler.*
                         result_a5=result_a5,
                         result_a6=_tmp_a6,
+                        # ⚠️⚠️ LES CONDITIONS DE MESURE DU CLASSEMENT. A6 les
+                        # RASSEMBLE, il ne les fabrique pas -- chaque agent
+                        # declare la sienne la ou sa decoupe a lieu. Sans ce
+                        # relais, le document range trois Gini cote a cote sans
+                        # dire sur quelles lignes ils ont ete mesures, ni
+                        # qu'aucun plan ne declare cette decoupe.
+                        conditions_mesure=[
+                            (r or {}).get('conditions_mesure')
+                            for r in (result_a3, result_a4, result_a5)],
                         # ⚠️ L'ARRETE VIENT DE L'APPELANT, JAMAIS DE L'HORLOGE.
                         arrete=arrete,
                         audit_id=audit_id, formats=['html','word'],
