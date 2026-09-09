@@ -526,7 +526,10 @@ class K1_Les_Livrables_Disent_NON_TESTABLE(unittest.TestCase):
         print('    OK K1-1 _h1 publie un statut, comme _h2 depuis F3')
 
     def test_les_cartes_html_ne_sont_plus_vertes(self):
-        b = _n5r._build_blocks(self._n2(), {}, {}, '', 'aucune', 'Credit', 'X',
+        # `n1` d'abord : le contrat de `_build_blocks` l'exige depuis que la
+        # section « qualite des donnees » a un canal. `{}` ici — ce test ne
+        # porte pas sur elle, et le helper declare l'absence proprement.
+        b = _n5r._build_blocks({}, self._n2(), {}, {}, '', 'aucune', 'Credit', 'X',
                                '30/06/2026', '18/08/2026', 'A7-1',
                                'chain_ladder', 'VERT', '')
         cartes = b['hyp_cards']

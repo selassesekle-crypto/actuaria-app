@@ -97,7 +97,7 @@ class S3_Le_Garde_Fou_BE_NEGATIF_Ne_Fait_Plus_Tomber_Le_Rapport(unittest.TestCas
     """⚠️ LA VRAIE VICTIME : un etat que N4 marque CORRECTEMENT."""
 
     def test_le_html_se_genere(self):
-        b = _n5r._build_blocks({}, {}, dict(N4_GARDE), '', 'aucune', 'X',
+        b = _n5r._build_blocks({}, {}, {}, dict(N4_GARDE), '', 'aucune', 'X',
                                'C', '30/06', '18/08', 'A', 'cl', 'ROUGE', '')
         self.assertIn('SCR Provisions', b['kpi_grid'])
         self.assertIn('—', b['kpi_grid'])
@@ -106,7 +106,7 @@ class S3_Le_Garde_Fou_BE_NEGATIF_Ne_Fait_Plus_Tomber_Le_Rapport(unittest.TestCas
     def test_le_kpi_risk_margin_ne_leve_plus(self):
         # ⚠️ `risk_margin` PRESENT A None faisait lever `None > 0`, deux lignes
         # apres le SCR. Meme garde-fou, meme chute.
-        b = _n5r._build_blocks({}, {}, dict(N4_GARDE), '', 'aucune', 'X',
+        b = _n5r._build_blocks({}, {}, {}, dict(N4_GARDE), '', 'aucune', 'X',
                                'C', '30/06', '18/08', 'A', 'cl', 'ROUGE', '')
         self.assertNotIn('Provisions Tech. S2', b['kpi_grid'])
         print('    OK S3-2 la carte KPI ne tombe plus sur risk_margin=None')

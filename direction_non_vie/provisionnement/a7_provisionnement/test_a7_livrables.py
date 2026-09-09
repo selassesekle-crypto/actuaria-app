@@ -758,7 +758,7 @@ class T_Avis_Couleur_Suit_Le_Statut(unittest.TestCase):
         # controle de proprete du depot attrape.
         for statut, attendu in _AVIS_ATTENDU.items():
             css = attendu[0]
-            b = _build_blocks(self.r['n2'], self.r['n3'], self._n4(statut),
+            b = _build_blocks({}, self.r['n2'], self.r['n3'], self._n4(statut),
                               '', 'aucune', 'RC', 'X', '30/06', '18/08',
                               'A7-1', 'chain_ladder', statut, {})
             trouve = re.search(r'background:(var\(--[a-z]+\))', b['avis'])
@@ -786,7 +786,7 @@ class T_Avis_Couleur_Suit_Le_Statut(unittest.TestCase):
     def test_un_dossier_rouge_n_est_jamais_vert(self):
         # ⚠️ LE FAUX EXACT, ENONCE EN TOUTES LETTRES pour qu'une recherche
         # plein texte le retrouve s'il revenait.
-        b = _build_blocks(self.r['n2'], self.r['n3'], self._n4('ROUGE'),
+        b = _build_blocks({}, self.r['n2'], self.r['n3'], self._n4('ROUGE'),
                           '', 'aucune', 'RC', 'X', '30/06', '18/08',
                           'A7-1', 'chain_ladder', 'ROUGE', {})
         self.assertNotIn('background:var(--vert)', b['avis'])

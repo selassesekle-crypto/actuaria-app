@@ -2208,7 +2208,54 @@ def trace_relecture(nom, numero_ia=None) -> TraceRelecture:
         'par un actuaire identifié.', True)
 
 
-def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom='', actuaire_numero_ia='') -> Dict:
+def lignes_qualite_donnees(n1: Dict) -> list:
+    """Ce que N1 a constate sur la donnee, en lignes pretes a rendre.
+
+    ⚠️⚠️ N1 DIAGNOSTIQUAIT, ET PERSONNE NE LISAIT. Les controles dont le
+    statut est ROUGE partent dans `rapport['infos']`, et non dans
+    `rapport['alertes']` qui seul colore le statut — c'est une decision
+    tranchee et argumentee en tete de `nv_triangle`, et elle n'est pas en
+    cause. Ce qui l'etait est la phrase qui l'accompagne : « il est
+    integralement expose ». Mesure : le mot `infos` n'apparait pas UNE
+    SEULE FOIS dans les cinq modules N5, et `prep.diagnostics` n'a aucun
+    lecteur hors de son module. Le diagnostic etait expose dans un
+    dictionnaire de retour ; il n'etait expose a personne.
+
+    ⚠️ ET LE SYSTEM_PROMPT DE LA NARRATION EXIGE UNE SECTION « §1 —
+    CONTEXTE ET QUALITE DES DONNEES » en interdisant les « phrases
+    generiques sans donnees », pendant que `_construire_contexte` ne lui
+    transmettait aucune charge sur la qualite. Le redacteur etait somme
+    d'ecrire une section sur une matiere qu'on ne lui donnait pas.
+
+    ⚠️ CE HELPER EST LA SOURCE UNIQUE DES DEUX RENDUS. Composer la meme
+    section deux fois, c'est se donner deux occasions de diverger — le
+    defaut que ce depot a deja paye sur l'arrete et sur les seuils.
+    """
+    n1 = n1 or {}
+    lignes = []
+    _taille = n1.get('taille') or '—'
+    _mode = n1.get('mode_detecte') or '—'
+    lignes.append('Triangle retenu : %s, mode %s. Statut de preparation : %s.'
+                  % (_taille, _mode, n1.get('statut') or '—'))
+    _al = [str(a) for a in (n1.get('alertes') or [])]
+    _ro = [str(i) for i in (n1.get('infos') or [])
+           if 'ROUGE' in str(i) or '🔴' in str(i)]
+    if _al:
+        lignes.append('Alertes de preparation (%d) — elles colorent le '
+                      'statut :' % len(_al))
+        lignes += ['  • ' + a for a in _al]
+    if _ro:
+        lignes.append('Controles de qualite en ROUGE (%d) — ils NE colorent '
+                      'PAS le statut (decision tranchee), et doivent etre '
+                      'documentes :' % len(_ro))
+        lignes += ['  • ' + r for r in _ro]
+    if not _al and not _ro:
+        lignes.append('Aucune alerte de preparation ni controle de qualite '
+                      'en ROUGE sur ce triangle.')
+    return lignes
+
+
+def _build_blocks(n1, n2, n3, n4, narration, source_narration, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom='', actuaire_numero_ia='') -> Dict:
     mk    = n3.get('mack', {})
     clark = n3.get('clark', {});         bz  = n3.get('glm_apc', {})
     bt    = n3.get('backtesting', {});   sc  = n4.get('scr', {})
@@ -3010,6 +3057,16 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     b['actuaire_nom'] = act_nom
     b['actuaire_ia']  = act_ia
 
+    # ⚠️ LA SECTION QUE LE RAPPORT PROMETTAIT SANS JAMAIS L'ALIMENTER.
+    _qd = lignes_qualite_donnees(n1)
+    b['qualite_donnees'] = (
+        '<div class="table-section-title">Qualite des donnees — '
+        'constats de la preparation (N1)</div>\n'
+        + '<div style="font-size:8pt;line-height:1.5;color:#3A4A5F;'
+          'margin:2mm 0 4mm 0;">'
+        + '<br>'.join(_clean(x) for x in _qd)
+        + '</div>\n')
+
     return b
 
 
@@ -3462,7 +3519,7 @@ def export_html(
                 logger.debug(f'Graphique {nom} ignoré : {_eg}')
 
         # Construire tous les blocs
-        b = _build_blocks(n2, n3, n4, narration, source, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom=actuaire_nom, actuaire_numero_ia=actuaire_numero_ia)
+        b = _build_blocks(n1, n2, n3, n4, narration, source, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom=actuaire_nom, actuaire_numero_ia=actuaire_numero_ia)
 
         # ⚠️⚠️ LE SOCLE EST CALCULE ICI, PAS DANS `_build_blocks`, ET C'EST
         # MESURE : cette fonction a QUATRE appelants de test POSITIONNELS.
@@ -3559,6 +3616,7 @@ def export_html(
             '<div class="section-header"><span class="section-num">01</span><span class="section-titre">Synthèse exécutive</span></div>\n'
             '<div class="section-body">\n'
             + b['kpi_grid']
+            + b['qualite_donnees']
             + fig.html('g5_convergence')
             + '\n</div>\n<div class="section-divider"></div>\n\n'
 
@@ -3951,12 +4009,30 @@ def export_word(n1, n2, n3, n4,
               [f'P90 ({_appr_w})',_f(P90),'SCR Provisions',_f(SCP)],
               [f'P99.5 ({_appr_w})',_f(P99),'Ratio SCR/BE',_pct(SCR)]],ws=[4.5,3.5,4.5,3.5])
 
+        # ⚠️ LE MEME CANAL QUE LE HTML, ISSU DU MEME HELPER. Composer la
+        # section deux fois, c'est se donner deux occasions de diverger.
+        _h('Qualité des données — constats de la préparation (N1)'); _sep()
+        for _l in lignes_qualite_donnees(n1):
+            _p_qd = doc.add_paragraph()
+            _p_qd.paragraph_format.space_after = Pt(1)
+            _run(_p_qd, _clean(_l), sz=8.5)
+
         _h("Diagnostic — décomposition de l'incertitude (outil analytique interne, non destiné au bilan)"); _sep()
         _tbl(['Approche','P90','σ','Centre'],
              [[marque_retenue(n4,CLE_COMPOSE,'Incertitude composée'),_f(n4.get('reserve_p90_compose',0) or 0),_f(n4.get('sigma_total_compose',SIG)),'BE pondéré'],
               [marque_retenue(n4,CLE_MACK,'Mack recentré'),_f(n4.get('reserve_p90_mack',P90)),_f(n4.get('sigma_mack',SIG)),'BE pondéré'],
               ['Mack natif',_f(mk.get('reserve_p90',0)),_f(mk.get('sigma_total',SIG)),'réserve Mack'],
-              [marque_retenue(n4,CLE_BOOT,'Bootstrap ODP'),_f(n3.get('bootstrap',{}).get('p90') or 0),_f(n3.get('bootstrap',{}).get('std_bootstrap') or 0),'réserve Bootstrap']],ws=[5.0,3.0,3.0,3.0])
+              # ⚠️⚠️ LA PORTE DE GOUVERNANCE VAUT AUSSI POUR LE WORD. Ce
+              # tableau lisait `n3['bootstrap']['p90']` EN DIRECT, comme le
+              # bloc du commentaire : quand BOOT-H3 est NON VALIDEE et que
+              # N4 a mis `reserve_p90_boot` a None, le Word publiait le
+              # percentile que le meme document declare non publie. Un
+              # correctif qui n'aurait ferme qu'un rendu sur deux aurait
+              # laisse la contradiction vivante dans le format SIGNE.
+              [marque_retenue(n4,CLE_BOOT,'Bootstrap ODP'),
+               (_f(n4.get('reserve_p90_boot')) if n4.get('reserve_p90_boot') is not None else '—'),
+               (_f(n3.get('bootstrap',{}).get('std_bootstrap') or 0) if n4.get('reserve_p90_boot') is not None else '—'),
+               'réserve Bootstrap']],ws=[5.0,3.0,3.0,3.0])
         # ⚠️ L'ORDRE DES FIGURES EST LE MÊME QUE DANS LE HTML, ET C'EST
         # VOLONTAIRE : « Figure 7 » doit désigner la même chose dans les deux
         # formats. Le compteur est positionnel dans chacun d'eux.
