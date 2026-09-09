@@ -64,7 +64,13 @@ from direction_non_vie.tarification.services.rapport_modeles_tarif import (
     _bloc_decision_html,
 )
 
-_QUI, _QUAND = 'S. Sekle, actuaire signataire', '2026-09-08'
+#: ⚠️⚠️ UN ROLE, JAMAIS UNE PERSONNE -- ET C'EST UNE REGLE DU DEPOT, PAS UN
+#: gout de redaction. `decide_par` PEUT porter un nom : il vit dans le contexte
+#: de run, qui n'est jamais versionne. Cette fixture-ci, elle, EST versionnee
+#: dans un depot PUBLIC : un nom y serait une donnee personnelle publiee.
+#:   *Ma premiere version portait un nom reel. Le scan d'avant-poussee l'a
+#:   trouve -- c'est exactement ce pour quoi ce scan existe.*
+_QUI, _QUAND = 'actuaire signataire (role)', '2026-09-08'
 
 
 def _d(verdict, decision, motif=''):
