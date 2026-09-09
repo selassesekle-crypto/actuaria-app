@@ -446,6 +446,16 @@ class AgentA6Comparaison:
         # 3 rapports (synthese_mapping), exactement comme rapport_qualite. None sur
         # la quasi-totalité des appels (pas de mapping) → rien affiché.
         rapport_mapping:     Optional[Any] = None,
+        # ⚠️⚠️ L'ARRETE EST UNE REFERENCE METIER DECLAREE, PAS UNE LECTURE DE
+        # L'HORLOGE. Deux lignes de cet agent posaient `datetime.now()` : le
+        # livrable signe affirmait un arrete que personne n'avait declare, et
+        # le MEME dossier regenere le lendemain en portait un autre. Mesure du
+        # 09/09/2026 : le temoin de gel, vert a 23 h, rougissait a minuit -- il
+        # mesurait la date, pas le code.
+        #   `None` -> `libelle_arrete` ecrit << non declare >>, VISIBLE. C'est
+        #   son contrat, et sa docstring le dit deja : *jamais un horodatage a
+        #   l'heure*. Trois appelants devinaient a sa place.
+        arrete:              Any | None = None,
         generer_rapport_equipe: bool = True,
         formats_equipe:      Optional[List[str]] = None,
         # ⚠️ Archivage vérifiable du livrable signé (dossier + empreintes),
@@ -1073,7 +1083,8 @@ class AgentA6Comparaison:
                         # frôler.*
                         result_a5=result_a5,
                         result_a6=_tmp_a6,
-                        arrete=datetime.now().strftime('%d/%m/%Y'),
+                        # ⚠️ L'ARRETE VIENT DE L'APPELANT, JAMAIS DE L'HORLOGE.
+                        arrete=arrete,
                         audit_id=audit_id, formats=['html','word'],
                         actuaire_nom=actuaire_nom or '',
                         actuaire_numero_ia=actuaire_numero_ia or '',
@@ -1121,7 +1132,8 @@ class AgentA6Comparaison:
                     _rapport_equipe = generer_rapport_equipe_tarification(
                         _results_equipe,
                         branche=sous_branche,
-                        arrete=datetime.now().strftime('%d/%m/%Y'),
+                        # ⚠️ L'ARRETE VIENT DE L'APPELANT, JAMAIS DE L'HORLOGE.
+                        arrete=arrete,
                         audit_id=audit_id,
                         formats=formats_equipe or ['excel', 'html', 'word', 'pdf'],
                     )

@@ -112,10 +112,16 @@ def produire_la_chaine() -> dict:
     r3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp').run(
         result_a2=r2, plan=plan, col_frequence=plan.cible_frequence,
         col_cout=plan.cible_cout, generer_graphiques=True)
+    # ⚠️⚠️ L'ARRETE SE DECLARE ICI AUSSI, PAS SEULEMENT AUX DEUX RAPPORTS. Ce
+    # pilote declarait `ARRETE` a `rapport_modeles` et `rapport_equipe` mais
+    # laissait A4 et A6 le fabriquer depuis l'horloge : le meme dossier portait
+    # DEUX arretes differents, et le temoin de gel rougissait chaque nuit sur
+    # `a4 Word`. *Un parametre que personne ne remplit est un tuyau sans
+    # source -- la lecon du lot 2.*
     r4 = AgentA4ML(models_path='/tmp', audit_path='/tmp').run(
         result_a2=r2, result_a3=r3, plan=plan, col_cible='nb_sinistres',
         ponderer_par_exposition=True, calcul_shap=False,
-        generer_graphiques=True)
+        generer_graphiques=True, arrete=ARRETE)
     r5: dict = {}
     try:
         from direction_non_vie.tarification.a5_deep_learning.agent import (
@@ -131,7 +137,7 @@ def produire_la_chaine() -> dict:
         result_a5=r5 if r5.get('success') else None,
         col_cible='nb_sinistres', plan=plan, environnement='production',
         profil_valide_par='Gel', generer_graphiques=True,
-        generer_rapport_equipe=False)
+        generer_rapport_equipe=False, arrete=ARRETE)
     return {
         'a1': r1, 'a2': r2, 'a3': r3, 'a4': r4, 'a5': r5, 'a6': r6,
         'rapport_modeles': RM.generer_rapport_tarification(

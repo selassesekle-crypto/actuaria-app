@@ -1064,6 +1064,16 @@ class AgentA4ML:
         calcul_shap:        bool = True,
         generer_graphiques: bool = True,
         optuna_trials:      int  = 0,   # 0 = désactivé ; >0 = nb essais Optuna XGBoost
+        # ⚠️⚠️ L'ARRETE EST UNE REFERENCE METIER DECLAREE, PAS UNE LECTURE DE
+        # L'HORLOGE. Cette ligne posait `datetime.now()` : le livrable signe
+        # affirmait un arrete que personne n'avait declare, et le MEME dossier
+        # regenere le lendemain en portait un autre. Mesure du 09/09/2026 : le
+        # temoin de gel, vert a 23 h, rougissait a minuit sur `a4 Word` -- il
+        # mesurait la date, pas le code.
+        #   `None` -> `libelle_arrete` ecrit << non declare >>, VISIBLE. C'est
+        #   son contrat, et sa docstring le dit deja : *jamais un horodatage a
+        #   l'heure*. Trois appelants devinaient a sa place.
+        arrete:         Any | None = None,
     ) -> Dict[str, Any]:
         """
         Pipeline ML complet.
@@ -1498,7 +1508,8 @@ class AgentA4ML:
                             'metriques': self.metriques, 'shap_values': shap_summary,
                             'commentaire': commentaire,
                         },
-                        arrete=datetime.now().strftime('%d/%m/%Y'),
+                        # ⚠️ L'ARRETE VIENT DE L'APPELANT, JAMAIS DE L'HORLOGE.
+                        arrete=arrete,
                         audit_id=audit_id, formats=['html', 'word'],
                     )
                     _word_a4 = _rapports_a4.get('word_bytes', b'')
