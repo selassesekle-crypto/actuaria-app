@@ -263,8 +263,14 @@ class TarifNonVie:
         Rend ``(taux, refus, phrase)`` :
           · ``taux``   le décimal à appliquer à la prime commerciale HT ;
           · ``refus``  vrai quand aucune prime TTC ne doit être publiée ;
-          · ``phrase`` le régime appliqué avec sa source et sa date, ou le
-            motif du refus — ``None`` quand le plan ne déclare aucun régime.
+          · ``phrase`` le taux appliqué et D'OÙ IL VIENT, ou le motif du
+            refus. ⚠️⚠️ **PLUS JAMAIS ``None`` — relevé AST du 10/09/2026 :
+            cinq ``return``, zéro muet.** Les trois sources qui rendent un taux
+            nomment leur origine ; les deux qui refusent nomment leur motif.
+            Les deux sources hors registre disent en outre ce qu'elles NE sont
+            PAS — ni article du CGI, ni date d'entrée en vigueur, ni date de
+            relecture. *Un TTC publié avec ``regime_fiscal: None`` était un
+            taux sans provenance dans un document signé.*
 
         ⚠️⚠️ L'ORDRE, ET POURQUOI L'APPELANT PASSE EN PREMIER. Des chargements
         fournis explicitement sont une décision de l'appelant sur CE calcul :
@@ -280,19 +286,32 @@ class TarifNonVie:
         `regime_du_plan` rend un mixte, donc un refus. *Ne pas savoir sous
         quelle qualification on taxe n'autorise pas à taxer quand même.*
         """
-        # ⚠️⚠️ IL N'Y A PLUS DE REPLI DE TAXE, ET C'EST VOULU. Le taux ne peut
-        # venir que de deux endroits : les chargements que l'APPELANT a
-        # explicitement fournis, ou le REGISTRE via `regime_fiscal`. Un plan
-        # qui ne declare ni l'un ni l'autre n'obtient pas de prime TTC -- le
-        # `0.33` qui bouchait ce trou etait le taux de la RC auto applique aux
-        # vingt LoB, et personne ne l'avait declare.
+        # ⚠️⚠️ IL N'Y A PLUS DE REPLI DE TAXE, ET C'EST VOULU. Le `0.33` qui
+        # bouchait ce trou etait le taux de la RC auto applique aux vingt LoB,
+        # et personne ne l'avait declare.
+        #
+        # ⚠️⚠️ TROIS SOURCES, PAS DEUX -- ET LES TROIS SE NOMMENT. Ce
+        # commentaire disait « le taux ne peut venir que de deux endroits » ;
+        # le releve AST du 10/09/2026 en compte TROIS qui rendent un taux, et
+        # DEUX rendaient `phrase=None`. Un TTC etait alors publie dans un
+        # document signe avec `regime_fiscal: None` : un taux sans article,
+        # sans date d'entree en vigueur, sans date de relecture. *Une
+        # provenance PAUVRE se publie ; une provenance ABSENTE, jamais.*
+        #   A. les chargements que l'APPELANT a explicitement fournis ;
+        #   B. le bloc `chargements` du PLAN, qui peut porter `taxes` ;
+        #   C. le REGISTRE fiscal, via `regime_fiscal`.
         _explicite = (float(self.chargements["taxes"])
                       if (self.chargements_explicites
                           and self.chargements is not None
                           and self.chargements.get("taxes") is not None)
                       else None)
         if _explicite is not None:
-            return _explicite, False, None
+            return _explicite, False, (
+                f"Taxe appliquee : {100 * _explicite:.4g} % -- taux FOURNI A "
+                f"L'APPEL par l'appelant, hors du registre fiscal. Il ne porte "
+                f"ni article du CGI, ni date d'entree en vigueur, ni date de "
+                f"relecture : il n'est pas opposable au titre du registre. "
+                f"Declarez `regime_fiscal` au plan pour un taux source.")
         regime = regime_du_plan(self.plan, contrat)
         if regime is None:
             # ⚠️ Ni regime declare, ni taxe fournie a l'appel : aucun taux
@@ -300,7 +319,19 @@ class TarifNonVie:
             _declare = (getattr(self.plan.chargements, 'taxes', None)
                         if getattr(self.plan, 'chargements', None) else None)
             if _declare is not None:
-                return float(_declare), False, None
+                # ⚠️ LA TROISIEME SOURCE. Elle reste ADMISE -- un plan signe
+                # peut porter son propre taux --, mais plus MUETTE : elle dit
+                # qui l'a declare et quand, et ce qu'elle n'est PAS.
+                _qui = getattr(self.plan.chargements, 'declare_par', '') \
+                    or 'declarant non renseigne'
+                _quand = getattr(self.plan.chargements, 'declare_le', '') \
+                    or 'date non renseignee'
+                return float(_declare), False, (
+                    f"Taxe appliquee : {100 * float(_declare):.4g} % -- taux "
+                    f"DECLARE dans le bloc `chargements` du plan "
+                    f"'{self.plan.lob}', par {_qui} le {_quand}. Ce taux ne "
+                    f"vient PAS du registre fiscal : il ne porte ni article du "
+                    f"CGI, ni date d'entree en vigueur, ni date de relecture.")
             return 0.0, True, (
                 "AUCUN TAUX DE TAXE : ni `regime_fiscal` au plan, ni `taxes` "
                 "fourni a l'appel. La prime TTC n'est pas calculee. La prime "
@@ -485,9 +516,11 @@ class TarifNonVie:
                 # pas declares. `regime_fiscal` et `chargements` le disent.
                 "prime_ttc": (None if (_refus or pc is None)
                               else round(pc * (1 + _taux), 2)),
-                # ⚠️ Le régime appliqué, sa source légale et sa date de
-                # relecture — ou le motif du refus. `None` quand le plan ne
-                # déclare rien : `chargements` parle alors.
+                # ⚠️⚠️ LE TAUX APPLIQUÉ ET D'OÙ IL VIENT — jamais `None`
+                # depuis le 10/09/2026. Deux des trois sources de taux se
+                # taisaient : un TTC partait signé avec `regime_fiscal: None`.
+                # Quand la source n'est pas le registre, la phrase le DIT et
+                # nomme ce qui manque (article, entrée en vigueur, relecture).
                 "regime_fiscal": _phrase_fiscale,
                 # ⚠️⚠️ CE QUI A ETE APPLIQUE, D'OU CA VIENT ET QUI L'A DECLARE.
                 # Un chargement decide du prix paye : un regulateur demande QUI

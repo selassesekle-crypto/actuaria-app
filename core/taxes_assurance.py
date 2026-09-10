@@ -150,10 +150,24 @@ class RegimeMixte(NamedTuple):
     `composantes` les nomme avec le taux et l'article de chacune — pour que
     l'actuaire sache exactement ce qu'il faudrait déclarer, ou trancher, pour
     sortir de ce régime.
+
+    ⚠️⚠️ `routage_non_resolu` N'EST PAS UNE TROISIÈME CAUSE — C'EST L'ABSENCE
+    DE CAUSE. Mesuré le 10/09/2026 sur `flotte_automobile` : un régime ROUTÉ
+    interrogé SANS contrat empruntait cette classe faute d'un taux unique, et
+    la surface signée en concluait « aucune prime TTC n'est publiée » — au-
+    dessus d'une table qui en publiait **neuf sur dix, 131 644,24 €**. Les deux
+    faits sont différents : un régime mixte REFUSE tout prix TTC ; un régime
+    routé en PRODUIRA, contrat par contrat, simplement pas à ce niveau
+    d'agrégation. Ce drapeau les sépare — sans ouvrir le refus des cinq autres.
     """
     composantes: tuple[tuple[str, float, str], ...]   # (libellé, taux, réf.)
     motif: str
     verifie_le: str
+    #: ⚠️ Un CHAMP, pas un type nouveau : les consommateurs testent
+    #: `isinstance(regime, TauxTaxe)`, et un quatrième champ à valeur par
+    #: défaut ne change rien pour eux. Relevé AST du 10/09/2026 : zéro
+    #: construction positionnelle, zéro dépaquetage, zéro test de longueur.
+    routage_non_resolu: bool = False
 
 
 Regime = TauxTaxe | RegimeMixte
@@ -505,7 +519,12 @@ def regime_du_plan(plan, contrat: Mapping | None = None) -> Regime | None:
                 motif=(f"Le régime fiscal de ce plan dépend du facteur "
                        f"'{declaration.selon}' : il se résout CONTRAT PAR "
                        f"CONTRAT, et aucun contrat n'a été fourni."),
-                verifie_le=_RELU)
+                verifie_le=_RELU,
+                # ⚠️⚠️ LE SEUL DES SIX SITES QUI LÈVE CE DRAPEAU. Ici le taux
+                # unique manque parce que la QUESTION est mal posée — on n'a
+                # pas dit de quel contrat il s'agit —, non parce que le régime
+                # refuse. Les cinq autres sont de vrais refus et le restent.
+                routage_non_resolu=True)
         modalite = contrat.get(declaration.selon)
         nom = declaration.pour(modalite)
         if nom is None:
@@ -636,6 +655,18 @@ def synthese_regime_fiscal(plan, contrat: Mapping | None = None,
             (f"{lib} -> {ref}" if math.isnan(t)
              else f"{lib} {100 * t:.4g} % ({ref})")
             for lib, t, ref in regime.composantes)
+        # ⚠️⚠️ DEUX PHRASES, PARCE QU'IL Y A DEUX FAITS. Un régime MIXTE refuse
+        # tout prix TTC ; un régime ROUTÉ en produira, contrat par contrat.
+        # Écrire la première pour le second contredit la table de détail du
+        # MÊME bloc signé — mesuré le 10/09/2026 : neuf primes TTC publiées
+        # sous une phrase affirmant qu'aucune ne l'était. *Un commissaire aux
+        # comptes doit alors conclure que l'une des deux ment.*
+        if regime.routage_non_resolu:
+            return ("REGIME FISCAL ROUTE, NON RESOLU A CE NIVEAU -- il se "
+                    "determine CONTRAT PAR CONTRAT, et les primes TTC du "
+                    "detail sont calculees sous le regime de CHAQUE contrat. "
+                    + regime.motif
+                    + (f" Branches declarees : {parts}." if parts else ""))
         return ("REGIME FISCAL NON TRANCHE -- aucune prime TTC n'est publiee. "
                 + regime.motif
                 + (f" Composantes : {parts}." if parts else ""))

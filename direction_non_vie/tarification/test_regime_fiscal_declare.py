@@ -41,7 +41,9 @@ comportement d'aujourd'hui -- **aucun euro ne bouge** -- et le repli est DIT.
 """
 from __future__ import annotations
 
+import ast
 import dataclasses
+import inspect
 import os
 import sys
 import unittest
@@ -72,9 +74,11 @@ from core.taxes_assurance import (
     regime_du_plan,
     route_depuis_dict,
     synthese_regime_fiscal,
+    taux_applicable,
 )
 from direction_non_vie.tarification import test_plan_invariants as T
 from direction_non_vie.tarification.pipeline_tarifaire import (
+    TarifNonVie,
     phrase_chargements_non_declares,
     pipeline_complet,
 )
@@ -92,6 +96,13 @@ def _plan(nom: str) -> PlanTarifaire:
 #: leur faut donc une prime commerciale, donc des chargements declares.
 _CHARGEMENTS = Chargements(frais=0.15, commission=0.10, marge=0.03,
                            declare_par='Controle du lot', declare_le='2026-09-08')
+
+#: ⚠️ LES TROIS CHARGEMENTS COMMERCIAUX SEULS, SANS `taxes` -- la forme que
+#: `pipeline_complet` attend a l'appel. Son absence de `taxes` dit precisement
+#: << le taux ne vient PAS de l'appel >>, et laisse parler les deux autres
+#: sources. Un dict a part, parce que quatre controles le passent a l'identique
+#: et qu'un chiffre recopie quatre fois finit par diverger en un endroit.
+_COMMERCIAUX = {'frais': 0.15, 'commission': 0.10, 'marge': 0.03}
 
 
 def _plan_tarifable(nom: str) -> PlanTarifaire:
@@ -499,7 +510,18 @@ class TestLAsymetrie(unittest.TestCase):
     def test_TX10_l_appelant_EXPLICITE_l_emporte_sur_le_regime_du_plan(self):
         """⚠️ Des chargements passes a l'appel sont une decision sur CE calcul :
         les ecraser par le registre reviendrait a ignorer un parametre qu'on
-        accepte. C'est l'ordre deja arbitre pour `_chargements_effectifs`."""
+        accepte. C'est l'ordre deja arbitre pour `_chargements_effectifs`.
+
+        ⚠️⚠️ L'ORACLE A ETE RESSERRE LE 10/09/2026, ET DANS LE SENS STRICT. Il
+        exigeait `regime_fiscal is None` -- le SILENCE -- pour empecher
+        d'attester un taux qui n'avait pas servi. Mais se taire ne protege de
+        rien : mesure du 10/09, un TTC partait signe avec `regime_fiscal:
+        None`, donc un taux sans article, sans date d'entree en vigueur et sans
+        date de relecture, et RIEN dans le document ne le disait. Le motif du
+        test etait juste, son oracle le confondait avec l'absence. Il verifie
+        desormais ce que le motif voulait vraiment : la phrase n'atteste PAS le
+        regime du plan, et elle NOMME le taux qui a servi ainsi que sa
+        provenance. *Un silence ne se relit pas ; une phrase, si.*"""
         force = pipeline_complet(
             T.portefeuille_rcg(n=1200), _plan_tarifable('rc_generale'),
             chargements={'frais': 0.15, 'commission': 0.10, 'marge': 0.03,
@@ -512,10 +534,32 @@ class TestLAsymetrie(unittest.TestCase):
         rapport = r['prime_ttc'] / r['prime_commerciale_ht']
         self.assertAlmostEqual(rapport, 1.20, places=3,
             msg="le regime du plan a ecrase des chargements EXPLICITES")
-        self.assertIsNone(r['regime_fiscal'],
-                          "publier le regime du plan alors qu'il n'a pas servi "
-                          "attesterait un taux qui n'a pas ete applique")
-        print(f"    TX-10 appelant explicite x{rapport:.4f} : il l'emporte")
+        phrase = r['regime_fiscal']
+        self.assertIsNotNone(
+            phrase, "un TTC publie sans un mot sur l'origine de son taux est "
+                    "un taux sans provenance dans un document signe")
+        # ⚠️ CE QUE LE MOTIF D'ORIGINE PROTEGEAIT : ne pas attester le regime
+        # du PLAN, qui n'a pas servi. `rc_generale` porte un regime au
+        # registre ; ni son article ni son taux ne doivent apparaitre.
+        regime_du_plan_ = REGIMES[_plan('rc_generale').regime_fiscal]
+        self.assertNotIn(regime_du_plan_.reference, phrase,
+                         "l'article du CGI du regime du plan atteste un taux "
+                         "qui n'a PAS ete applique")
+        self.assertNotIn(f"{100 * regime_du_plan_.taux:.4g} %", phrase,
+                         "le taux du registre n'a pas servi : le publier "
+                         "attesterait le mauvais nombre")
+        # ⚠️ ET CE QUE LE SILENCE NE DISAIT PAS : le taux qui a REELLEMENT
+        # servi, d'ou il vient, et ce qu'il n'est pas.
+        self.assertIn('20 %', phrase, "le taux applique doit etre nomme")
+        self.assertIn("FOURNI A L'APPEL", phrase.upper(),
+                      "la provenance du taux applique doit etre publiee")
+        for manque in ('article', 'vigueur', 'relecture'):
+            self.assertIn(manque, phrase.lower(),
+                          f"la phrase doit dire ce qui MANQUE a ce taux "
+                          f"('{manque}') : une provenance pauvre se publie, "
+                          f"elle ne se maquille pas en provenance sourcee")
+        print(f"    TX-10 appelant explicite x{rapport:.4f} : il l'emporte, "
+              f"et sa provenance est PUBLIEE")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -593,6 +637,282 @@ class TestPeremptionEtPhrases(unittest.TestCase):
         self.assertIn('30 %', phrase)
         self.assertIn('9 %', phrase)
         print("    TX-12c un mixte publie ses composantes et leurs taux")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  UN REGIME *ROUTE* N'EST PAS UN REGIME *MIXTE* -- defaut D2 du 09/09/2026
+# ═════════════════════════════════════════════════════════════════════════════
+class TestUneRoutN_estPasUnMixte(unittest.TestCase):
+    """⚠️⚠️ LE MEME BLOC SIGNE ECRIVAIT << aucune prime TTC n'est publiee >> ET
+    PUBLIAIT NEUF PRIMES TTC. Mesure du 10/09/2026 sur `flotte_automobile` :
+    la phrase du bloc appelle `synthese_regime_fiscal(plan)` SANS contrat, la
+    table de detail resout, elle, contrat par contrat -- neuf TTC sur dix
+    lignes, 131 644,24 EUR sous une phrase affirmant qu'aucun ne l'etait. *Un
+    commissaire aux comptes doit alors conclure que l'un des deux ment.*
+    """
+
+    REFUS = "aucune prime TTC n'est publiee"
+    ROUTE = 'REGIME FISCAL ROUTE, NON RESOLU A CE NIVEAU'
+
+    def test_TX18_une_route_SANS_contrat_ne_refuse_plus_le_TTC(self):
+        """⚠️ Le fait a publier n'est pas << pas de prix >> mais << pas A CE
+        NIVEAU >>."""
+        phrase = synthese_regime_fiscal(_plan('flotte_automobile'))
+        self.assertIsNotNone(phrase)
+        self.assertNotIn(self.REFUS, phrase,
+                         "le bloc affirme qu'aucun TTC n'est publie alors que "
+                         "sa propre table de detail en publie")
+        self.assertTrue(phrase.startswith(self.ROUTE), phrase[:120])
+        self.assertIn('CONTRAT PAR CONTRAT', phrase.upper(),
+                      "la phrase doit dire OU le regime se resout, sinon elle "
+                      "se lit comme une panne")
+        print("    TX-18 route sans contrat : plus de refus, et le niveau de "
+              "resolution est DIT")
+
+    def test_TX18b_la_phrase_annonce_les_TTC_que_le_detail_publie(self):
+        """⚠️⚠️ ELLE NE SE CONTENTE PAS DE NE PLUS MENTIR -- elle ANNONCE. Un
+        lecteur qui voit des TTC sous une phrase muette sur eux doit deviner
+        d'ou ils sortent ; le silence entre deux sections se lit comme un
+        lien."""
+        phrase = synthese_regime_fiscal(_plan('flotte_automobile'))
+        self.assertIn('TTC', phrase, "les primes TTC du detail ne sont pas "
+                                     "annoncees par la phrase du bloc")
+        self.assertIn('detail', phrase.lower())
+        # ⚠️ ET LES BRANCHES RESTENT NOMMEES : un refus -- ou un renvoi -- qui
+        # ne dit pas ce qu'il faudrait declarer est un mur, pas un diagnostic.
+        for modalite in ('VL', 'VUL', 'PL', 'Mixte'):
+            self.assertIn(modalite, phrase,
+                          f"la branche '{modalite}' n'est pas nommee")
+        print("    TX-18b la phrase ANNONCE les TTC du detail et nomme ses "
+              "quatre branches")
+
+    def test_TX18c_LE_SCEAU_le_garde_a_ete_SEPARE_et_non_ELARGI(self):
+        """⚠️⚠️ LE CONTROLE CENTRAL DE CE CORRECTIF, ET IL PORTE SUR LES SIX
+        SITES. Le risque n'est pas que la route cesse de refuser : c'est que le
+        refus s'ouvre AILLEURS. Un plant qui mettrait `routage_non_resolu=True`
+        sur un autre site -- ou qui ferait de `synthese_regime_fiscal` une
+        phrase unique -- doit faire rougir ceci. *La question a tout garde-fou
+        est << sur quelle assiette ? >>, et la reponse ici est UN site sur
+        six.*
+        """
+        cas = [(f'registre {nom}',
+                dataclasses.replace(_plan('flotte_automobile'),
+                                    regime_fiscal=nom), None)
+               for nom, r in sorted(REGIMES.items())
+               if isinstance(r, RegimeMixte)]
+        cas.append(('declare MIXTE_NON_TRANCHE',
+                    dataclasses.replace(_plan('flotte_automobile'),
+                                        regime_fiscal=MIXTE_NON_TRANCHE),
+                    None))
+        cas.append(('route modalite HORS enumeration',
+                    _plan('flotte_automobile'),
+                    {'type_flotte': 'Tracteur agricole'}))
+        self.assertGreaterEqual(
+            len(cas), 6, "l'assiette du sceau s'est retrecie : des regimes "
+                         "mixtes ont disparu du registre sans que ce controle "
+                         "le voie")
+        for nom, plan, contrat in cas:
+            with self.subTest(site=nom):
+                r = regime_du_plan(plan, contrat)
+                self.assertIsInstance(r, RegimeMixte)
+                self.assertFalse(
+                    r.routage_non_resolu,
+                    f"'{nom}' est un VRAI refus : lever le drapeau ici "
+                    f"publierait un renvoi la ou aucune prime TTC ne doit "
+                    f"sortir")
+                phrase = synthese_regime_fiscal(plan, contrat)
+                self.assertIn(self.REFUS, phrase,
+                              f"'{nom}' a perdu son refus")
+                self.assertNotIn(self.ROUTE, phrase)
+        # ⚠️ ET L'ASYMETRIE, le revelateur le moins cher : le SEUL site qui
+        # doit changer change bien.
+        seul = regime_du_plan(_plan('flotte_automobile'), None)
+        self.assertTrue(seul.routage_non_resolu,
+                        "le site VISE n'a pas change : le correctif ne mord "
+                        "sur rien")
+        print(f"    TX-18c SCEAU : {len(cas)} vrais refus intacts, 1 seul "
+              f"site route -- garde SEPARE, pas elargi")
+
+    def test_TX18d_un_MIXTE_construit_a_la_main_refuse_TOUJOURS(self):
+        """⚠️ CONTRE-EPREUVE SUR LE DEFAUT PAR DEFAUT. Le champ vaut `False`
+        sans qu'on le dise : un `RegimeMixte` ecrit ailleurs, demain, refusera
+        sans avoir a connaitre ce correctif."""
+        mixte = RegimeMixte(
+            composantes=(("une garantie", 0.09, 'CGI art. 1001-6°'),),
+            motif="Motif de controle.", verifie_le='2026-09-10')
+        self.assertFalse(mixte.routage_non_resolu,
+                         "le drapeau doit etre BAISSE par defaut : un refus "
+                         "qui s'ouvre tout seul est pire que pas de refus")
+        plan = dataclasses.replace(T.MRH, regime_fiscal='habitation')
+        self.assertIn(self.REFUS, synthese_regime_fiscal(plan))
+        print("    TX-18d drapeau BAISSE par defaut, refus intact")
+
+    def test_TX18e_le_4e_champ_ne_casse_AUCUN_consommateur(self):
+        """⚠️⚠️ UN CHAMP, PAS UN TYPE NOUVEAU. Les consommateurs testent
+        `isinstance(regime, TauxTaxe)` ; releve AST du 10/09/2026 sur tout le
+        depot : zero construction positionnelle, zero depaquetage, zero test de
+        longueur. Ce controle tient la propriete cote comportement."""
+        r = regime_du_plan(_plan('flotte_automobile'))
+        self.assertIsInstance(r, RegimeMixte)
+        self.assertNotIsInstance(r, TauxTaxe)
+        self.assertIsNone(taux_applicable(_plan('flotte_automobile')),
+                          "une route sans contrat n'a toujours PAS de taux "
+                          "unique : le renvoi ne cree pas un nombre")
+        self.assertEqual(len(r.composantes), 4)
+        self.assertTrue(r.motif)
+        print("    TX-18e retro-compatible : isinstance, taux_applicable et "
+              "les champs d'origine intacts")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  AUCUN TAUX MUET -- defaut D3 du 09/09/2026
+# ═════════════════════════════════════════════════════════════════════════════
+class TestAucunTauxMuet(unittest.TestCase):
+    """⚠️⚠️ TROIS SOURCES DE TAUX, DEUX SANS AUCUNE PROVENANCE PUBLIEE. Le
+    commentaire du site affirmait << le taux ne peut venir que de deux
+    endroits >> ; le releve AST du 10/09/2026 en compte TROIS qui rendent un
+    taux, et DEUX rendaient `phrase=None`. Un TTC partait signe avec
+    `regime_fiscal: None` : un taux sans article, sans date d'entree en vigueur
+    et sans date de relecture, et rien dans le document ne le disait.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.pf = T.portefeuille_rcg(n=1200)
+        cls.contrat = {
+            'chiffre_affaires_eur': 600000, 'effectif': 20,
+            'secteur_activite': 'BTP', 'anciennete_entreprise_ans': 10,
+            'sous_traitance': 1, 'couverture_produits': 'Export',
+            'sinistres_3ans_anterieurs': 0}
+        cls.muet = dataclasses.replace(_plan_tarifable('rc_generale'),
+                                       regime_fiscal=None)
+
+    def _tarifer(self, plan, chargements):
+        return pipeline_complet(self.pf, plan,
+                                chargements=chargements).tarifer(
+                                    dict(self.contrat))
+
+    def test_TX19_LE_SCEAU_aucune_branche_ne_rend_un_taux_SANS_provenance(self):
+        """⚠️⚠️ LE CONTROLE CENTRAL DE CE CORRECTIF, ET IL EST *COMPORTEMENTAL*.
+
+        Lire le TEXTE du code dirait seulement qu'une phrase y est ecrite ; ce
+        controle EXECUTE les quatre branches et lit ce qui SORT. Un plant qui
+        remettrait `None` sur l'une des deux branches rendues bavardes doit
+        faire rougir ceci.
+        """
+        matrice = (
+            ('appelant explicite', self.muet,
+             {'frais': 0.15, 'commission': 0.10, 'marge': 0.03,
+              'taxes': 0.25}, 0.25),
+            ('plan.chargements.taxes',
+             dataclasses.replace(
+                 self.muet,
+                 chargements=dataclasses.replace(_CHARGEMENTS, taxes=0.20)),
+             None, 0.20),
+            ('registre regime_fiscal', _plan_tarifable('rc_generale'),
+             None, None),
+        )
+        for nom, plan, ch, attendu in matrice:
+            with self.subTest(source=nom):
+                r = self._tarifer(plan, ch or _COMMERCIAUX)
+                self.assertIsNotNone(
+                    r['prime_ttc'],
+                    f"'{nom}' devait produire un TTC : le controle porterait "
+                    f"alors sur une branche qui n'est pas empruntee")
+                self.assertIsNotNone(
+                    r['regime_fiscal'],
+                    f"'{nom}' publie un TTC SANS un mot sur l'origine de son "
+                    f"taux -- un taux sans provenance dans un document signe")
+                self.assertIn('Taxe appliquee', r['regime_fiscal'])
+                if attendu is not None:
+                    applique = r['prime_ttc'] / r['prime_commerciale_ht'] - 1
+                    self.assertAlmostEqual(
+                        applique, attendu, places=3,
+                        msg=f"'{nom}' : le taux APPLIQUE a bouge")
+                    self.assertIn(f"{100 * attendu:.4g} %", r['regime_fiscal'],
+                                  "la phrase doit nommer le taux REELLEMENT "
+                                  "applique, pas un autre")
+        print("    TX-19 SCEAU : 3/3 sources publient leur origine, et le "
+              "taux publie est celui qui a servi")
+
+    def test_TX19b_les_sources_HORS_registre_disent_ce_qu_elles_NE_sont_PAS(self):
+        """⚠️⚠️ UNE PROVENANCE PAUVRE SE PUBLIE, ELLE NE SE MAQUILLE PAS. Une
+        phrase qui dirait seulement << taxe 20 % >> se lirait comme un taux
+        source. Ces deux-la doivent nommer les trois choses qui leur manquent
+        -- article, entree en vigueur, relecture -- sinon elles empruntent
+        l'autorite du registre sans en porter les obligations."""
+        cas = (
+            ('appelant', self.muet,
+             {'frais': 0.15, 'commission': 0.10, 'marge': 0.03,
+              'taxes': 0.25}),
+            ('plan', dataclasses.replace(
+                self.muet,
+                chargements=dataclasses.replace(_CHARGEMENTS, taxes=0.20)),
+             None),
+        )
+        for nom, plan, ch in cas:
+            with self.subTest(source=nom):
+                phrase = self._tarifer(
+                    plan, ch or _COMMERCIAUX)['regime_fiscal']
+                for manque in ('article', 'vigueur', 'relecture'):
+                    self.assertIn(manque, phrase.lower(),
+                                  f"'{nom}' ne dit pas qu'il lui manque "
+                                  f"'{manque}'")
+                self.assertNotIn('CGI art.', phrase,
+                                 f"'{nom}' s'attribue un article du CGI qu'il "
+                                 f"n'a pas")
+        print("    TX-19b les deux sources hors registre nomment les trois "
+              "choses qui leur manquent")
+
+    def test_TX19c_le_taux_du_PLAN_dit_QUI_l_a_declare_et_QUAND(self):
+        """⚠️ Un chargement decide du prix paye : un regulateur demande QUI l'a
+        fixe. Le bloc `chargements` porte deja `declare_par` et `declare_le`,
+        obligatoires au plan -- la phrase les publie."""
+        plan = dataclasses.replace(
+            self.muet,
+            chargements=dataclasses.replace(_CHARGEMENTS, taxes=0.20))
+        phrase = self._tarifer(plan, _COMMERCIAUX)['regime_fiscal']
+        self.assertIn(_CHARGEMENTS.declare_par, phrase)
+        self.assertIn(_CHARGEMENTS.declare_le, phrase)
+        self.assertIn(plan.lob, phrase, "la phrase doit nommer le PLAN dont "
+                                        "le bloc chargements porte ce taux")
+        print("    TX-19c le taux declare au plan dit QUI et QUAND")
+
+    def test_TX19d_CONTRE_EPREUVE_le_cas_sans_aucun_taux_refuse_TOUJOURS(self):
+        """⚠️⚠️ LE CORRECTIF REND DES BRANCHES BAVARDES : il ne doit pas rendre
+        une branche PAYANTE. Sans regime au plan et sans taxe a l'appel, aucun
+        taux n'existe -- et il n'en apparait pas un."""
+        r = self._tarifer(self.muet, _COMMERCIAUX)
+        self.assertIsNone(r['prime_ttc'],
+                          "un taux est apparu la ou aucune source n'en "
+                          "declare : le correctif a INVENTE un taux fiscal")
+        self.assertGreater(r['prime_commerciale_ht'], 0,
+                           "la prime HT reste publiee : le refus porte sur la "
+                           "TAXE")
+        self.assertIn('AUCUN TAUX DE TAXE', r['regime_fiscal'])
+        print("    TX-19d contre-epreuve : pas de source -> pas de TTC, et le "
+              "motif est DIT")
+
+    def test_TX19e_AUCUN_return_ne_rend_un_taux_sans_phrase(self):
+        """⚠️⚠️ LA PROPRIETE, PAS SES TROIS EXEMPLES. Les controles ci-dessus
+        executent les branches CONNUES ; celui-ci releve par AST *toutes* les
+        sorties de la methode. Une sixieme branche ajoutee demain, muette,
+        rougirait ici sans que personne ait pense a l'ajouter a la matrice."""
+        src = inspect.getsource(TarifNonVie._taxe_du_contrat)
+        arbre = ast.parse('if 1:\n' + src)
+        sorties = [n for n in ast.walk(arbre) if isinstance(n, ast.Return)]
+        self.assertGreaterEqual(len(sorties), 5,
+                                "l'assiette du releve s'est retrecie")
+        muets = [n.lineno - 1 for n in sorties
+                 if (getattr(n.value, 'elts', None)
+                     and len(n.value.elts) == 3
+                     and isinstance(n.value.elts[2], ast.Constant)
+                     and n.value.elts[2].value is None)]
+        self.assertEqual(
+            muets, [], f"{len(muets)} sortie(s) de `_taxe_du_contrat` rendent "
+                       f"encore `phrase=None` (lignes relatives {muets}) : un "
+                       f"TTC peut repartir sans provenance")
+        print(f"    TX-19e {len(sorties)} sorties relevees par AST, 0 muette")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
