@@ -34,6 +34,47 @@ de `refus_anti_selection` : une règle qui bloque se déclare, elle ne se devine
 pas. *Et un seuil qui bascule avec la taille de l'échantillon mesure du bruit
 — la gate l'a déjà démontré une fois sur ce dépôt.*
 
+⚠️⚠️ ET C'EST DÉSORMAIS TRANCHÉ SUR E2 LUI-MÊME, PAS PAR ANALOGIE — ARBITRAGE
+DU 10/09/2026, MESURÉ CONTRADICTOIREMENT. Deux formes de bande ont été
+proposées, mesurées à 4 tailles × 5 découpes × 6 candidats, et **les deux sont
+réfutées** :
+
+    n        bande FIXE [0,90 ; 1,10]     bande CALCULÉE 1 ± z/√sinistres
+    1 000        80,0 % de refus              [0,642 ; 1,358]   40,0 %
+    2 000        73,3 %                       [0,770 ; 1,230]   46,7 %
+    4 000        53,3 %                       [0,834 ; 1,166]   20,0 %
+    8 000        33,3 %                       [0,875 ; 1,125]   20,0 %
+    amplitude    46,7 points                                    26,7 points
+
+La bande calculée corrige la LARGEUR, pas le CENTRE : elle reproduit **57 %**
+du défaut de la bande fixe. *Un verdict qui dépend encore à moitié de la taille
+de l'échantillon reste un verdict sur du bruit.*
+
+⚠️⚠️ ET L'ARGUMENT QUI LES ENTERRE VRAIMENT — elle cesse d'éliminer le mauvais
+modèle quand le portefeuille grossit. `xgboost_tweedie` est mal calibré à
+TOUTES les tailles (son `k_train` vaut 1,29 à 1,55 partout : il sous-prédit de
+23 à 36 % sur ses propres données). La bande le rejette **5 fois sur 5** à
+n = 1 000 et le **retient 4 fois sur 5** à n = 8 000. *Elle devient indulgente
+exactement quand la réponse commence à compter.*
+
+⚠️ LE « BIAIS DE CENTRE » N'EST PAS UNE PROPRIÉTÉ D'E2 — c'est une COMPOSITION.
+La médiane à 0,699 (n = 1 000) est un artefact d'agrégation entre candidats de
+qualité inégale : `lineaire_regularise` ne dérive quasiment pas (0,9674 →
+1,0158), c'est `xgboost_tweedie` (0,3857 → 0,9578) qui tire la médiane. *Une
+médiane entre candidats de qualité inégale n'est la propriété de personne.*
+
+⚠️ CE QUE LA MESURE SUGGÈRE POUR PLUS TARD, ET QUI N'EST PAS CÂBLÉ ICI :
+`k_train` est **~40 × plus stable** qu'E2 entre découpes (étendues 0,0005 à
+0,0308 contre 0,2031 à 0,2278) et sépare proprement les candidats aux quatre
+tailles. ⚠️⚠️ **MAIS LES DEUX NE MESURENT PAS LA MÊME FAUTE** : `k_train`
+détecte un défaut de **spécification** (le modèle ne se cale pas sur ses
+propres données), E2 un défaut de **transfert** (il se cale sur le train et pas
+ailleurs). *`k_train` n'est donc PAS un substitut d'E2* — au mieux un meilleur
+candidat pour un critère qui élimine, le jour où l'on en déclarera un. Rien
+n'est câblé sur cette base : la mesure ci-dessus porte sur un portefeuille où
+la seule faute réelle est de spécification, et une règle ne se pose pas sur un
+seul portefeuille.
+
 ⚠️ CE QUI EST COMPARÉ : la FRÉQUENCE de chaque candidat, multipliée par un
 modèle de coût PARTAGÉ. Mesuré : il n'existe qu'un seul modèle de sévérité
 dans toute la chaîne. Comparer autre chose supposerait des modèles de coût qui

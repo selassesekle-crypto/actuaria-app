@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import inspect
 import os
 import pathlib
 import sys
@@ -61,6 +62,7 @@ from core.prix_compares import (
     niveau_holdout,
     refuser_assiette_discordante,
     refuser_natures_melangees,
+    synthese_comparaison,
 )
 from core.validation_tarif import DecoupeValidation
 from direction_non_vie.tarification import test_plan_invariants as T
@@ -458,6 +460,96 @@ class TestLeBranchement(unittest.TestCase):
         self.assertEqual(remontees, [],
                          f"le socle importe une direction : {remontees}")
         print("    PC-15 le socle n'importe aucune direction")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  AUCUNE BANDE DE NIVEAU N'EST CÂBLÉE -- arbitrage ① du 10/09/2026
+# ═════════════════════════════════════════════════════════════════════════════
+class TestAucuneBandeCablee(unittest.TestCase):
+    """⚠️⚠️ UNE DÉCISION DE NE PAS FAIRE SE GARDE, SINON ELLE SE REPREND.
+
+    Deux formes de bande ont été proposées et mesurées contradictoirement à
+    4 tailles x 5 découpes x 6 candidats. **Les deux sont réfutées** :
+
+      · la bande FIXE `[0,90 ; 1,10]` : le taux de refus va de 80,0 % (n=1 000)
+        à 33,3 % (n=8 000) -- **46,7 points** d'amplitude par la seule taille ;
+      · la bande CALCULÉE `1 ± z/√sinistres` : **26,7 points**, soit **57 %**
+        du même défaut. Elle corrige la LARGEUR, pas le CENTRE.
+
+    ⚠️⚠️ Et elle cesse d'éliminer le mauvais modèle quand le portefeuille
+    grossit : `xgboost_tweedie`, mal calibré à toutes les tailles, est rejeté
+    5/5 à n = 1 000 et **retenu 4/5 à n = 8 000**.
+
+    *Ce contrôle ne teste pas un calcul : il tient une ABSENCE.* Sans lui, un
+    lecteur qui trouve `bande=None` partout le prend pour un oubli et le
+    << répare >>.
+    """
+
+    def test_PC22_AUCUN_des_20_plans_ne_declare_de_bande_de_niveau(self):
+        """⚠️ MIROIR DE `VT10b`. Le champ peut exister ; ce qui compte est que
+        personne ne le déclare, sinon ce lot changerait le comportement d'un
+        plan réel sans que quiconque l'ait décidé."""
+        import glob
+        declarants = []
+        for chemin in sorted(glob.glob(os.path.join(_RACINE, 'plans',
+                                                    '*.yaml'))):
+            plan = PlanTarifaire.depuis_yaml(chemin)
+            for champ in ('bande_niveau', 'bande_de_niveau', 'bande'):
+                if getattr(plan, champ, None):
+                    declarants.append(f"{os.path.basename(chemin)}:{champ}")
+        self.assertEqual(
+            declarants, [],
+            f"des plans declarent une bande de niveau : {declarants} -- or "
+            f"les deux formes mesurees eliminent sur la TAILLE du "
+            f"portefeuille avant d'eliminer sur la qualite du calage")
+        print("    PC-22 aucun des 20 plans ne declare de bande de niveau")
+
+    def test_PC23_LE_SCEAU_sans_bande_E2_n_ecarte_PERSONNE(self):
+        """⚠️⚠️ LE CONTROLE CENTRAL DE CET ARBITRAGE, ET IL EST COMPORTEMENTAL.
+        Un plant qui poserait une bande par defaut -- un litteral, une valeur
+        calculee, n'importe quoi -- doit faire rougir ceci. *E2 reste MESURE et
+        PUBLIE ; il n'ELIMINE pas.*"""
+        source = inspect.getsource(comparer_les_prix)
+        arbre = ast.parse(source)
+        litteraux = []
+        for n in ast.walk(arbre):
+            if not isinstance(n, ast.arguments):
+                continue
+            noms = [a.arg for a in list(n.posonlyargs) + list(n.args)
+                    + list(n.kwonlyargs)]
+            defauts = list(n.defaults) + [d for d in n.kw_defaults if d]
+            for nom, defaut in zip(noms[len(noms) - len(n.defaults):],
+                                   defauts):
+                if 'bande' in nom and not (
+                        isinstance(defaut, ast.Constant)
+                        and defaut.value is None):
+                    litteraux.append(f"{nom}={ast.unparse(defaut)}")
+        self.assertEqual(
+            litteraux, [],
+            f"une bande est posee PAR DEFAUT : {litteraux}. Une regle qui "
+            f"bloque se declare, elle ne se devine pas")
+        print("    PC-23 SCEAU : aucune bande par defaut dans "
+              "`comparer_les_prix`")
+
+    def test_PC24_le_document_DIT_qu_aucune_bande_n_est_declaree(self):
+        """⚠️ Un critere qui n'elimine pas et qui se TAIT se lit comme un
+        critere qui a laisse tout passer. La phrase doit dire les deux : E2 est
+        mesure, ET il n'ecarte personne."""
+        phrase = synthese_comparaison([], bande=None)
+        self.assertIn('AUCUNE BANDE', phrase.upper())
+        self.assertIn('MESURE', phrase.upper())
+        for mot in ('ecarte', 'declare'):
+            self.assertIn(mot, phrase.lower(),
+                          f"la phrase ne dit pas '{mot}' : le lecteur ne sait "
+                          f"ni ce qui a ete fait, ni comment l'activer")
+        # ⚠️ ET LE MIROIR : avec une bande DECLAREE, la phrase la publie -- un
+        # controle qui ne verifie que l'absence laisserait la branche declaree
+        # se taire.
+        declaree = synthese_comparaison([], bande=(0.9, 1.1))
+        self.assertNotIn('AUCUNE BANDE', declaree.upper())
+        self.assertIn('0.9', declaree)
+        print("    PC-24 le document dit l'absence de bande, et publie celle "
+              "qui est declaree")
 
 
 if __name__ == '__main__':
