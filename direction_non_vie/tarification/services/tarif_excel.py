@@ -258,7 +258,7 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "", arrete: Optional[str] =
         _kpi(ws5, r, "Audit ID",    aid);  r += 1
         _kpi(ws5, r, "Date",        now);  r += 1
         _kpi(ws5, r, "Agent",       "A3 GLM Poisson/Gamma/Tweedie"); r += 1
-        _kpi(ws5, r, "Branche",     result_a3.get('branche', 'N/A')); r += 1
+        _kpi(ws5, r, "Branche",     (result_a3.get('branche') or 'N/A')); r += 1
         _kpi(ws5, r, "Statut RAG",  result_a3.get('statut_rag', 'N/A'),
              statut=result_a3.get('statut_rag')); r += 1
         _kpi(ws5, r, "Nb obs train",result_a3.get('metriques',{}).get('poisson',{}).get('nb_obs_train',0),
@@ -501,7 +501,7 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "", arrete: Optional[str] =
         _kpi(ws5, r, "Audit ID",       aid); r += 1
         _kpi(ws5, r, "Date",           now); r += 1
         _kpi(ws5, r, "Agent",          "A4 — Machine Learning"); r += 1
-        _kpi(ws5, r, "Branche",        result_a4.get('branche', 'N/A')); r += 1
+        _kpi(ws5, r, "Branche",        (result_a4.get('branche') or 'N/A')); r += 1
         _kpi(ws5, r, "Statut RAG",     result_a4.get('statut_rag', 'N/A'),
              statut=result_a4.get('statut_rag')); r += 1
         _kpi(ws5, r, "Nb modèles",     len(classement), fmt=FMT_NB); r += 1
@@ -662,7 +662,7 @@ def export_excel_a5(result_a5: Dict, audit_id: str = "", arrete: Optional[str] =
         _kpi(ws4, r, "Audit ID",       aid); r += 1
         _kpi(ws4, r, "Date",           now); r += 1
         _kpi(ws4, r, "Agent",          "A5 — Deep Learning (CANN + TabNet)"); r += 1
-        _kpi(ws4, r, "Branche",        result_a5.get('branche', 'N/A')); r += 1
+        _kpi(ws4, r, "Branche",        (result_a5.get('branche') or 'N/A')); r += 1
         _kpi(ws4, r, "Statut RAG",     result_a5.get('statut_rag', 'N/A'),
              statut=result_a5.get('statut_rag')); r += 1
         _kpi(ws4, r, "Nb modèles",     len(classement), fmt=FMT_NB); r += 1
@@ -974,7 +974,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
         _kpi(ws5, r, "Audit ID",       aid); r += 1
         _kpi(ws5, r, "Date",           now); r += 1
         _kpi(ws5, r, "Agent",          "A6 — Comparaison & Validation Finale"); r += 1
-        _kpi(ws5, r, "Branche",        result_a6.get('branche','N/A')); r += 1
+        _kpi(ws5, r, "Branche",        (result_a6.get('branche') or 'N/A')); r += 1
         _kpi(ws5, r, "Statut RAG",     result_a6.get('statut_rag','N/A'),
              statut=result_a6.get('statut_rag')); r += 1
         _kpi(ws5, r, "Nb modèles comparés", len(classement), fmt=FMT_NB); r += 1
@@ -1065,7 +1065,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
         # le nom du plan, le libelle publie dit << plan '?' >>.
         _synth_ce = synthese_colonnes_plan_ecartees(
             result_a6.get('colonnes_plan_ecartees'),
-            result_a6.get('branche', ''))
+            (result_a6.get('branche') or ''))
         if _synth_ce:
             _kpi(ws5, r, "Colonnes du plan écartées avant le filtre",
                  _synth_ce, statut="AMBRE", wrap=True); r += 1
@@ -1302,7 +1302,7 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
         _kpi(ws4, r, "Audit ID", aid); r += 1
         _kpi(ws4, r, "Date", now); r += 1
         _kpi(ws4, r, "Agent", "A1 — Ingestion & Validation"); r += 1
-        _kpi(ws4, r, "Branche", result_a1.get('branche', 'N/A')); r += 1
+        _kpi(ws4, r, "Branche", (result_a1.get('branche') or 'N/A')); r += 1
         # ⚠️ Le meme libelle qu'en tete d'onglet : un statut qui ne dit pas
         # SUR QUOI il porte se lit comme un verdict global.
         _kpi(ws4, r, "Statut RAG — qualité du fichier",
@@ -1344,7 +1344,7 @@ def export_excel_a2(result_a2: Dict, audit_id: str = "", arrete: Optional[str] =
         _section(ws1, r, "▶ TRANSFORMATIONS APPLIQUÉES"); r += 1
         _kpi(ws1, r, "Statut RAG", result_a2.get('statut_rag', 'N/A'),
              statut=result_a2.get('statut_rag')); r += 1
-        _kpi(ws1, r, "Branche", result_a2.get('branche', 'N/A')); r += 1
+        _kpi(ws1, r, "Branche", (result_a2.get('branche') or 'N/A')); r += 1
         _kpi(ws1, r, "Étapes exécutées",
              ', '.join(rapport.get('etapes', [])), wrap=True); r += 1
         if rapport.get('alertes'):
@@ -1398,7 +1398,7 @@ def export_excel_a2(result_a2: Dict, audit_id: str = "", arrete: Optional[str] =
         _kpi(ws3, r, "Audit ID", aid); r += 1
         _kpi(ws3, r, "Date", now); r += 1
         _kpi(ws3, r, "Agent", "A2 — Preprocessing & Feature Engineering"); r += 1
-        _kpi(ws3, r, "Branche", result_a2.get('branche', 'N/A')); r += 1
+        _kpi(ws3, r, "Branche", (result_a2.get('branche') or 'N/A')); r += 1
         _kpi(ws3, r, "Statut RAG", result_a2.get('statut_rag', 'N/A'),
              statut=result_a2.get('statut_rag')); r += 1
         _kpi(ws3, r, "Nb variables dérivées tracées", len(data_dict), fmt=FMT_NB); r += 1

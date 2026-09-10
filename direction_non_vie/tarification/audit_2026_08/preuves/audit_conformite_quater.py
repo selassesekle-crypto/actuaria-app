@@ -5,16 +5,25 @@ Q1. « TOUS les livrables l'appellent » -- combien de livrables existe-t-il ?
 Q2. La justification que le module se donne pour Vie/Sante tient-elle ?
 Q3. sp_data_builder : mon soupcon de filtre duplique etait FAUX. Que fait-il ?
 """
+import pathlib as _pathlib
+
+#: ⚠️⚠️ LA RACINE SE DERIVE DU FICHIER, ELLE NE SE CODE PLUS EN DUR. Ce
+#: fichier portait le chemin local d'une personne reelle, dans un depot
+#: PUBLIC -- une donnee personnelle publiee. La derivation repare un
+#: second defaut au passage : ce fichier ne s'executait que sur UNE
+#: machine, celle de son auteur.
+_RACINE_DERIVEE = str(_pathlib.Path(__file__).resolve().parents[4])
+
 import ast
 import io
 import os
 import sys
 import warnings
 
-sys.path.insert(0, r'C:\Users\selse\actuaria-app')
+sys.path.insert(0, _RACINE_DERIVEE)
 warnings.filterwarnings('ignore')
 
-RACINE = r'C:\Users\selse\actuaria-app'
+RACINE = _RACINE_DERIVEE
 
 
 def titre(t):

@@ -11,13 +11,22 @@
 # ne varie que sur l'horodatage QU'IL MESURE -- et c'est precisement son
 # constat U1 : << Arrete : publie l'horodatage de generation >>.
 """RELEVE A5 -- chaque constat porte sa mesure, ou n'est pas rendu."""
+import pathlib as _pathlib
+
+#: ⚠️⚠️ LA RACINE SE DERIVE DU FICHIER, ELLE NE SE CODE PLUS EN DUR. Ce
+#: fichier portait le chemin local d'une personne reelle, dans un depot
+#: PUBLIC -- une donnee personnelle publiee. La derivation repare un
+#: second defaut au passage : ce fichier ne s'executait que sur UNE
+#: machine, celle de son auteur.
+_RACINE_DERIVEE = str(_pathlib.Path(__file__).resolve().parents[4])
+
 import inspect
 import pathlib
 import re
 import sys
 import tempfile
 
-RACINE = pathlib.Path(r'C:\Users\selse\actuaria-app')
+RACINE = pathlib.Path(_RACINE_DERIVEE)
 sys.path.insert(0, str(RACINE))
 
 import numpy as np

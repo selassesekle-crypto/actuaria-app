@@ -2026,7 +2026,7 @@ def _construire_contexte_tarif(
         # jamais passer par le site de production.
         (synthese_colonnes_plan_ecartees(
             result_a6.get('colonnes_plan_ecartees') if result_a6 else None,
-            (result_a6 or {}).get('branche', ''))
+            ((result_a6 or {}).get('branche') or ''))
          or "Aucune : toute colonne declaree a bien atteint le filtre."),
         "",
         *_lignes_map6,
@@ -2217,7 +2217,7 @@ def export_html(
         _dec, (result_a6 or result_a3 or {}).get('statut_rag'))
     now    = datetime.now().strftime('%d/%m/%Y %H:%M')   # GÉNÉRÉ LE (impression)
     arr    = libelle_arrete(arrete)                       # ARRÊTÉ (réf. ou « non déclaré »)
-    branche = (result_a6 or result_a3 or {}).get('branche', 'non_vie')
+    branche = ((result_a6 or result_a3 or {}).get('branche') or 'non_vie')
     statut  = (result_a6 or result_a3 or {}).get('statut_rag', 'AMBRE')
     s_col   = _statut_col(statut)
     s_emoji = _statut_emoji(statut)
@@ -2834,7 +2834,7 @@ def export_word(
     try:
         now    = datetime.now().strftime('%d/%m/%Y %H:%M')   # GÉNÉRÉ LE (impression)
         arr    = libelle_arrete(arrete)                       # ARRÊTÉ (réf. ou « non déclaré »)
-        branche= (result_a6 or result_a3 or {}).get('branche', 'non_vie')
+        branche= ((result_a6 or result_a3 or {}).get('branche') or 'non_vie')
         statut = (result_a6 or result_a3 or {}).get('statut_rag', 'AMBRE')
         met3   = (result_a3 or {}).get('metriques', {})
         rels   = (result_a3 or {}).get('relativites_poisson', {})
@@ -3603,7 +3603,7 @@ def generer_rapport_tarification(
     # narrations divergentes dans un même livrable deviennent désormais
     # IMPOSSIBLES PAR CONSTRUCTION, et le nombre d'appels est divisé par deux.
     arr_narr = libelle_arrete(arrete)
-    branche_narr = (result_a6 or result_a3 or {}).get('branche', 'non_vie')
+    branche_narr = ((result_a6 or result_a3 or {}).get('branche') or 'non_vie')
     narration_calculee = _narration_claude(
         result_a3, result_a4, result_a6, branche_narr, arr_narr)
 

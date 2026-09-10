@@ -5,11 +5,21 @@ Rien n'est modifie dans le depot : on RE-THEME une copie de la figure produite
 par core/charts_tarif, avec chaque palette, et on rend en PNG.
 Plus la mesure OBJECTIVE : les contrastes WCAG.
 """
+import tempfile as _tempfile
+import pathlib as _pathlib
+
+#: ⚠️⚠️ LA RACINE SE DERIVE DU FICHIER, ELLE NE SE CODE PLUS EN DUR. Ce
+#: fichier portait le chemin local d'une personne reelle, dans un depot
+#: PUBLIC -- une donnee personnelle publiee. La derivation repare un
+#: second defaut au passage : ce fichier ne s'executait que sur UNE
+#: machine, celle de son auteur.
+_RACINE_DERIVEE = str(_pathlib.Path(__file__).resolve().parents[4])
+
 import os
 import sys
 import warnings
 
-sys.path.insert(0, r'C:\Users\selse\actuaria-app')
+sys.path.insert(0, _RACINE_DERIVEE)
 warnings.filterwarnings('ignore')
 
 import numpy as np
@@ -17,7 +27,7 @@ from PIL import Image
 
 import core.charts_tarif as CH
 
-SORTIE = r'C:\Users\selse\AppData\Local\Temp\claude\C--Users-selse-actuaria-app\076f6e80-846d-43dc-bfa8-ba814f936a34\scratchpad\rendus'
+SORTIE = _pathlib.Path(_tempfile.gettempdir(), 'actuaria_rendus_chartes')
 os.makedirs(SORTIE, exist_ok=True)
 
 # ── LES TROIS JEUX DE ROLES ───────────────────────────────────────────────────

@@ -3,6 +3,15 @@
 Et : quelle ligne leve reellement dans le repli 'degenere mais defini' ?
 Et : l'oracle INV-7 existe-t-il ?
 """
+import pathlib as _pathlib
+
+#: ⚠️⚠️ LA RACINE SE DERIVE DU FICHIER, ELLE NE SE CODE PLUS EN DUR. Ce
+#: fichier portait le chemin local d'une personne reelle, dans un depot
+#: PUBLIC -- une donnee personnelle publiee. La derivation repare un
+#: second defaut au passage : ce fichier ne s'executait que sur UNE
+#: machine, celle de son auteur.
+_RACINE_DERIVEE = str(_pathlib.Path(__file__).resolve().parents[4])
+
 import io
 import os
 import re
@@ -10,7 +19,7 @@ import sys
 import traceback
 import warnings
 
-sys.path.insert(0, r'C:\Users\selse\actuaria-app')
+sys.path.insert(0, _RACINE_DERIVEE)
 warnings.filterwarnings('ignore')
 
 import numpy as np
@@ -19,7 +28,7 @@ import pandas as pd
 from core.plan_tarifaire import PlanTarifaire
 import direction_non_vie.tarification.pipeline_tarifaire as P
 
-RACINE = r'C:\Users\selse\actuaria-app'
+RACINE = _RACINE_DERIVEE
 PLAN = PlanTarifaire.depuis_yaml(os.path.join(RACINE, 'plans', 'auto.yaml'))
 
 

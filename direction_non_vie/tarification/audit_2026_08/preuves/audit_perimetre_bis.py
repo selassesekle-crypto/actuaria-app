@@ -6,16 +6,25 @@ l'app appelle pipeline_complet, qui porte la couche qualite. On refait en
 suivant la CHAINE D'APPEL.
 Et la question qui change le rang 1 : `tarifer()` a-t-il un appelant ?
 """
+import pathlib as _pathlib
+
+#: ⚠️⚠️ LA RACINE SE DERIVE DU FICHIER, ELLE NE SE CODE PLUS EN DUR. Ce
+#: fichier portait le chemin local d'une personne reelle, dans un depot
+#: PUBLIC -- une donnee personnelle publiee. La derivation repare un
+#: second defaut au passage : ce fichier ne s'executait que sur UNE
+#: machine, celle de son auteur.
+_RACINE_DERIVEE = str(_pathlib.Path(__file__).resolve().parents[4])
+
 import ast
 import io
 import os
 import sys
 import warnings
 
-sys.path.insert(0, r'C:\Users\selse\actuaria-app')
+sys.path.insert(0, _RACINE_DERIVEE)
 warnings.filterwarnings('ignore')
 
-RACINE = r'C:\Users\selse\actuaria-app'
+RACINE = _RACINE_DERIVEE
 
 
 def titre(t):

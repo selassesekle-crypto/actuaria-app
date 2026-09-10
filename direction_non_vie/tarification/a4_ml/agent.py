@@ -1109,7 +1109,7 @@ class AgentA4ML:
         """
         t_debut      = datetime.now()
         audit_id     = f"A4_{t_debut.strftime('%Y%m%d_%H%M%S')}"
-        sous_branche = result_a2.get('branche', 'inconnue')
+        sous_branche = (result_a2.get('branche') or 'inconnue')
 
         # Gini de référence GLM — lu chez A3, ou ABSENT.
         # ⚠️⚠️ IL N'Y A PLUS DE VALEUR PAR DÉFAUT — constat `a4/C11`, rang 1.
@@ -4106,7 +4106,7 @@ class AgentA4ML:
         return {
             'success':         False,
             'dataframe':       pd.DataFrame(),
-            'branche':         None,
+            'branche':         'inconnue',
             'statut_rag':      'ROUGE',
             'modeles':         {},
             'metriques':       {},

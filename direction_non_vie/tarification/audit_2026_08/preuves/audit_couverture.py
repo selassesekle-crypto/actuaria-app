@@ -2,8 +2,17 @@
 """Couverture -- resolution de chaque import vers un CHEMIN DE FICHIER REEL.
 La seule methode non ambigue. Les trois precedentes ont echoue, chacune sur une
 forme d'import differente."""
+import pathlib as _pathlib
+
+#: ⚠️⚠️ LA RACINE SE DERIVE DU FICHIER, ELLE NE SE CODE PLUS EN DUR. Ce
+#: fichier portait le chemin local d'une personne reelle, dans un depot
+#: PUBLIC -- une donnee personnelle publiee. La derivation repare un
+#: second defaut au passage : ce fichier ne s'executait que sur UNE
+#: machine, celle de son auteur.
+_RACINE_DERIVEE = str(_pathlib.Path(__file__).resolve().parents[4])
+
 import ast, io, os
-R = r'C:\Users\selse\actuaria-app'
+R = _RACINE_DERIVEE
 PERIM = [
  'direction_non_vie/tarification/a1_ingestion/agent.py',
  'direction_non_vie/tarification/a2_preprocessing/agent.py',

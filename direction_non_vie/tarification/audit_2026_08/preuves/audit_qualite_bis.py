@@ -4,13 +4,22 @@
 M6 a ete releve AU TEXTE : il comptait les mentions en docstring comme des
 appels. On refait PAR AST.
 """
+import pathlib as _pathlib
+
+#: ⚠️⚠️ LA RACINE SE DERIVE DU FICHIER, ELLE NE SE CODE PLUS EN DUR. Ce
+#: fichier portait le chemin local d'une personne reelle, dans un depot
+#: PUBLIC -- une donnee personnelle publiee. La derivation repare un
+#: second defaut au passage : ce fichier ne s'executait que sur UNE
+#: machine, celle de son auteur.
+_RACINE_DERIVEE = str(_pathlib.Path(__file__).resolve().parents[4])
+
 import ast
 import io
 import os
 import sys
 import warnings
 
-sys.path.insert(0, r'C:\Users\selse\actuaria-app')
+sys.path.insert(0, _RACINE_DERIVEE)
 warnings.filterwarnings('ignore')
 
 import numpy as np
@@ -19,7 +28,7 @@ import pandas as pd
 import core.qualite_donnees as Q
 from core.plan_tarifaire import Facteur, PlanTarifaire
 
-RACINE = r'C:\Users\selse\actuaria-app'
+RACINE = _RACINE_DERIVEE
 PLAN = PlanTarifaire(lob='q', exposition='expo', cible_frequence='nb',
                      cible_cout='cout', facteurs=(Facteur('age', 'continu'),))
 

@@ -44,6 +44,15 @@ par EXECUTION ; le chemin ECRAN se mesure par AST SEULEMENT.
 l'une d'elles n'est JAMAIS NOMME : un relevé par `.get('X')` le dirait muet a
 tort. On releve donc les DEUX, et on les distingue dans le verdict.
 """
+import pathlib as _pathlib
+
+#: ⚠️⚠️ LA RACINE SE DERIVE DU FICHIER, ELLE NE SE CODE PLUS EN DUR. Ce
+#: fichier portait le chemin local d'une personne reelle, dans un depot
+#: PUBLIC -- une donnee personnelle publiee. La derivation repare un
+#: second defaut au passage : ce fichier ne s'executait que sur UNE
+#: machine, celle de son auteur.
+_RACINE_DERIVEE = str(_pathlib.Path(__file__).resolve().parents[4])
+
 import io
 import logging
 import pathlib
@@ -51,7 +60,7 @@ import sys
 import warnings
 import zipfile
 
-sys.path.insert(0, r'C:\Users\selse\actuaria-app')
+sys.path.insert(0, _RACINE_DERIVEE)
 warnings.filterwarnings('ignore')
 if __name__ == '__main__':
     logging.disable(logging.CRITICAL)

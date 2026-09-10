@@ -17,12 +17,21 @@ troisieme implementation supprimee). On part de l'hypothese qu'il est bon.
 Chaque bloc essaie de FAIRE TOMBER une affirmation ; s'il n'y arrive pas,
 l'affirmation est classee VERIFIEE BONNE.
 """
+import pathlib as _pathlib
+
+#: ⚠️⚠️ LA RACINE SE DERIVE DU FICHIER, ELLE NE SE CODE PLUS EN DUR. Ce
+#: fichier portait le chemin local d'une personne reelle, dans un depot
+#: PUBLIC -- une donnee personnelle publiee. La derivation repare un
+#: second defaut au passage : ce fichier ne s'executait que sur UNE
+#: machine, celle de son auteur.
+_RACINE_DERIVEE = str(_pathlib.Path(__file__).resolve().parents[4])
+
 import pathlib
 import re
 import sys
 import tempfile
 
-RACINE = pathlib.Path(r'C:\Users\selse\actuaria-app')
+RACINE = pathlib.Path(_RACINE_DERIVEE)
 sys.path.insert(0, str(RACINE))
 
 import numpy as np

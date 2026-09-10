@@ -408,7 +408,7 @@ class AgentA3GLM:
         """
         t_debut      = datetime.now()
         audit_id     = f"A3_{t_debut.strftime('%Y%m%d_%H%M%S')}"
-        sous_branche = result_a2.get('branche', 'inconnue')
+        sous_branche = (result_a2.get('branche') or 'inconnue')
 
         logger.info(f"[{audit_id}] Agent A3 GLM démarré | branche={sous_branche}")
 
@@ -4146,7 +4146,7 @@ class AgentA3GLM:
         return {
             'success':     False,
             'dataframe':   pd.DataFrame(),
-            'branche':     None,
+            'branche':     'inconnue',
             'statut_rag':  'ROUGE',
             'modeles':     {},
             'metriques':   {},

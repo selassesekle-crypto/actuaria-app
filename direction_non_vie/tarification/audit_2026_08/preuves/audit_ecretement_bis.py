@@ -10,10 +10,19 @@ Les DEUX parametres en cause :
   · la DISPERSION de la severite (si elle est nulle, le quantile du TOTAL
     n'est plus qu'un quantile du NOMBRE)
 """
+import pathlib as _pathlib
+
+#: ⚠️⚠️ LA RACINE SE DERIVE DU FICHIER, ELLE NE SE CODE PLUS EN DUR. Ce
+#: fichier portait le chemin local d'une personne reelle, dans un depot
+#: PUBLIC -- une donnee personnelle publiee. La derivation repare un
+#: second defaut au passage : ce fichier ne s'executait que sur UNE
+#: machine, celle de son auteur.
+_RACINE_DERIVEE = str(_pathlib.Path(__file__).resolve().parents[4])
+
 import sys
 import warnings
 
-sys.path.insert(0, r'C:\Users\selse\actuaria-app')
+sys.path.insert(0, _RACINE_DERIVEE)
 warnings.filterwarnings('ignore')
 
 import numpy as np
@@ -85,7 +94,7 @@ print("     la QUEUE des montants, et l'effet s'effondre.")
 titre("E6 -- OU EST LE PORTEFEUILLE REEL DANS CE TABLEAU ?")
 # ══════════════════════════════════════════════════════════════════════════════
 import os
-RACINE = r'C:\Users\selse\actuaria-app'
+RACINE = _RACINE_DERIVEE
 sin = pd.read_csv(os.path.join(RACINE, 'data/PG_2017_CLAIMS_YEAR0.csv'))
 pos = sin.loc[sin.claim_amount > 0, 'claim_amount']
 cv_reel = pos.std() / pos.mean()

@@ -609,7 +609,7 @@ class AgentA2Preprocessing:
         """
         t_debut    = datetime.now()
         audit_id   = f"A2_{t_debut.strftime('%Y%m%d_%H%M%S')}"
-        sous_branche = result_a1.get('branche', 'inconnue')
+        sous_branche = (result_a1.get('branche') or 'inconnue')
 
         logger.info(f"[{audit_id}] Agent A2 démarré | branche={sous_branche}")
 
@@ -2266,7 +2266,7 @@ class AgentA2Preprocessing:
         return {
             'success':     False,
             'dataframe':   pd.DataFrame(),
-            'branche':     None,
+            'branche':     'inconnue',
             'statut_rag':  'ROUGE',
             'rapport':     {},
             'parametres':  {},

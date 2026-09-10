@@ -510,7 +510,7 @@ class AgentA6Comparaison:
         """
         t_debut      = datetime.now()
         audit_id     = f"A6_{t_debut.strftime('%Y%m%d_%H%M%S')}"
-        sous_branche = result_a2.get('branche', 'inconnue')
+        sous_branche = (result_a2.get('branche') or 'inconnue')
         # Écart plan → données, relevé par A2 : lu À LA SOURCE (A6 reçoit déjà
         # result_a2) et relayé aux 3 livrables, comme rapport_qualite. Un fichier
         # client incomplet ampute le modèle : ce qui n'est que dans les logs
@@ -4338,7 +4338,7 @@ class AgentA6Comparaison:
         return {
             'success':           False,
             'dataframe':         pd.DataFrame(),
-            'branche':           None,
+            'branche':           'inconnue',
             'statut_rag':        'ROUGE',
             'classement':        [],
             'modele_production': {},

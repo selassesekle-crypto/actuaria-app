@@ -575,7 +575,7 @@ class AgentA5DeepLearning:
         """
         t_debut      = datetime.now()
         audit_id     = f"A5_{t_debut.strftime('%Y%m%d_%H%M%S')}"
-        sous_branche = result_a2.get('branche', 'inconnue')
+        sous_branche = (result_a2.get('branche') or 'inconnue')
 
         logger.info(f"[{audit_id}] Agent A5 DL démarré | branche={sous_branche}")
 
@@ -3033,7 +3033,7 @@ class AgentA5DeepLearning:
         return {
             'success':           False,
             'dataframe':         pd.DataFrame(),
-            'branche':           None,
+            'branche':           'inconnue',
             'statut_rag':        'ROUGE',
             'modeles':           {},
             'metriques':         {},

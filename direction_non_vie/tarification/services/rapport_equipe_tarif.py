@@ -317,7 +317,7 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
         # quatre agents publient.
         'plan_ecarte':  synthese_colonnes_plan_ecartees(
                             r6.get('colonnes_plan_ecartees'),
-                            r6.get('branche', '')),
+                            (r6.get('branche') or '')),
         # ⚠️ Constat `conformite/C4` — sens INVERSE des deux précédentes :
         # la colonne est CONSERVÉE, soustraite au contrôle par l'effet
         # sur décision du plan signé. Ce qui se vérifie n'est pas son
@@ -431,7 +431,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
             _prises.add(cle)
             return synth.get(cle, '')
 
-        branche_f = branche or (r6 or r3 or r1).get('branche', 'non_vie')
+        branche_f = branche or ((r6 or r3 or r1).get('branche') or 'non_vie')
         statuts = _collecter_statuts(results)
         statut_global = _statut_global(list(statuts.values()))
 
@@ -788,7 +788,7 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
 
         now = datetime.now().strftime('%d/%m/%Y %H:%M')
         arr = libelle_arrete(arrete)
-        branche_f = branche or (r6 or r3 or r1).get('branche', 'non_vie')
+        branche_f = branche or ((r6 or r3 or r1).get('branche') or 'non_vie')
         statuts = _collecter_statuts(results)
         statut_global = _statut_global(list(statuts.values()))
         s_col   = _statut_col(statut_global)
@@ -1081,7 +1081,7 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
 
         now = datetime.now().strftime('%d/%m/%Y %H:%M')
         arr = libelle_arrete(arrete)
-        branche_f = branche or (r6 or r3 or r1).get('branche', 'non_vie')
+        branche_f = branche or ((r6 or r3 or r1).get('branche') or 'non_vie')
         statuts = _collecter_statuts(results)
         statut_global = _statut_global(list(statuts.values()))
 

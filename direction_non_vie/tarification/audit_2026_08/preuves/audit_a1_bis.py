@@ -22,12 +22,21 @@ M8bis  : quand le dossier d'audit est inecrivable, le fichier d'audit est-il
          REELLEMENT absent ? (sans quoi il n'y a rien de perdu, et le
          << silence >> ne serait qu'une supposition de ma part.)
 """
+import pathlib as _pathlib
+
+#: ⚠️⚠️ LA RACINE SE DERIVE DU FICHIER, ELLE NE SE CODE PLUS EN DUR. Ce
+#: fichier portait le chemin local d'une personne reelle, dans un depot
+#: PUBLIC -- une donnee personnelle publiee. La derivation repare un
+#: second defaut au passage : ce fichier ne s'executait que sur UNE
+#: machine, celle de son auteur.
+_RACINE_DERIVEE = str(_pathlib.Path(__file__).resolve().parents[4])
+
 import pathlib
 import shutil
 import sys
 import tempfile
 
-RACINE = pathlib.Path(r'C:\Users\selse\actuaria-app')
+RACINE = pathlib.Path(_RACINE_DERIVEE)
 sys.path.insert(0, str(RACINE))
 
 import pandas as pd
