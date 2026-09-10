@@ -42,6 +42,7 @@ from core.conditions_mesure import phrase_conditions_de_mesure
 from core.derivations import sources_brutes
 from core.prix_compares import assiette_du_tarif  # noqa: F401
 from core.origine_du_prix import phrase_origine_du_prix
+from core.stabilite_du_rang import phrase_stabilite_rang
 from core.validation_tarif import phrase_decoupe
 from datetime import datetime
 from typing import Dict, List, NamedTuple, Optional, Tuple
@@ -514,6 +515,21 @@ NOTE_CLASSEMENT = (
     "multicritères, et non le Gini seul : un modèle plus discriminant peut "
     "être classé après un modèle plus stable ou plus interprétable."
 )
+
+
+def _stabilite_du_rang(result_a6) -> str:
+    """La phrase de stabilité du rang, pour les DEUX formats.
+
+    ⚠️⚠️ ELLE SE DÉCLARE, ELLE NE SE DEVINE PAS — même patron que `bande` dans
+    :mod:`core.prix_compares`. Établir l'intervalle de rang demande de
+    réexécuter la chaîne : **62,1 s par tirage, mesuré le 10/09/2026**, soit
+    ×5 le temps de production pour cinq découpes. Ce coût est une décision, pas
+    une rédaction — alors le document DIT que la mesure manque tant qu'on ne
+    la lui fournit pas sous ``result_a6['stabilite_rang']``.
+    """
+    bloc = (result_a6 or {}).get('stabilite_rang') or {}
+    return phrase_stabilite_rang(bloc.get('intervalles'),
+                                 bloc.get('tirages'))
 
 #: Le plan : quel chapitre porte quelles figures, dans quel ordre.
 #:
@@ -2643,6 +2659,12 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
         html += f'<td class="center">{star}</td></tr>\n'
     html += (f'    <p style="margin-top:6px; font-size:10px; color:{SLATE};'
              f' font-style:italic;">✦ {NOTE_CLASSEMENT}</p>\n')
+    # ⚠️⚠️ ET CE QUE LE CLASSEMENT TAIT SUR LUI-MEME. Mesure du 10/09/2026 :
+    # CINQ modeles sur SEPT changent de rang entre cinq tirages des MEMES
+    # donnees, et le prix ne bouge pas d'un centime. *Un classement muet sur
+    # sa propre stabilite se lit comme un classement stable.*
+    html += (f'    <p style="margin-top:4px; font-size:10px; color:{SLATE};'
+             f' font-style:italic;">✦ {_stabilite_du_rang(result_a6)}</p>\n')
     html += _fermer_chapitre(3)
     html += _ouvrir_chapitre(4) + '    <table>\n      ' + _row(
         titres('hypotheses'), header=True,
@@ -3279,6 +3301,13 @@ def export_word(
         p = doc.add_paragraph()
         p.paragraph_format.space_after = Pt(4)
         _run(p, '✦ ' + NOTE_CLASSEMENT, sz=8, italic=True, col=GrR)
+        # ⚠️ LES DEUX FORMATS, SOURCE UNIQUE. L'asymetrie entre HTML et Word
+        # est le defaut que ce depot a paye QUATRE fois (mapping, elasticite,
+        # qualite, reserves d'A6).
+        p_stab = doc.add_paragraph()
+        p_stab.paragraph_format.space_after = Pt(4)
+        _run(p_stab, '✦ ' + _stabilite_du_rang(result_a6), sz=8,
+             italic=True, col=GrR)
         _note = note_troncature(MAX_CLASSEMENT_WORD, len(cl4), 'modèles',
                                 'dans l\'ordre du classement')
         if _note:
