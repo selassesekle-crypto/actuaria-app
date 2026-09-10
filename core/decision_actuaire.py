@@ -142,6 +142,29 @@ def divergence(decision: DecisionActuaire | None) -> bool:
     return decision.decision in (PASSE_OUTRE, REFUS)
 
 
+def verdict_discordant(decision: DecisionActuaire | None,
+                       verdict_systeme: str | None) -> bool:
+    """Le verdict que la décision CITE est-il celui que le système a RENDU ?
+
+    ⚠️⚠️ CE MODULE ENREGISTRE UN DÉSACCORD ENTRE DEUX PARTIES ; ENCORE FAUT-IL
+    QUE LA SECONDE SOIT LE SYSTÈME. Mesuré le 10/09/2026 sur la matrice 3×3
+    des couples (verdict cité, verdict rendu) : **six couples sur neuf
+    publiaient un verdict système FAUX**, aucun n'était signalé, et
+    :func:`divergence` valait ``False`` dans les neuf — elle ne lit que le
+    champ `decision`. Le désaccord détecté était celui entre deux champs que
+    la MÊME personne remplit. *Un document qui écrit « l'actuaire SUIT le
+    verdict du systeme » alors que le système a rendu ROUGE et que la décision
+    cite VERT atteste un accord qui n'a jamais eu lieu.*
+
+    ⚠️ ``False`` QUAND LE VERDICT RÉEL N'EST PAS FOURNI — et ce n'est pas un
+    accord : on ne CONCLUT pas à la concordance faute de pouvoir comparer.
+    :func:`synthese_decision` le publie alors explicitement.
+    """
+    if decision is None or not verdict_systeme:
+        return False
+    return str(decision.verdict_systeme).strip() != str(verdict_systeme).strip()
+
+
 def decision_depuis_dict(d) -> DecisionActuaire | None:
     """Construit la décision depuis le contexte du run, ou ``None``.
 
@@ -178,6 +201,12 @@ def synthese_decision(decision: DecisionActuaire | None,
     ⚠️⚠️ TROIS ÉTATS, ET ILS NE SE CONFONDENT PAS : aucune décision
     enregistrée · un accord · un désaccord motivé. Le premier est le plus
     dangereux à mal écrire, parce qu'un document muet se lit comme un accord.
+
+    ⚠️⚠️ ET UN QUATRIÈME FAIT, ORTHOGONAL AUX TROIS : le verdict que la
+    décision CITE peut ne pas être celui que le système a RENDU. Il se
+    superpose à chacun des trois états au lieu de s'y substituer — un désaccord
+    motivé portant sur le mauvais verdict reste un désaccord, mais il n'est pas
+    opposable. Voir :func:`verdict_discordant` pour la mesure qui l'a établi.
     """
     if decision is None:
         return (
@@ -190,6 +219,22 @@ def synthese_decision(decision: DecisionActuaire | None,
     tete = (f"Verdict du systeme : {decision.verdict_systeme}. "
             f"Decision de l'actuaire : {decision.decision}, par "
             f"{decision.decide_par} le {decision.decide_le}.")
+    # ⚠️⚠️ LE VERDICT CITÉ EST-IL CELUI QUI A ÉTÉ RENDU ? L'appelant fournit
+    # déjà le vrai `statut_rag` ; jusqu'au 10/09/2026 il n'était lu que dans
+    # la branche « aucune décision », et la phrase reprenait sans contrôle un
+    # champ que le déclarant avait rempli lui-même.
+    if verdict_discordant(decision, verdict_systeme):
+        tete += (f" /!\\ CE VERDICT N'EST PAS CELUI DU SYSTEME : la decision "
+                 f"cite '{decision.verdict_systeme}', le systeme a rendu "
+                 f"'{verdict_systeme}'. La decision enregistree ne porte donc "
+                 f"pas sur le verdict de ce document, et n'est pas opposable "
+                 f"en l'etat.")
+    elif not verdict_systeme:
+        # ⚠️ NE PAS POUVOIR COMPARER N'EST PAS CONCORDER. Sans cette phrase,
+        # le document concluait a l'accord sur la seule parole du declarant.
+        tete += (" (Le verdict du systeme n'a pas ete remis a la redaction : "
+                 "ce document ne peut pas confirmer que la decision porte sur "
+                 "le bon verdict.)")
     if not divergence(decision):
         return tete + " L'actuaire SUIT le verdict du systeme."
     return (

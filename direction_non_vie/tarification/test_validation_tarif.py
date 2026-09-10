@@ -80,6 +80,7 @@ from core.validation_tarif import (
     DecoupeValidation,
     Discrimination,
     gini_lorenz,
+    indices_validation,
     mesurer_discrimination,
     publication,
     valider,
@@ -442,6 +443,171 @@ class TestLeTarifPorteSaValidation(unittest.TestCase):
             declarants, [],
             f'des plans declarent deja le blocage dur : {declarants} -- ce '
             f'lot changerait leur comportement sans que personne l ait decide')
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  LA DECOUPE NE DEPEND PAS DE L'ORDRE DU FICHIER -- defaut D6 du 09/09/2026
+# ═════════════════════════════════════════════════════════════════════════════
+class TestLaDecoupeEstInvarianteParPermutation(unittest.TestCase):
+    """⚠️⚠️ UN TRI STABLE CONSERVE L'ORDRE DU FICHIER DANS LES EX AEQUO -- et
+    une vraie colonne de date est massivement ex aequo. Mesure du 10/09/2026,
+    3 000 lignes, 12 dates distinctes, cinq permutations des MEMES lignes : le
+    holdout ne se recouvrait qu'a 89,0-90,5 %, soit 57 a 66 contrats sur 600
+    changeant de cote par le seul rangement, et le Gini de frequence publie
+    variait de 0,1701 a 0,1979.
+
+    ⚠️ LE PRIX, LUI, NE BOUGE PAS : `k` variait de 2e-12 -- le tarif s'ajuste
+    sur 100 % du portefeuille. C'est le nombre qui ACCOMPAGNE le prix dans le
+    document signe qui basculait. Le defaut deplace un VERDICT, pas un euro.
+    """
+
+    N = 3000
+    #: ⚠️ DOUZE DATES SUR 3 000 LIGNES : la forme d'une vraie colonne de date
+    #: mensuelle. Une colonne a valeurs toutes distinctes ne montrerait RIEN --
+    #: l'assiette du controle serait vide.
+    DATES = 12
+
+    @classmethod
+    def setUpClass(cls):
+        import pandas as pd
+        rng = np.random.default_rng(11)
+        dates = pd.to_datetime(
+            [f'2025-{m:02d}-01' for m in range(1, cls.DATES + 1)])
+        cls.pd = pd
+        cls.base = pd.DataFrame({
+            'date_souscription': rng.choice(dates, cls.N),
+            'valeur': rng.normal(0, 1, cls.N).round(4),
+            'cle': np.arange(cls.N),
+        })
+        cls.decoupe = DecoupeValidation(methode='chronologique',
+                                        colonne='date_souscription')
+
+    def _holdout(self, df):
+        """Les CLES du holdout -- ce qui identifie les lignes, pas leur rang."""
+        _, te = indices_validation(df, self.decoupe)
+        return set(df['cle'].to_numpy()[te])
+
+    def test_VT14_LE_SCEAU_le_holdout_est_INVARIANT_par_permutation(self):
+        """⚠️⚠️ LE CONTROLE CENTRAL DE CE CORRECTIF. Un plant qui remettrait
+        `argsort(..., kind='stable')` -- ou tout depart qui lit la POSITION --
+        doit faire rougir ceci. *Dans un groupe de dates egales aucun ordre
+        n'est plus juste qu'un autre ; ce qui n'est pas admissible, c'est que
+        le rangement du fichier tranche.*"""
+        self.assertGreater(
+            self.base['date_souscription'].nunique(), 1,
+            "l'assiette du controle exige des dates VARIEES")
+        self.assertLess(
+            self.base['date_souscription'].nunique(), self.N // 10,
+            "l'assiette du controle exige des EX AEQUO : sans eux le tri "
+            "stable est deja deterministe et ce controle ne mesure rien")
+        reference = self._holdout(self.base)
+        self.assertGreater(len(reference), 0)
+        for k in range(1, 6):
+            with self.subTest(permutation=k):
+                melange = self.base.sample(
+                    frac=1.0, random_state=100 + k).reset_index(drop=True)
+                obtenu = self._holdout(melange)
+                bascules = len(reference ^ obtenu) // 2
+                self.assertEqual(
+                    obtenu, reference,
+                    f"{bascules} contrat(s) sur {len(reference)} changent de "
+                    f"cote par le SEUL rangement du fichier : le Gini publie "
+                    f"a cote du prix n'est alors pas reproductible")
+        print(f"    VT-14 SCEAU : holdout de {len(reference)} contrats, "
+              f"identique aux 5 permutations")
+
+    def test_VT14b_la_CHRONOLOGIE_reste_respectee(self):
+        """⚠️ CONTRE-EPREUVE : le correctif departage les ex aequo, il ne
+        reordonne PAS les dates. Une fuite du futur vers le train serait un
+        defaut bien pire que celui qu'on ferme."""
+        tr, te = indices_validation(self.base, self.decoupe)
+        d = self.base['date_souscription'].to_numpy()
+        self.assertLessEqual(
+            d[tr].max(), d[te].min(),
+            "une date du train est POSTERIEURE a une date du test : la "
+            "decoupe chronologique a perdu sa chronologie")
+        self.assertEqual(len(tr) + len(te), self.N)
+        self.assertEqual(len(set(tr) & set(te)), 0,
+                         "un indice est des deux cotes")
+        print(f"    VT-14b chronologie tenue : {len(tr)} train / {len(te)} "
+              f"test, aucun recouvrement")
+
+    def test_VT14c_CONTRE_EPREUVE_la_methode_aleatoire_est_INCHANGEE(self):
+        """⚠️ Le correctif ne touche QUE la branche chronologique. Une methode
+        voisine qui bougerait serait le signe d'un correctif trop large.
+
+        ⚠️⚠️ CE CONTROLE A ETE ELARGI LE 10/09/2026, ET LE SCEAU L'A EXIGE. Il
+        ne comparait que DEUX rangements entre eux : un plant decalant la
+        graine (`graine + 1`) changeait les deux de la MEME facon et restait
+        VERT -- alors qu'il deplace un holdout reel, donc un Gini publie.
+        *Une contre-epreuve qui ne compare qu'a elle-meme ne surveille rien.*
+        Il tient desormais la VALEUR, c'est-a-dire le contrat : la permutation
+        est celle de `default_rng(decoupe.graine)`, et de personne d'autre."""
+        alea = DecoupeValidation(methode='aleatoire', graine=42)
+        a_tr, a_te = indices_validation(self.base, alea)
+        # ⚠️ LE CONTRAT, PAS UN NOMBRE MAGIQUE : la decoupe aleatoire tire sa
+        # permutation de la graine DECLAREE au plan. Un plan signe qui declare
+        # 42 doit obtenir la meme decoupe chez l'actuaire et chez le CAC.
+        attendu = np.random.default_rng(42).permutation(self.N)
+        np.testing.assert_array_equal(
+            np.concatenate([a_tr, a_te]), attendu,
+            "la decoupe aleatoire ne suit plus la graine DECLAREE : deux "
+            "lecteurs du meme plan signe obtiendraient deux holdouts")
+        # ⚠️ ET L'INVARIANCE : la methode tire des INDICES, donc les memes
+        # indices sur des lignes rangees autrement designent d'autres lignes.
+        # C'est son contrat, et il est INCHANGE.
+        b_tr, b_te = indices_validation(
+            self.base.sample(frac=1.0, random_state=7).reset_index(drop=True),
+            alea)
+        np.testing.assert_array_equal(a_tr, b_tr)
+        np.testing.assert_array_equal(a_te, b_te)
+        self.assertEqual(len(a_tr), int(self.N * 0.80))
+        print("    VT-14c methode aleatoire : la graine DECLAREE gouverne, "
+              "contrat inchange")
+
+    def test_VT14d_le_depart_vient_du_CONTENU_et_non_de_la_POSITION(self):
+        """⚠️⚠️ LA PROPRIETE, PAS SON SYMPTOME. Deux lignes STRICTEMENT
+        identiques partagent leur empreinte : elles sont interchangeables, et
+        le resultat reste invariant. Une ligne dont on change une VALEUR, en
+        revanche, peut legitimement changer de cote -- c'est la preuve que le
+        depart lit bien le contenu."""
+        jumelles = self.pd.concat([self.base, self.base.head(50)],
+                                  ignore_index=True)
+        jumelles['cle'] = np.arange(len(jumelles))
+        un = indices_validation(jumelles, self.decoupe)
+        deux = indices_validation(
+            jumelles.sample(frac=1.0, random_state=3).reset_index(drop=True),
+            self.decoupe)
+        self.assertEqual(len(un[1]), len(deux[1]),
+                         "la taille du holdout depend du rangement")
+        # ⚠️ ET LE MIROIR : une valeur modifiee EST vue. Sans lui, un depart
+        # constant -- qui ignorerait le contenu -- passerait ce controle.
+        modifie = self.base.copy()
+        modifie.loc[:, 'valeur'] = modifie['valeur'] + 1000.0
+        self.assertNotEqual(
+            self._holdout(modifie), self._holdout(self.base),
+            "changer une VALEUR ne change rien au depart : le depart ne lit "
+            "donc pas le contenu, il est constant")
+        print("    VT-14d depart lu sur le CONTENU : jumelles stables, "
+              "valeur modifiee VUE")
+
+    def test_VT14e_AUCUN_EURO_le_correctif_ne_touche_que_la_MESURE(self):
+        """⚠️⚠️ LA DECOUPE SERT A MESURER, JAMAIS A PRODUIRE. Le tarif de
+        production s'ajuste sur 100 % du portefeuille : aucune permutation ne
+        peut le deplacer. Ce controle tient la frontiere -- si un jour la
+        decoupe entrait dans le chemin du PRIX, il rougirait."""
+        import inspect
+
+        from core import validation_tarif
+        src = inspect.getsource(validation_tarif.indices_validation)
+        for interdit in ('coefficient_equilibre', 'prime_pure', 'prime_ttc',
+                         'ecretement'):
+            self.assertNotIn(
+                interdit, src,
+                f"`indices_validation` touche '{interdit}' : la decoupe "
+                f"entrerait dans le chemin du PRIX, et une permutation du "
+                f"fichier deplacerait alors un euro")
+        print("    VT-14e la decoupe reste hors du chemin du prix")
 
 
 if __name__ == '__main__':

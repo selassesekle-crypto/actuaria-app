@@ -59,6 +59,7 @@ from core.decision_actuaire import (
     decision_depuis_dict,
     divergence,
     synthese_decision,
+    verdict_discordant,
 )
 from direction_non_vie.tarification.services.rapport_modeles_tarif import (
     _bloc_decision_html,
@@ -296,6 +297,146 @@ class TestVocabulaireEtBranchement(unittest.TestCase):
             "plus atteindre le document signe.")
         print(f"    DA-12 les deux exportateurs publient, et A6 fait passer "
               f"({sorted(appelants)})")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  LE VERDICT CITE EST-IL CELUI QUI A ETE RENDU ? -- defaut D4 du 09/09/2026
+# ═════════════════════════════════════════════════════════════════════════════
+class TestLeVerdictCiteEstCeluiRendu(unittest.TestCase):
+    """⚠️⚠️ CE MODULE ENREGISTRE UN DESACCORD ENTRE DEUX PARTIES ; ENCORE
+    FAUT-IL QUE LA SECONDE SOIT LE SYSTEME. `synthese_decision` recevait le
+    vrai `statut_rag` et ne le lisait que dans la branche << aucune decision >>.
+    Des qu'une decision existait, la phrase citait `decision.verdict_systeme`,
+    un champ que le MEME appelant avait rempli.
+
+    Mesure du 10/09/2026 sur la matrice 3x3 des couples (verdict cite, verdict
+    rendu) : **six couples sur neuf publiaient un verdict systeme FAUX**, aucun
+    n'etait signale, et `divergence()` valait `False` dans les neuf. *Une
+    decision citant VERT quand le systeme a rendu ROUGE faisait ecrire au
+    document << L'actuaire SUIT le verdict du systeme >>.*
+    """
+
+    #: ⚠️ LA PHRASE CHERCHABLE, telle qu'un lecteur la cherchera.
+    ALERTE = "CE VERDICT N'EST PAS CELUI DU SYSTEME"
+
+    def test_DA13_LE_SCEAU_la_matrice_3x3_ne_laisse_AUCUN_couple_muet(self):
+        """⚠️⚠️ LE CONTROLE CENTRAL DE CE CORRECTIF, ET IL PORTE SUR LES NEUF
+        COUPLES. Un plant qui comparerait le verdict cite a LUI-MEME -- ou qui
+        rendrait `verdict_discordant` toujours faux -- doit faire rougir ceci.
+        *Verifier un seul couple discordant laisserait passer une comparaison
+        qui ne mord que sur une paire de statuts.*"""
+        muets, signales = [], 0
+        for cite in STATUTS_ADMIS:
+            for rendu in STATUTS_ADMIS:
+                with self.subTest(cite=cite, rendu=rendu):
+                    phrase = synthese_decision(_d(cite, ACCORD), rendu)
+                    if cite == rendu:
+                        continue
+                    self.assertTrue(
+                        verdict_discordant(_d(cite, ACCORD), rendu),
+                        f"({cite}, {rendu}) : la discordance n'est pas vue")
+                    if self.ALERTE not in phrase:
+                        muets.append((cite, rendu))
+                    else:
+                        signales += 1
+                        self.assertIn(rendu, phrase,
+                                      "l'alerte doit NOMMER le verdict "
+                                      "reellement rendu")
+                        self.assertIn('opposable', phrase.lower(),
+                                      "l'alerte doit dire la CONSEQUENCE : "
+                                      "la decision n'est pas opposable")
+        self.assertEqual(
+            muets, [],
+            f"{len(muets)} couple(s) publient un verdict systeme FAUX sans "
+            f"le signaler : {muets}")
+        self.assertEqual(signales, 6,
+                         "les six couples discordants de la matrice 3x3 "
+                         "doivent tous etre signales")
+        print(f"    DA-13 SCEAU : {signales}/6 couples discordants signales, "
+              f"0 muet sur 9")
+
+    def test_DA13b_CONTRE_EPREUVE_aucune_alerte_sur_un_couple_CONCORDANT(self):
+        """⚠️⚠️ UN GARDE-FOU QUI CRIE TOUJOURS EST UN GARDE-FOU QU'ON CESSE DE
+        LIRE. Sur un verdict concordant, la phrase doit etre MOT POUR MOT celle
+        d'avant le correctif."""
+        for statut in STATUTS_ADMIS:
+            with self.subTest(statut=statut):
+                d = _d(statut, ACCORD)
+                avec = synthese_decision(d, statut)
+                sans_comparaison = (
+                    f"Verdict du systeme : {statut}. Decision de l'actuaire : "
+                    f"{ACCORD}, par {_QUI} le {_QUAND}."
+                    f" L'actuaire SUIT le verdict du systeme.")
+                self.assertEqual(
+                    avec, sans_comparaison,
+                    "la phrase d'un couple concordant a change : le correctif "
+                    "ajoute du bruit la ou il n'y a rien a signaler")
+                self.assertFalse(verdict_discordant(d, statut))
+        print("    DA-13b concordants : phrase mot pour mot celle d'avant")
+
+    def test_DA13c_un_verdict_NON_REMIS_ne_vaut_pas_concordance(self):
+        """⚠️⚠️ NE PAS POUVOIR COMPARER N'EST PAS CONCORDER. Sans le verdict
+        reel, le document concluait a l'accord sur la seule parole du
+        declarant -- exactement le defaut que `DA5` ferme pour l'ABSENCE de
+        decision, non ferme ici pour l'absence de VERDICT."""
+        for absent in (None, ''):
+            with self.subTest(verdict=absent):
+                phrase = synthese_decision(_d('VERT', ACCORD), absent)
+                self.assertIn('pas ete remis', phrase,
+                              "le document doit DIRE qu'il n'a pas pu "
+                              "comparer")
+                self.assertIn('ne peut pas confirmer', phrase)
+                self.assertNotIn(self.ALERTE, phrase,
+                                 "une absence de verdict n'est pas une "
+                                 "discordance : accuser serait aussi faux "
+                                 "que se taire")
+                self.assertFalse(verdict_discordant(_d('VERT', ACCORD),
+                                                    absent))
+        print("    DA-13c verdict non remis : l'absence est DITE, pas prise "
+              "pour un accord")
+
+    def test_DA13d_la_discordance_se_superpose_au_DESACCORD_motive(self):
+        """⚠️⚠️ QUATRE ETATS, PAS TROIS -- et le quatrieme est ORTHOGONAL. Un
+        desaccord motive portant sur le MAUVAIS verdict reste un desaccord,
+        mais il n'est pas opposable. Un correctif qui aurait remplace un etat
+        par l'autre perdrait la moitie de l'information."""
+        d = _d('VERT', REFUS, motif="je refuse malgre le vert")
+        phrase = synthese_decision(d, 'ROUGE')
+        self.assertIn(self.ALERTE, phrase, "la discordance a disparu")
+        self.assertIn('DESACCORD', phrase, "le desaccord a disparu")
+        self.assertIn(d.motif, phrase, "le motif a disparu")
+        self.assertTrue(divergence(d))
+        self.assertTrue(verdict_discordant(d, 'ROUGE'))
+        print("    DA-13d desaccord motive ET discordance : les deux faits "
+              "publies")
+
+    def test_DA13e_le_VRAI_verdict_atteint_les_DEUX_formats(self):
+        """⚠️⚠️ L'ASYMETRIE, RELEVEE PAR AST. `verdict_discordant` ne sert a
+        rien si l'appelant ne lui passe pas le verdict REEL. Les deux
+        exportateurs doivent lire `statut_rag` DANS l'appel a
+        `synthese_decision`, pas un champ de la decision."""
+        chemin = (pathlib.Path(_RACINE) / 'direction_non_vie' / 'tarification'
+                  / 'services' / 'rapport_modeles_tarif.py')
+        arbre = ast.parse(chemin.read_text(encoding='utf-8'))
+        vus = {}
+        for fonction in ast.walk(arbre):
+            if not isinstance(fonction, ast.FunctionDef):
+                continue
+            for n in ast.walk(fonction):
+                if (isinstance(n, ast.Call)
+                        and getattr(n.func, 'id', None) == 'synthese_decision'):
+                    vus[fonction.name] = len(n.args) + len(n.keywords)
+        for exportateur in ('export_html', 'export_word'):
+            self.assertIn(exportateur, vus)
+            self.assertGreaterEqual(
+                vus[exportateur], 2,
+                f"`{exportateur}` appelle `synthese_decision` sans le verdict "
+                f"reel : la comparaison ne peut pas avoir lieu")
+            source = ast.unparse(arbre)
+            self.assertIn("'statut_rag'", source,
+                          "le verdict reel ne vient plus de `statut_rag`")
+        print(f"    DA-13e les deux exportateurs passent le verdict reel "
+              f"({sorted(vus)})")
 
 
 if __name__ == '__main__':

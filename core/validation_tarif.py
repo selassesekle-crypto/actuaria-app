@@ -48,6 +48,7 @@ s'invente pas dans le code qui l'applique.*
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -165,8 +166,35 @@ def indices_validation(df, decoupe: DecoupeValidation | None,
                 f"'{decoupe.colonne}' est DECLAREE et ABSENTE du fichier. Une "
                 f"declaration que le fichier ne tient pas ne se remplace pas "
                 f"en silence.")
-        ordre = np.argsort(
-            df[decoupe.colonne].to_numpy(), kind='stable')
+        # ⚠️⚠️ LES EX AEQUO SE DEPARTAGENT SUR LE CONTENU, PAS SUR LE RANG.
+        # `argsort(..., kind='stable')` conservait l'ordre DU FICHIER a
+        # l'interieur des dates egales -- et une vraie colonne de date est
+        # massivement ex aequo. Mesure du 10/09/2026, 3 000 lignes, 12 dates,
+        # cinq permutations des MEMES lignes : le holdout ne se recouvrait qu'a
+        # 89,0-90,5 %, soit 57 a 66 contrats sur 600 changeant de cote par le
+        # seul rangement, et le Gini de frequence publie variait de 0,1701 a
+        # 0,1979. *Le PRIX, lui, ne bouge pas -- k varie de 2e-12, il s'ajuste
+        # sur 100 % du portefeuille. C'est le nombre qui ACCOMPAGNE le prix
+        # dans le document signe qui basculait.*
+        #
+        # ⚠️ Dans un groupe de dates egales, aucun ordre n'est plus juste
+        # qu'un autre ; ce qui n'est pas admissible, c'est que le rangement du
+        # fichier tranche. Une empreinte du CONTENU de la ligne donne un
+        # depart reproductible et independant de la position. Deux lignes
+        # strictement identiques partagent leur empreinte -- elles sont alors
+        # interchangeables, et le resultat reste invariant.
+        #
+        # ⚠️ MEME DOCTRINE QUE `gini_lorenz` CI-DESSOUS, qui moyenne la cible
+        # dans un palier de predictions egales pour la meme raison. Le depot a
+        # deja paye ce motif une fois, sur le GINI ; il le paie ici sur la
+        # DECOUPE.
+        _dates = df[decoupe.colonne].to_numpy()
+        _cle = np.array([
+            hashlib.sha256(
+                chr(31).join(map(repr, ligne)).encode('utf-8', 'replace')
+            ).hexdigest()
+            for ligne in df.itertuples(index=False, name=None)])
+        ordre = np.lexsort((_cle, _dates))
     elif decoupe.methode == 'aleatoire':
         ordre = np.random.default_rng(decoupe.graine).permutation(n)
     else:
