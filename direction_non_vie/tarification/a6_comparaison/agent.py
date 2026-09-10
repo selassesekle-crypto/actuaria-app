@@ -133,6 +133,7 @@ from core.conformite_reglementaire import (
 from direction_non_vie.tarification.contrat_sortie import (
     publication_reglementaire,
 )
+from core.sortie_console import afficher_sans_echouer
 
 #: ⚠️⚠️ LE VOCABULAIRE DES SPLITS, NOMMÉ — constat `a6/C6`.
 #: Trois sites comparaient `backtest['split']` au littéral
@@ -1071,6 +1072,18 @@ class AgentA6Comparaison:
                         "[%s] Comparaison de prix non produite : %s",
                         audit_id, _e_cmp)
                     _comparaison = None
+            # ⚠️⚠️ L'ASSIETTE DE PUBLICATION, RESOLUE UNE FOIS ET SANS
+            # CONDITION. La calculer dans un bloc `try` voisin la rendrait
+            # indefinie des que ce bloc ne s'execute pas -- une panne la ou on
+            # voulait un garde.
+            _assiette_pub = None
+            if _tarif_publiable is not None:
+                try:
+                    from core.prix_compares import assiette_du_tarif
+                    _assiette_pub = assiette_du_tarif(_tarif_publiable)
+                except Exception as _e_ap:                 # noqa: BLE001
+                    logger.warning("[%s] Assiette de publication non "
+                                   "resolue : %s", audit_id, _e_ap)
             _excel_a6 = b''
             _word_a6  = b''
             _html_a6  = b''
@@ -1127,7 +1140,26 @@ class AgentA6Comparaison:
                         # au-dessus. Le tarif vient de l'appelant ; sans lui,
                         # ce rapport est exactement celui d'hier.
                         tarif=_tarif_publiable,
-                        portefeuille=(result_a2 or {}).get('dataframe'),
+                        # ⚠️⚠️ L'ASSIETTE DU TARIF, PAS LA SORTIE D'A2. Cette
+                        # ligne remettait `result_a2['dataframe']` -- or le
+                        # prix se calcule en RE-APPLIQUANT A2 : il tournait
+                        # donc DEUX FOIS sur le chemin du prix PUBLIE, alors
+                        # que le tarif etait ajuste sur UNE application.
+                        # *Le correctif precedent avait ferme la CONSTRUCTION
+                        # du tarif et laisse sa PUBLICATION ouverte -- un garde
+                        # pose a une porte et pas a sa jumelle.*
+                        #   Mesure du 10/09/2026 : +4 458,08 EUR sur le total
+                        #   de 3 000 contrats, 53 deplaces, jusqu'a 55,98 %.
+                        #   ⚠️⚠️ `is not None`, JAMAIS `or` : `_assiette_pub`
+                        #   est un DataFrame, et `or` en teste la valeur de
+                        #   verite -- « The truth value of a DataFrame is
+                        #   ambiguous ». Ma premiere version l'a fait, et A6
+                        #   a perdu SES DEUX documents signes. *L'idiome `or`
+                        #   vaut pour un dict ou un None, pas pour un
+                        #   DataFrame.*
+                        portefeuille=(
+                            _assiette_pub if _assiette_pub is not None
+                            else (result_a2 or {}).get('dataframe')),
                         decision_actuaire=decision_actuaire,
                         comparaison_prix=_comparaison,
                     )
@@ -1240,10 +1272,15 @@ class AgentA6Comparaison:
 
 
             if self.verbose:
-                self._afficher_rapport_console(
-                    audit_id, sous_branche, classement,
-                    modele_production, statut_rag, commentaire
-                )
+                # ⚠️⚠️ LE RENDU CONSOLE NE PEUT PLUS FAIRE ECHOUER LE CALCUL.
+                # Mesure du 10/09/2026 : console cp1252, meme code et memes
+                # donnees -> A3 `success=False`, statut ROUGE, sur un
+                # 'charmap' codec can't encode. L'affichage vit DANS le `try`
+                # metier : un incident de RENDU devenait un echec de CALCUL.
+                afficher_sans_echouer(
+                    lambda: self._afficher_rapport_console(
+                        audit_id, sous_branche, classement, modele_production, statut_rag, commentaire),
+                    logger, audit_id)
 
             # _val_sel_ déjà calculé avant le bloc Standard ActuarIA
             _gv_sel_  = self._graphiques_validation_selection(

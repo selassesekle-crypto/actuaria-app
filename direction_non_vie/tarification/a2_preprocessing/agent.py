@@ -445,6 +445,7 @@ DATA_DICTIONNAIRE = {
 # désormais AUSSI valeur_mobilier / annee_construction (mrh), pas seulement les 3
 # dérivées auto documentées — le correctif du #4 était partiel, il est complété.
 from core.derivations import sources_brutes as _sources_brutes
+from core.sortie_console import afficher_sans_echouer
 
 # ── TRAÇABILITÉ DES INTERACTIONS — désormais PILOTÉE PAR LE PLAN (Phase 2) ───
 # Les entrées ci-dessus documentent les variables dérivées "simples" (statiques,
@@ -745,10 +746,15 @@ class AgentA2Preprocessing:
                                      statut_rag, t_debut)
 
             if self.verbose:
-                self._afficher_rapport_console(
-                    audit_id, sous_branche, rapport,
-                    statut_rag, commentaire
-                )
+                # ⚠️⚠️ LE RENDU CONSOLE NE PEUT PLUS FAIRE ECHOUER LE CALCUL.
+                # Mesure du 10/09/2026 : console cp1252, meme code et memes
+                # donnees -> A3 `success=False`, statut ROUGE, sur un
+                # 'charmap' codec can't encode. L'affichage vit DANS le `try`
+                # metier : un incident de RENDU devenait un echec de CALCUL.
+                afficher_sans_echouer(
+                    lambda: self._afficher_rapport_console(
+                        audit_id, sous_branche, rapport, statut_rag, commentaire),
+                    logger, audit_id)
 
             # ── Audit trail — traçabilité ACPR ────────────────────────────────
             # Traçabilité ACPR §3.2 : dérivées statiques + interactions du PLAN.

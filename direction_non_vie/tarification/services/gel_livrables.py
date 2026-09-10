@@ -38,6 +38,7 @@ tairait une surface illisible serait le pire des trois défauts possibles ici.
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import re
 import zipfile
@@ -151,6 +152,17 @@ def contenu_xlsx(octets: bytes) -> dict:
                 cellules[cellule.coordinate] = _valeur_cellule(valeur)
         feuilles[feuille.title] = cellules
     classeur.close()
+    # ⚠️⚠️ LE MEME ANGLE MORT QUE LE WORD, PAR UN AUTRE CHEMIN. `openpyxl`
+    # rend des CELLULES ; les images d'un classeur vivent dans `xl/media/` et
+    # ne traversent jamais cette lecture. Un graphique remplace passerait donc
+    # ici aussi -- on ouvre le zip a cote, pour les figures seules.
+    try:
+        with zipfile.ZipFile(io.BytesIO(octets)) as z:
+            media = _empreintes_media(z)
+    except zipfile.BadZipFile:
+        media = {}
+    if media:
+        feuilles['<figures>'] = media
     return feuilles
 
 
@@ -190,6 +202,37 @@ _PARTIES_DOCX = re.compile(r'^word/(document|header\d*|footer\d*|footnotes|'
 #: espace ou sur `>`, jamais sur n'importe quelle lettre.
 _TEXTE_W = re.compile(r'<w:t(?:\s[^>]*)?>(.*?)</w:t>', re.DOTALL)
 
+#: ⚠️⚠️ LES FIGURES ETAIENT UN ANGLE MORT DE L'INSTRUMENT DE PREUVE, ET UN
+#: AUDIT L'A DEMONTRE EN LE TROMPANT. Deux `.docx` au texte IDENTIQUE et a la
+#: figure entierement differente -- une courbe de Lorenz discriminante contre
+#: une qui ne separe rien, toutes deux titrees pareil : le gel rendait
+#: **0 ecart**.
+#:   Refait le 10/09/2026 sur un livrable REEL : figure remplacee, 7 983
+#:   octets d'ecart, texte identique -> **0 ecart**, et `non_lues` restait
+#:   **AUCUNE**. *Le pire des trois defauts possibles selon la doctrine que ce
+#:   module enonce lui-meme : il ne voit pas, ET il ne dit pas qu'il ne voit
+#:   pas.*
+#: ⚠️⚠️ MESURE PREALABLE, AVANT DE PROPOSER QUOI QUE CE SOIT. Hacher une
+#: figure NON deterministe ferait un rouge par execution, et le correctif
+#: serait pire que le defaut. Mesure du 10/09/2026 : **31 figures dans 3
+#: livrables signes** (`a4 Word` 5, `a6 Word` 12, `rapport_modeles Word` 14),
+#: deux executions completes, **empreintes identiques**.
+#: ⚠️ Le risque residuel est un changement de version de la bibliotheque de
+#: rendu : il rougirait, et c'est le bon sens -- le document aurait change.
+_MEDIA = re.compile(r'^(word|xl|ppt)/media/')
+
+
+def _empreintes_media(z: zipfile.ZipFile) -> dict:
+    """Le CONTENU de chaque figure, par son empreinte — jamais ses octets.
+
+    ⚠️ UNE EMPREINTE, PAS LES OCTETS : un ecart doit rendre UNE ligne, pas
+    quarante kilo-octets. Le nom de la partie voyage avec elle, comme la
+    coordonnee Excel voyage avec sa valeur — une figure INSEREE ne doit pas se
+    lire comme quarante figures modifiees.
+    """
+    return {nom: hashlib.sha256(z.read(nom)).hexdigest()
+            for nom in sorted(z.namelist()) if _MEDIA.match(nom)}
+
 
 def contenu_docx(octets: bytes) -> dict:
     """Le texte du document, partie par partie, dans l'ordre de lecture."""
@@ -201,6 +244,11 @@ def contenu_docx(octets: bytes) -> dict:
             xml = z.read(nom).decode('utf-8', 'replace')
             parties[nom] = [neutraliser(_desechapper(m))
                             for m in _TEXTE_W.findall(xml)]
+        # ⚠️ LES FIGURES ENTRENT DANS LA MESURE, sous une cle a part : un
+        # ecart de figure ne doit pas se confondre avec un ecart de texte.
+        media = _empreintes_media(z)
+        if media:
+            parties['<figures>'] = media
     return parties
 
 

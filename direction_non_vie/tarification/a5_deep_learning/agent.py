@@ -69,6 +69,7 @@ from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
 )
+from core.sortie_console import afficher_sans_echouer
 
 # Export Excel (audit V7 MINEUR #2) — A5 était le seul agent sans export
 # Excel. export_excel_a5 suit le même gabarit que les autres agents.
@@ -755,10 +756,15 @@ class AgentA5DeepLearning:
                                      statut_rag, t_debut)
 
             if self.verbose:
-                self._afficher_rapport_console(
-                    audit_id, sous_branche, classement,
-                    statut_rag, commentaire
-                )
+                # ⚠️⚠️ LE RENDU CONSOLE NE PEUT PLUS FAIRE ECHOUER LE CALCUL.
+                # Mesure du 10/09/2026 : console cp1252, meme code et memes
+                # donnees -> A3 `success=False`, statut ROUGE, sur un
+                # 'charmap' codec can't encode. L'affichage vit DANS le `try`
+                # metier : un incident de RENDU devenait un echec de CALCUL.
+                afficher_sans_echouer(
+                    lambda: self._afficher_rapport_console(
+                        audit_id, sous_branche, classement, statut_rag, commentaire),
+                    logger, audit_id)
 
             # ── CALCUL VALIDATION DL ──────────────────────────────────────────
             _val_dl_ = self._valider_hypotheses_dl(

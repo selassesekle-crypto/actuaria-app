@@ -151,6 +151,7 @@ from core.severite import (ajuster_glm_cout, construire_cible_severite,
                            couts_par_sinistre_du_plan, phrase_aucun_grave,
                            phrase_seuil_suppose, seuil_declare,
                            synthese_assiette_ecretement)
+from core.sortie_console import afficher_sans_echouer
 
 # ⚠️⚠️ CONSTAT `a2/C15` — LE FILTRE GLOBAL D'AVERTISSEMENTS EST RETIRÉ.
 # `warnings.filterwarnings('ignore')` posé ICI, au niveau module, s'appliquait
@@ -682,11 +683,15 @@ class AgentA3GLM:
             )
 
             if self.verbose:
-                self._afficher_rapport_console(
-                    audit_id, sous_branche, rapport,
-                    statut_rag, commentaire,
-                    res_poisson, res_gamma
-                )
+                # ⚠️⚠️ LE RENDU CONSOLE NE PEUT PLUS FAIRE ECHOUER LE CALCUL.
+                # Mesure du 10/09/2026 : console cp1252, meme code et memes
+                # donnees -> A3 `success=False`, statut ROUGE, sur un
+                # 'charmap' codec can't encode. L'affichage vit DANS le `try`
+                # metier : un incident de RENDU devenait un echec de CALCUL.
+                afficher_sans_echouer(
+                    lambda: self._afficher_rapport_console(
+                        audit_id, sous_branche, rapport, statut_rag, commentaire, res_poisson, res_gamma),
+                    logger, audit_id)
 
             # ── CALCUL VALIDATION GLM ─────────────────────────────────────────
             _val_glm_ = self._valider_hypotheses_glm(

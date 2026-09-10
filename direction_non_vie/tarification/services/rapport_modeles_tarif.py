@@ -39,6 +39,8 @@ from core.decision_actuaire import (
 from core.mapping_client import lignes_mapping, synthese_mapping
 from core.taxes_assurance import synthese_regime_fiscal
 from core.conditions_mesure import phrase_conditions_de_mesure
+from core.derivations import sources_brutes
+from core.prix_compares import assiette_du_tarif  # noqa: F401
 from core.origine_du_prix import phrase_origine_du_prix
 from core.validation_tarif import phrase_decoupe
 from datetime import datetime
@@ -878,14 +880,57 @@ def tarif_publie(tarif, portefeuille=None, modele_recommande=None) -> dict:
     import numpy as _np
 
     plan = tarif.plan
+    # ⚠️⚠️ L'ASSIETTE VIENT DU TARIF, PAS DE L'APPELANT -- ET C'EST LE MEME
+    # GESTE QUE POUR LA COMPARAISON DE PRIX. A6 remettait ici
+    # `result_a2['dataframe']`, la sortie d'A2 ; or `predire_portefeuille`
+    # refait `a2.transform(df)`. A2 tournait donc DEUX FOIS sur le chemin du
+    # PRIX PUBLIE -- pendant que le tarif, lui, etait ajuste sur UNE seule
+    # application. *Le correctif precedent avait ferme la construction du
+    # tarif et laisse sa PUBLICATION ouverte : un garde pose a une porte et
+    # pas a sa jumelle.*
+    #   Mesure du 10/09/2026, 3 000 lignes : total publie 1 103 945,59 EUR
+    #   au lieu de 1 099 487,51 -- ecart +4 458,08 EUR (+0,4055 %), 53
+    #   contrats sur 3 000 deplaces, jusqu'a 55,98 % sur un contrat. Le
+    #   mecanisme, sans aucun GLM : cinq colonnes changent au second passage
+    #   d'A2, dont `risque_historique` sur 82 lignes.
+    #   ⚠️ ON REFUSE, ON NE SUBSTITUE PAS. Remplacer en silence l'assiette par
+    #   la bonne cacherait l'erreur de l'appelant -- et laisserait passer le
+    #   cas ou il remet un TROISIEME portefeuille. Le detecteur est celui de
+    #   `pipeline_complet`, pilote par le PLAN : les colonnes qu'A2 cree et
+    #   qu'un fichier client ne contient jamais.
+    _temoins = [c for c in plan.colonnes_derivees()
+                if c in getattr(portefeuille, 'columns', ())]
+    if _temoins:
+        return {'refus_assiette': (
+            f"AUCUN PRIX PUBLIE : le portefeuille remis porte deja "
+            f"{len(_temoins)} colonne(s) que A2 CREE -- {_temoins[:6]}. Le "
+            f"prix se calcule en re-appliquant A2, donc A2 tournerait DEUX "
+            f"FOIS ici alors que le tarif a ete ajuste sur UNE seule "
+            f"application. Mesure du 10/09/2026 sur 3 000 lignes : "
+            f"+4 458,08 EUR sur le total, jusqu'a 55,98 % sur un contrat. "
+            f"Remettez le portefeuille CLIENT, ou l'assiette du tarif "
+            f"(`assiette_du_tarif`).")}
     pred = tarif.predire_portefeuille(portefeuille)
     pure = _np.asarray(pred['prime_pure'], dtype=float)
 
     # ⚠️ LES ROLES DE DONNEES NE SONT PAS DES FACTEURS, et deux d'entre eux
     # sont des donnees personnelles. On ne montre que ce que le plan declare
     # comme FACTEUR tarifaire -- c'est aussi ce qui rend le detail lisible.
-    colonnes = [f.nom for f in plan.facteurs
-                if f.nom in getattr(portefeuille, 'columns', ())]
+    # ⚠️⚠️ EN NOMS DE SOURCE BRUTE, ET C'EST INDISSOCIABLE DU CORRECTIF
+    # D'ASSIETTE CI-DESSUS. Le detail construit un contrat a partir des noms
+    # de FACTEURS ; or six facteurs du plan `auto` sont DERIVES par A2
+    # (`km_par_an_normalise` vient de `kilometrage_annuel / exposition`).
+    # Sans la colonne SOURCE, `tarifer()` echoue sur
+    # « INV-1 rompu : transform n'a pas produit ['km_par_an_normalise'] »,
+    # et toute la table de detail sort a `None`.
+    #   ⚠️⚠️ LE DOUBLE-A2 MASQUAIT CE DEFAUT : la sortie d'A2 portait DEJA la
+    #   colonne derivee, donc `transform` la retrouvait. En remettant
+    #   l'assiette du tarif -- des colonnes CLIENT -- le defaut apparait.
+    #   *Deux fautes se compensaient ; corriger l'une seule casse le Word.*
+    #   Mesure du 10/09/2026 : `export_word` rendait 0 octet, et le contrôle
+    #   `BP-10` est ne de cette panne.
+    colonnes = [c for c in sources_brutes([f.nom for f in plan.facteurs])
+                if c in getattr(portefeuille, 'columns', ())]
 
     lignes = []
     for rang in range(min(LIGNES_DETAIL_TARIF, len(portefeuille))):
@@ -930,6 +975,24 @@ def tarif_publie(tarif, portefeuille=None, modele_recommande=None) -> dict:
     # unique. Les relire pour les reformater ferait deux redactions du meme
     # fait -- et deux redactions finissent par en dire deux choses.
     ch = chargements_du_contrat(plan)[0]
+    # ⚠️⚠️ COMBIEN DE CONTRATS DU TOTAL PORTENT UNE VALEUR IMPUTEE. Le DETAIL
+    # passe par `tarifer()`, qui REFUSE un facteur absent ou illisible ; le
+    # TOTAL passe par `predire_portefeuille()`, qui ne refuse rien -- A2
+    # impute, et le prix sort. *Le meme bloc signe pouvait afficher un refus a
+    # la ligne 3 et compter ce contrat dans son total.*
+    #   Mesure du 10/09/2026, 40 valeurs absentes sur 3 000 lignes : la couche
+    #   qualite ne voit RIEN (0 exclusion, 0 correction, 0 signalement),
+    #   `tarifer` refuse les 40, et le total en compte 14 099,19 EUR --
+    #   1,28 % du montant publie, mediane 303,53 EUR, max 767,40 EUR.
+    # ⚠️⚠️ ON REUTILISE LE PREDICAT DE `tarifer()`, JAMAIS UNE SECONDE
+    # DEFINITION : deux codes qui disent la meme regle finissent par diverger.
+    # ⚠️ MAIS ON NE LE NOURRIT PLUS LIGNE A LIGNE. `iloc` par ligne coutait
+    # 3,13 s sur 3 000 lignes et 12,55 s sur 12 000 -- pour DEUX appels par
+    # document. `to_dict('records')` construit les memes dictionnaires en une
+    # passe : 0,04 s, soit x79, resultats IDENTIQUES (mesure du 10/09/2026).
+    _imputes = [rang for rang, _c in enumerate(
+        portefeuille[colonnes].to_dict('records'))
+        if tarif.anomalies_du_contrat(_c)]
     total = {
         'n_contrats': len(portefeuille),
         'n_lignes_detail': len(lignes),
@@ -938,6 +1001,20 @@ def tarif_publie(tarif, portefeuille=None, modele_recommande=None) -> dict:
         'somme_prime_commerciale_ht': None,
         'somme_prime_ttc': None,
         'n_sans_prime_commerciale': len(portefeuille) if ch is None else 0,
+        'n_contrats_imputes': len(_imputes),
+        # ⚠️ LE RANG, JAMAIS L'IDENTIFIANT : ce rapport sort du perimetre de
+        # traitement, et un identifiant y serait une donnee personnelle.
+        'rangs_imputes': [i + 1 for i in _imputes[:20]],
+        # ⚠️ LA PHRASE SE TAIT QUAND IL N'Y A RIEN A DIRE -- meme doctrine que
+        # l'alerte d'origine du prix et que la bande de niveau.
+        'phrase_imputes': (None if not _imputes else (
+            f"/!\\ {len(_imputes)} contrat(s) sur {len(portefeuille)} portent "
+            f"un facteur ABSENT ou ILLISIBLE. Ils sont COMPTES dans le total "
+            f"ci-dessus -- A2 impute leur valeur manquante et le prix sort --, "
+            f"alors que le detail les REFUSE contrat par contrat. Le total et "
+            f"le detail ne portent donc pas sur la meme assiette. "
+            f"Rang(s) : {[i + 1 for i in _imputes[:20]]}"
+            + (' ...' if len(_imputes) > 20 else '') + '.')),
     }
     if ch is not None:
         _ht = pure * (1 + ch['frais']) * (1 + ch['marge']) / (1 - ch['commission'])
@@ -968,6 +1045,16 @@ def _bloc_tarif_html(publie: dict) -> str:
     """
     if not publie:
         return ''
+    # ⚠️⚠️ LE REFUS D'ASSIETTE SE PUBLIE, ET IL PASSE AVANT TOUT LE RESTE.
+    # `{'refus_assiette': ...}` est un dict VRAI sans clé `total` : lire
+    # `publie['total']` juste apres `if publie:` ferait perdre le RAPPORT
+    # ENTIER sur un `KeyError`. *Un refus qui casse le document est pire que
+    # le defaut qu'il refuse.*
+    if publie.get('refus_assiette'):
+        return ('<div class="raisons-plafond">\n'
+                f'  <div class="raisons-titre">{TITRE_TARIF}</div>\n'
+                f'    <p>{publie["refus_assiette"]}</p>\n'
+                '</div>\n')
     t = publie['total']
     entetes = ['#'] + list(publie['detail'][0]['facteurs']) + [
         'exposition', 'prime pure', 'commerciale HT', 'TTC']         if publie['detail'] else []
@@ -986,7 +1073,8 @@ def _bloc_tarif_html(publie: dict) -> str:
         for ligne in publie['detail'])
     phrases = '\n'.join(
         f'      <li>{p}</li>' for p in
-        (publie.get('origine'), publie.get('chargements'),
+        (publie.get('origine'), publie['total'].get('phrase_imputes'),
+         publie.get('chargements'),
          publie.get('regime_fiscal'),
          publie.get('validation_hypothese')) if p)
     return (
@@ -2997,7 +3085,15 @@ def export_word(
         _tar_w = tarif_publie(
             tarif, portefeuille,
             ((result_a6 or {}).get('modele_production') or {}).get('modele'))
-        if _tar_w:
+        # ⚠️⚠️ LE REFUS D'ASSIETTE, DANS LES DEUX FORMATS -- et AVANT de lire
+        # `['total']`, qu'un refus ne porte pas. Le Word perdrait sinon le
+        # document entier sur un `KeyError`.
+        if _tar_w and _tar_w.get('refus_assiette'):
+            p = doc.add_paragraph()
+            _run(p, TITRE_TARIF, bold=True, sz=10, col=NR).add_break()
+            _run(p, '   ' + _tar_w['refus_assiette'], sz=9,
+                 col=AR).add_break()
+        elif _tar_w:
             _t = _tar_w['total']
             p = doc.add_paragraph()
             _run(p, TITRE_TARIF, bold=True, sz=10, col=NR).add_break()
@@ -3026,6 +3122,7 @@ def export_word(
             # vient le montant qu'on vient de lire, et signale le cas ou le
             # modele recommande n'est pas celui qui l'a produit.
             for _phrase in (_tar_w.get('origine'),
+                            _tar_w['total'].get('phrase_imputes'),
                             _tar_w.get('chargements'),
                             _tar_w.get('regime_fiscal'),
                             _tar_w.get('validation_hypothese')):

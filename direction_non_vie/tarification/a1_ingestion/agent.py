@@ -46,6 +46,7 @@ from core.mapping_client import (
 from direction_non_vie.tarification.contrat_sortie import sortie_completee
 from core.qualite_donnees import (borne_exposition,
                                   exiger_canal_sans_objet)
+from core.sortie_console import afficher_sans_echouer
 
 try:
     from ..services.tarif_excel import export_excel_a1
@@ -510,10 +511,15 @@ class AgentA1Ingestion:
             )
 
             if self.verbose:
-                self._afficher_rapport_console(
-                    audit_id, sous_branche, qualite,
-                    statut_rag, score_qual, commentaire, client_id
-                )
+                # ⚠️⚠️ LE RENDU CONSOLE NE PEUT PLUS FAIRE ECHOUER LE CALCUL.
+                # Mesure du 10/09/2026 : console cp1252, meme code et memes
+                # donnees -> A3 `success=False`, statut ROUGE, sur un
+                # 'charmap' codec can't encode. L'affichage vit DANS le `try`
+                # metier : un incident de RENDU devenait un echec de CALCUL.
+                afficher_sans_echouer(
+                    lambda: self._afficher_rapport_console(
+                        audit_id, sous_branche, qualite, statut_rag, score_qual, commentaire, client_id),
+                    logger, audit_id)
 
             # ── Audit trail — traçabilité ACPR ────────────────────────────────
             _audit_trail_a1 = {
