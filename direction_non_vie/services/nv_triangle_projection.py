@@ -27,6 +27,37 @@ from typing import Dict
 import numpy as np
 
 
+def derniere_diagonale_observee(C) -> np.ndarray:
+    """La DERNIERE VALEUR CONNUE de chaque ligne — lue dans la donnee.
+
+    ⚠️⚠️ POURQUOI PAS `C[i, min(n-i-1, m-1)]`. Cette position SUPPOSE que
+    l'indice de ligne et celui de colonne avancent au meme pas. Sur 8 annees
+    de survenance developpees en 32 trimestres, elle lit le trimestre 7-i au
+    lieu du trimestre 4(8-i)-1 : la lecture tombe en PLEIN developpement, la ou
+    la provision dossier est encore lourde.
+
+    ⚠️ MESURE, base 'charges', meme portefeuille decrit de deux facons :
+        description ANNUELLE     provisions dossier 1 824 160 EUR   (+0,0 %)
+        description TRIMESTRIELLE                   3 562 111 EUR   (+95,3 %)
+        Best Estimate publie     4 880 836 EUR  ->  6 618 787 EUR   (+35,6 %)
+    Le triangle, lui, etait bien agrege : c'est la seule lecture de diagonale
+    que la porte de geometrie n'a pas emmenee avec elle.
+
+    ⚠️ SUR UN TRIANGLE AU PAS USUEL, LA DERNIERE CELLULE CONNUE **EST** CELLE
+    DE LA POSITION `n-1-i` : la zone future y vaut exactement zero. Le
+    correctif ne deplace donc rien sur la forme courante — ce n'est pas une
+    promesse, c'est la definition du masque.
+    """
+    A = np.asarray(C, dtype=float)
+    n = A.shape[0]
+    diag = np.zeros(n)
+    for i in range(n):
+        connues = np.where(np.isfinite(A[i]) & (A[i] != 0.0))[0]
+        if connues.size:
+            diag[i] = float(A[i, int(connues[-1])])
+    return diag
+
+
 def projeter_ultimates(
     C:        np.ndarray,
     facteurs: np.ndarray,

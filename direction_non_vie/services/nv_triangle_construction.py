@@ -174,18 +174,68 @@ def detecter_cumulativite(M: np.ndarray) -> str:
     return 'ambigu'
 
 
+def pas_de_developpement_observe(M: np.ndarray) -> int:
+    """Le PAS entre l'axe de survenance et l'axe de développement, LU DANS LA
+    DONNÉE — jamais déduit de la forme de la matrice.
+
+    Rend 1 pour le triangle usuel (une période de développement par année de
+    survenance), K > 1 quand le développement est plus fin que la survenance
+    (annuel × trimestriel : K = 4), et 0 quand les longueurs de lignes ne
+    décroissent pas d'un pas constant compatible avec la hauteur du triangle.
+
+    ⚠️ LE ZÉRO EST UN REFUS DE CONCLURE, PAS UNE ERREUR. L'appelant retombe
+    alors sur la règle historique `i + j >= n` : une géométrie illisible ne
+    doit pas changer le comportement d'un dossier qui marche aujourd'hui.
+
+    ⚠️ LA CONDITION `longueurs[0] == pas * n` EST CE QUI EMPÊCHE UN FAUX PAS.
+    Sans elle, trois lignes qui perdraient deux colonnes chacune par accident
+    de saisie se liraient « K = 2 » et la zone observée doublerait.
+    """
+    A = np.asarray(M, dtype=float)
+    n = A.shape[0]
+    if n < 2:
+        return 1
+    longueurs = []
+    for i in range(n):
+        connues = np.where(np.isfinite(A[i]) & (A[i] != 0.0))[0]
+        longueurs.append(int(connues[-1]) + 1 if connues.size else 0)
+    ecarts = {longueurs[i] - longueurs[i + 1] for i in range(n - 1)}
+    if len(ecarts) != 1:
+        return 0
+    pas = ecarts.pop()
+    if pas < 1 or longueurs[0] != pas * n:
+        return 0
+    return pas
+
+
 def _cumuler_et_masquer(M: np.ndarray) -> np.ndarray:
     """Incrémental → cumulé, puis remise à zéro de la ZONE FUTURE.
 
     np.cumsum propage les zéros vers la droite : sans ce masquage, les cellules
-    (i, j) avec i + j >= n porteraient la dernière valeur connue au lieu d'être
+    de la zone future porteraient la dernière valeur connue au lieu d'être
     vides (bug déjà corrigé côté validator, repris ici).
+
+    ⚠️⚠️ LA FRONTIÈRE SE LIT DANS LA DONNÉE, PAS DANS LA FORME. Ce masque
+    posait `i + j >= n`, c'est-à-dire qu'il SUPPOSAIT un pas de développement
+    égal au pas de survenance. Sur 8 années annuelles développées en 32
+    trimestres — une table de sinistres ordinaire — il mettait à ZÉRO 108 des
+    144 cellules renseignées AVANT que quiconque puisse les voir : la porte de
+    géométrie d'A7, en aval, lisait alors « pas = 1, rien à signaler ».
+    Mesuré sur ce triangle : paiements lus 1 768 070 € au lieu de 5 575 682 €,
+    et Best Estimate −52,4 % contre la description ANNUELLE du même
+    portefeuille. Multiplier par dix les 108 cellules masquées ne déplaçait
+    pas un centime — la preuve qu'elles n'étaient lues par personne.
+
+    ⚠️ POUR `pas = 1`, `j >= pas × (n − i)` EST `i + j >= n`, LITTÉRALEMENT.
+    Aucun dossier au pas usuel ne bouge, et ce n'est pas une promesse : c'est
+    la même inégalité réécrite.
     """
     C = np.cumsum(np.asarray(M, dtype=float), axis=1)
-    n = C.shape[0]
+    n, m = C.shape
+    pas = pas_de_developpement_observe(M) or 1
     for i in range(n):
-        for j in range(C.shape[1]):
-            if i + j >= n:
+        for j in range(m):
+            if j >= pas * (n - i):
                 C[i, j] = 0.0
     return C
 
@@ -253,7 +303,27 @@ def _pivot_long(df: pd.DataFrame, mesure: str, rapport: Dict,
     else:
         annee_min = int(travail['surv'].min())
         n_annees  = int(travail['surv'].max()) - annee_min + 1
-        n_dev     = max(int(travail['dev'].max()) + 1, n_annees)
+        # ⚠️⚠️ L'AXE DE DEVELOPPEMENT NE S'ELARGIT PLUS JUSQU'A LA HAUTEUR DU
+        # TRIANGLE. `max(dev.max() + 1, n_annees)` ajoutait des colonnes que
+        # AUCUNE ligne du tableau ne renseigne — la forme TRONQUEE (m < n) est
+        # pourtant la forme standard des branches longues. Le masque
+        # `i + j >= n` ne couvre pas ces colonnes pour les premieres lignes, et
+        # `np.cumsum` y RECOPIE la derniere valeur connue : le triangle sort
+        # avec des cellules fabriquees.
+        #
+        # ⚠️ LA CONSEQUENCE EST CELLE QUE LA PORTE DE GEOMETRIE EXISTE POUR
+        # FERMER, sur le chemin qu'elle ne couvre pas. Mesure sur un 8x5
+        # rigoureusement identique fourni en matrice puis en tableau :
+        #     matrice   facteurs 1,850 1,391 1,239 1,164        tail 1,2233  ROUGE
+        #     tableau   les memes + 1,0000 x3                    tail 1,0     VERT
+        #     Best Estimate 1 446 442 EUR  ->  774 064 EUR       soit -46,5 %
+        # Une reserve plus basse assortie d'un voyant plus vert, pour des
+        # colonnes qui ne portent aucune donnee. `_retirer_colonnes_vides` ne
+        # peut pas les voir : le cumul les a remplies.
+        #
+        # ⚠️ SANS EFFET DES QUE LA DONNEE EST AU MOINS AUSSI LARGE QUE HAUTE :
+        # `dev.max() + 1 >= n_annees` rendait deja `dev.max() + 1`.
+        n_dev     = int(travail['dev'].max()) + 1
 
     inc = np.zeros((n_annees, n_dev))
     hors = 0
@@ -607,8 +677,14 @@ def _diagonale_payee(C_paie: Optional[np.ndarray], base_reference: str,
     IBNR pur en croyant tenir un Best Estimate.
     """
     if C_paie is not None:
-        n, m = C_paie.shape
-        return np.array([float(C_paie[i, min(n - i - 1, m - 1)]) for i in range(n)])
+        # ⚠️ LU DANS LA DONNEE, PLUS A UNE POSITION — cf.
+        # `derniere_diagonale_observee`. La position `min(n-i-1, m-1)` suppose
+        # un pas de developpement egal au pas de survenance ; elle lit le
+        # trimestre 7-i sur un triangle annuel x trimestriel.
+        from direction_non_vie.services.nv_triangle_projection import (
+            derniere_diagonale_observee,
+        )
+        return derniere_diagonale_observee(C_paie)
     if base_reference == 'charges':
         rapport['alertes'].append(
             "⚠️ Base 'charges' SANS triangle de paiements : le payé à date est "

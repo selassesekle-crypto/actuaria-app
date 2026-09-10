@@ -83,6 +83,7 @@ import numpy as np
 __all__ = [
     'GeometrieRefusee',
     'analyser_geometrie',
+    'appliquer_geometrie',
     'longueurs_observees',
     'pas_de_developpement',
 ]
@@ -176,6 +177,31 @@ def _agreger(C: np.ndarray, K: int) -> Tuple[np.ndarray, float]:
     return B, (100.0 * ecarte / total if total else 0.0)
 
 
+def appliquer_geometrie(C_autre: np.ndarray, geo: Dict) -> np.ndarray:
+    """Applique à un SECOND triangle la géométrie retenue pour le premier.
+
+    ⚠️⚠️ POURQUOI PAS UNE SECONDE `analyser_geometrie`. Deux analyses
+    indépendantes peuvent conclure différemment : mesuré, un payé 6×10 aux
+    quatre colonnes de queue vides devenait 6×6, l'engagé restait 6×10, et
+    `munich_cl.valider_prerequis` désactivait la méthode sur
+    « Dimensions incompatibles : payé (6, 6) ≠ engagé (6, 10) » — un motif que
+    l'utilisateur ne peut pas corriger, puisqu'il avait bien fourni deux
+    matrices de MÊME forme. Le nettoyage du module fabriquait l'incompatibilité
+    qu'il reprochait ensuite aux données.
+
+    La règle est donc : l'engagé subit LA MÊME transformation, jamais la
+    sienne. Les deux triangles restent comparables par construction — ce que
+    Munich CL exige, puisqu'il rapproche cellule à cellule.
+    """
+    A = np.asarray(C_autre, dtype=float)
+    if geo.get('transforme'):
+        A, _ = _agreger(A, int(geo['pas']))
+    largeur = int(geo['triangle'].shape[1])
+    if A.shape[1] > largeur:
+        A = A[:, :largeur]
+    return A
+
+
 def analyser_geometrie(C: np.ndarray) -> Dict:
     """Rend `{'triangle', 'pas', 'infos', 'transforme'}`, ou leve
     `GeometrieRefusee`.
@@ -200,6 +226,30 @@ def analyser_geometrie(C: np.ndarray) -> Dict:
             f"tail 1,2624 → 1,0, statut ROUGE → VERT, Best Estimate −38,6 %.")
 
     n, m = A.shape
+
+    # ⚠️⚠️ « AUCUN FUTUR » N'EST PAS UNE QUESTION DE FORME, ET CE REFUS NE
+    # VIVAIT QUE DANS LA BRANCHE `m > n`. Un carré 6×6 ou un tronqué 8×4 dont
+    # TOUTES les cellules sont connues traversait en silence et recevait
+    # « pas = 1 ». Mesuré sur un 6×6 entièrement observé — donc d'IBNR NUL par
+    # construction : le module publiait 870 € de réserve, 7,3 % de la charge à
+    # date, entièrement extrapolés. Le MÊME jeu de nombres posé en 4×8 était
+    # refusé, avec le message ci-dessous. Des quatre géométries que ce module
+    # nomme, c'est la seule dont l'assiette dépendait de la forme.
+    #
+    # ⚠️ LE PRÉDICAT EST LU DANS LA DONNÉE, ET IL EST STRICTEMENT PLUS ÉTROIT
+    # QUE `pas == 0` : il exige que CHAQUE ligne aille jusqu'à la dernière
+    # colonne. Un triangle usuel a `L = [m, m−1, …]` — il n'entre jamais ici.
+    # Aucun dossier au pas usuel ne peut donc être refusé par cette porte.
+    _L = longueurs_observees(A)
+    if n >= 2 and m >= 1 and all(l == m for l in _L):
+        raise GeometrieRefusee(
+            f"Triangle {n}×{m} entièrement observé : aucune cellule n'est "
+            f"inconnue, il n'y a donc aucun futur à projeter. Un portefeuille "
+            f"dont toutes les survenances sont développées jusqu'au bout ne "
+            f"relève pas d'une méthode de provisionnement — sa charge est "
+            f"connue. Le module publierait sinon une réserve entièrement "
+            f"extrapolée.")
+
     if m <= n:
         return {'triangle': A, 'pas': 1, 'infos': infos, 'transforme': False}
 

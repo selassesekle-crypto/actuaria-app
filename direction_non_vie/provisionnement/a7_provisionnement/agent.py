@@ -45,7 +45,7 @@ from .n2_hypotheses_clm  import verifier_hypotheses_clm
 from .n2_hypotheses_bfcc import verifier_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import verifier_hypotheses_bootstrap
 from .n2_hypotheses_munich import MESSAGE_H4, verifier_hypotheses_munich
-from .geometrie_triangle import analyser_geometrie
+from .geometrie_triangle import analyser_geometrie, appliquer_geometrie
 from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif, s2_non_calculable
 # Alias VOLONTAIRE — ne pas « nettoyer » : `generer_graphiques` est aussi un
 # PARAMÈTRE public de run() (compatibilité ancienne API, cf. plus bas). Sans
@@ -122,9 +122,18 @@ def _provisions_dossier(n1_rapport: Dict, triangle_reference: str,
             "⚠️ Base 'charges' sans triangle de paiements : provisions dossier "
             "non réintégrables — le Best Estimate reste l'IBNR PUR, sous-estimé.")
         return None
-    n, m = tri.charges.shape
-    diag_charges = np.array(
-        [float(tri.charges[i, min(n - i - 1, m - 1)]) for i in range(n)])
+    # ⚠️⚠️ LA CHARGE A DATE SE LIT DANS LA DONNEE, PAS A LA POSITION
+    # `i + j = n - 1`. Le triangle de PROJECTION a bien ete ramene au pas de la
+    # survenance par la porte de geometrie ; cette lecture-ci, elle, est restee
+    # sur le triangle d'ORIGINE et a sa position supposee. Mesure sur un 8x32,
+    # base 'charges' : provisions dossier 3 562 111 EUR publiees pour
+    # 1 824 160 EUR reelles (+95,3 %), et Best Estimate +35,6 % — soit
+    # +1 737 951 EUR sur un chiffre de bilan signe.
+    from direction_non_vie.services.nv_triangle_projection import (
+        derniere_diagonale_observee,
+    )
+    n = tri.charges.shape[0]
+    diag_charges = derniere_diagonale_observee(tri.charges)
     idx = max(0, min(int(annee_base), n - 1))
     provisions = float(np.sum(diag_charges[idx:] - tri.diagonale_paiements[idx:]))
     n1['infos'].append(
@@ -593,17 +602,39 @@ class AgentA7Provisionnement:
             _geo = analyser_geometrie(C)
             if _geo['infos']:
                 n1_rapport.setdefault('infos', []).extend(_geo['infos'])
-            if _geo['transforme']:
-                C = _geo['triangle']
-                if C_engage is not None:
-                    # ⚠️ LE TRIANGLE DES CHARGES SUIT LE MEME SORT, sinon les
-                    # deux cessent d'etre comparables et Munich CL rapproche
-                    # deux geometries differentes.
-                    C_engage = analyser_geometrie(C_engage)['triangle']
-            else:
-                C = _geo['triangle']
+            C = _geo['triangle']
+            if C_engage is not None:
+                # ⚠️⚠️ LE TRIANGLE DES CHARGES SUIT LE MEME SORT — TOUJOURS, ET
+                # PAR LA MEME TRANSFORMATION. Deux defauts vivaient ici :
+                # l'engage n'etait touche QUE si le paye avait ete transforme
+                # (un simple retrait de colonnes vides le laissait donc plus
+                # large), et il subissait sa PROPRE analyse au lieu de celle du
+                # paye. Mesure : paye 6x10 a quatre colonnes de queue vides ->
+                # paye 6x6, engage 6x10, et Munich CL desactive sur
+                # « Dimensions incompatibles : paye (6, 6) != engage (6, 10) ».
+                # L'utilisateur avait fourni deux matrices de MEME forme : le
+                # motif publie designait une faute qui n'etait pas la sienne.
+                C_engage = appliquer_geometrie(C_engage, _geo)
 
             n, m = C.shape
+            # ⚠️⚠️ LES DIMENSIONS PUBLIEES DOIVENT ETRE CELLES DU TRIANGLE
+            # CALCULE. `taille`, `n_annees` et `n_dev` viennent de la facade,
+            # qui les etablit AVANT la porte de geometrie : sur un 8x32 agrege
+            # en 8x8, le dossier publiait « 8x32 » en section N1, dans l'Excel
+            # et dans l'audit trail — le seul artefact ECRIT SUR DISQUE et
+            # scelle par SHA-256 — pendant que la section N2 du MEME document
+            # publiait « 8x8 ». Deux dimensions pour un seul triangle, dans un
+            # document signe.
+            # ⚠️ LA FORME RECUE N'EST PAS PERDUE : elle est publiee a cote,
+            # sous son propre nom. Corriger un chiffre ne doit pas en effacer
+            # un autre.
+            if (int(n1_rapport.get('n_annees') or n) != n
+                    or int(n1_rapport.get('n_dev') or m) != m):
+                n1_rapport['taille_source'] = n1_rapport.get('taille')
+                n1_rapport['n_dev_source']  = n1_rapport.get('n_dev')
+                n1_rapport['taille']   = f"{n}×{m}"
+                n1_rapport['n_annees'] = n
+                n1_rapport['n_dev']    = m
             n1   = {
                 **n1_rapport,
                 'C':        C,
