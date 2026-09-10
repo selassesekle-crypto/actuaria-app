@@ -1149,7 +1149,7 @@ class AgentA3GLM:
         # `np.asarray` accepte les deux natures, et n'en suppose aucune.
         gini = self._calculer_gini(df_test[col_freq].values,
                                    np.asarray(pred_test))
-        gini_train, overfit_ratio, overfit_ic = self._stabilite_train(
+        gini_train, overfit_ratio, overfit_ic, overfit_n = self._stabilite_train(
             modele_final, gini, df_test[col_freq].values,
             np.asarray(pred_test))
 
@@ -1177,6 +1177,12 @@ class AgentA3GLM:
             'overfit_ratio':    (round(overfit_ratio, 4)
                                  if overfit_ratio is not None else None),
             'overfit_ic':       overfit_ic,
+            # ⚠️ L'EFFECTIF SUR LEQUEL LE RATIO REPOSE, PUBLIE AVEC LUI.
+            # Releve du 10/09/2026 : le ratio du Poisson varie d un facteur
+            # 4,5 sur le MEME plan par la seule taille du portefeuille. Sans
+            # son effectif, un lecteur prend une propriete de l'assiette pour
+            # une caracteristique du modele.
+            'overfit_n':        overfit_n,
             # ⚠️ BASE MESURÉE : `predict(X_test, offset=offset_test)` incorpore
             # l'exposition — le tri se fait sur un COMPTAGE (constat `a4/C10`).
             'base_gini':        BASE_GINI_COMPTAGE,
@@ -1575,7 +1581,7 @@ class AgentA3GLM:
         gini = self._calculer_gini(
             y_sev_test.values, np.asarray(pred_test)
         ) if nb_sin_test > 0 else None
-        gini_train, overfit_ratio, overfit_ic = self._stabilite_train(
+        gini_train, overfit_ratio, overfit_ic, overfit_n = self._stabilite_train(
             modele_final, gini,
             y_sev_test.values if nb_sin_test > 0 else None,
             np.asarray(pred_test) if nb_sin_test > 0 else None)
@@ -1607,6 +1613,12 @@ class AgentA3GLM:
             'overfit_ratio':    (round(overfit_ratio, 4)
                                  if overfit_ratio is not None else None),
             'overfit_ic':       overfit_ic,
+            # ⚠️ L'EFFECTIF SUR LEQUEL LE RATIO REPOSE, PUBLIE AVEC LUI.
+            # Releve du 10/09/2026 : le ratio du Poisson varie d un facteur
+            # 4,5 sur le MEME plan par la seule taille du portefeuille. Sans
+            # son effectif, un lecteur prend une propriete de l'assiette pour
+            # une caracteristique du modele.
+            'overfit_n':        overfit_n,
             # ⚠️ BASE MESURÉE : `predict(X_test)` SANS offset, sur les sinistrés
             # seuls — le tri se fait sur un COÛT MOYEN.
             'base_gini':        BASE_GINI_COUT_MOYEN,
@@ -1925,7 +1937,7 @@ class AgentA3GLM:
                 f"d'une absence de pouvoir discriminant.")
             gini_tw = None
 
-        gini_train_tw, overfit_ratio_tw, overfit_ic_tw = (
+        gini_train_tw, overfit_ratio_tw, overfit_ic_tw, overfit_n_tw = (
             self._stabilite_train(
                 modele_final, gini_tw,
                 df_test[col_target_tweedie].values,
@@ -1943,6 +1955,12 @@ class AgentA3GLM:
             'overfit_ratio':    (round(float(overfit_ratio_tw), 4)
                                  if overfit_ratio_tw is not None else None),
             'overfit_ic':       overfit_ic_tw,
+            # ⚠️ L'EFFECTIF SUR LEQUEL LE RATIO REPOSE, PUBLIE AVEC LUI.
+            # Releve du 10/09/2026 : le ratio du Poisson varie d un facteur
+            # 4,5 sur le MEME plan par la seule taille du portefeuille. Sans
+            # son effectif, un lecteur prend une propriete de l'assiette pour
+            # une caracteristique du modele.
+            'overfit_n':        overfit_n_tw,
             # ⚠️ BASE MESURÉE : `predict(X_test)` SANS offset — le tri se fait
             # sur une prédiction UNITAIRE, hors exposition.
             'base_gini':        BASE_GINI_UNITAIRE,
@@ -2170,10 +2188,26 @@ class AgentA3GLM:
         tout GLM, sans jamais l'avoir mesuré, et ce 1.0 se trouvait être le
         MINIMUM du catalogue : la normalisation lui donnait donc la meilleure
         note de stabilité possible, soit 30 % du score de sélection du modèle
-        de production. Mesuré le 03/09/2026 sur la fixture de référence, le
-        vrai ratio vaut **1,0842** (Poisson), **1,2751** (Tweedie) et
-        **1,7468** (Gamma) : le Gamma sur-apprend franchement, et se publiait
-        « parfaitement stable ».
+        de production.
+
+        ⚠️⚠️ TROIS NOMBRES ONT ÉTÉ RETIRÉS D'ICI LE 10/09/2026, ET C'EST UNE
+        LEÇON. Cette docstring publiait « 1,0842 (Poisson), 1,2751 (Tweedie),
+        1,7468 (Gamma) » comme des faits mesurés. Or `ModeleCout` n'exposait ni
+        ``model`` ni ``fittedvalues`` : **le chemin levait, et le ratio du
+        Gamma sortait à ``None``**. Le nombre publié ici ne pouvait donc plus
+        être produit — *un texte qui accompagne un comportement se relit quand
+        ce comportement change.*
+
+        ⚠️ ET CES NOMBRES DÉPENDAIENT DE L'ASSIETTE, PAS DU MODÈLE. Relevé du
+        10/09 sur trois plans et quatre tailles : le ratio du Poisson va de
+        **3,5715** (n = 800) à **0,7857** (n = 4 000) sur le même plan et le
+        même générateur — facteur 4,5 **par la seule taille**. Et à n = 800 sur
+        `mrh`, le Poisson et le Tweedie sortent ``None`` eux aussi : l'absence
+        n'est pas la signature d'une famille, c'est celle du manque de
+        sinistres. *Un verdict qui change avec la taille de l'échantillon
+        mesure du bruit.* C'est pourquoi cette méthode rend désormais aussi
+        **l'effectif d'entraînement**, publié sous ``overfit_n`` à côté du
+        ratio.
 
         La mesure ne reconstruit AUCUNE matrice : ``endog`` et
         ``fittedvalues`` du modèle ajusté portent exactement le jeu
@@ -2181,19 +2215,43 @@ class AgentA3GLM:
         que le Gini d'entraînement et le Gini de test se calculent sur la même
         définition, à la seule différence du jeu.
 
+        ⚠️⚠️ ENCORE FAUT-IL QU'ILS SOIENT SUR LA MÊME ÉCHELLE. Pour la
+        lognormale, ``endog`` est ``log(coût)`` et ``fittedvalues`` est en
+        euros : le couple rend un Gini **0,15 ×** trop petit, donc un ratio
+        près de sept fois trop petit — et **il ne lève pas**.
+        :attr:`~core.severite.ModeleCout.model` rend ``None`` dans ce cas, et
+        la garde ci-dessous le publie comme un refus motivé.
+
         La formule vient de :func:`ratio_sur_apprentissage`, partagée avec A4
         et A5 : un ratio normalisé entre modèles doit être calculé pareil pour
         tous, sinon la comparaison n'en est pas une.
         """
+        # ⚠️⚠️ LA GARDE D'ÉCHELLE PASSE AVANT TOUT CALCUL, ET ELLE EST
+        # EXPLICITE. `ModeleCout.model` rend `None` quand son `endog` n'est pas
+        # sur l'échelle du coût — la lognormale ajuste sur `log(coût)`. Laisser
+        # ce cas tomber dans l'`except` ci-dessous publierait un motif
+        # illisible (« 'NoneType' object has no attribute 'endog' »), qui se
+        # lirait comme une panne au lieu d'un refus motivé.
+        _sous_jacent = getattr(modele, 'model', None)
+        if _sous_jacent is None:
+            logger.warning(
+                "[A3] Stabilité NON MESURÉE — la cible d'entraînement de ce "
+                "modèle n'est pas sur l'échelle de ses valeurs ajustées "
+                "(lognormale : `endog` en log(cout), `fittedvalues` en euros). "
+                "Les apparier rendrait un Gini d'entrainement environ 0,15 x "
+                "trop petit, donc un modele qui PARAIT moins sur-apprendre "
+                "qu'il ne le fait — et le meilleur score de stabilite. "
+                "Publiee a None, jamais a 1.0.")
+            return None, None, None, None
         try:
-            y_train  = np.asarray(modele.model.endog,  dtype=float)
+            y_train  = np.asarray(_sous_jacent.endog,  dtype=float)
             mu_train = np.asarray(modele.fittedvalues, dtype=float)
         except Exception as exc:                                  # noqa: BLE001
             logger.warning(
                 f"[A3] Stabilité NON MESURÉE ({type(exc).__name__}: {exc}) — "
                 f"publiée à None, jamais à 1.0 : un ratio fabriqué à 1.0 est "
                 f"le meilleur score de stabilité possible chez A6.")
-            return None, None, None
+            return None, None, None, None
         gini_train = self._calculer_gini(y_train, mu_train)
         # ⚠️⚠️ ET SON INTERVALLE, PARCE QUE C'EST ICI QU'IL PEUT SE CALCULER.
         # H1 d'A4 se déclare NON CONCLUANT quand l'intervalle du ratio enjambe
@@ -2204,7 +2262,21 @@ class AgentA3GLM:
         #   *Un correctif posé sur le chemin minoritaire est décoratif : il
         #   faut le poser là où la grandeur est réellement produite.*
         ic = intervalle_sur_apprentissage(y_train, mu_train, y_test, pred_test)
-        return gini_train, ratio_sur_apprentissage(gini_train, gini_test), ic
+        # ⚠️⚠️ LE RATIO VOYAGE AVEC SON EFFECTIF, ET C'EST UNE RÉSERVE MESURÉE.
+        # Relevé du 10/09/2026 sur trois plans et quatre tailles : le ratio du
+        # Poisson va de 3,5715 (n=800) à 0,7857 (n=4 000) sur le MÊME plan et
+        # le MÊME générateur — facteur 4,5 par la seule taille. Et à n=800 sur
+        # `mrh`, le Poisson et le Tweedie sortent `None` eux aussi : l'absence
+        # n'est pas la signature d'une famille, c'est celle du manque de
+        # sinistres.
+        #   *Un critère qui pèse 30 % du score désignant le modèle de
+        #   production doit dire sur combien d'observations il repose.*
+        # ⚠️ C'est le NOMBRE DE LIGNES d'entraînement du modèle concerné —
+        # contrats pour la fréquence, contrats sinistrés pour le coût. Pas un
+        # nombre de sinistres : le déduire des deux cas demanderait de deviner
+        # la nature de la cible, et un effectif faux est pire qu'aucun.
+        return (gini_train, ratio_sur_apprentissage(gini_train, gini_test),
+                ic, len(y_train))
 
     def _calculer_gini(
         self,

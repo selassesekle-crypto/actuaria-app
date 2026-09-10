@@ -499,6 +499,58 @@ class ModeleCout:
         valeur = getattr(self._res, 'null_deviance', None)
         return None if valeur is None else float(valeur)
 
+    @property
+    def fittedvalues(self):
+        """Les valeurs ajustées, SUR L'ÉCHELLE DU COÛT — la même que
+        :meth:`predict`.
+
+        ⚠️ La lognormale ajuste sur ``log(coût)`` : rendre
+        ``_res.fittedvalues`` tel quel donnerait un Gini d'entraînement sur une
+        AUTRE grandeur que le Gini de test. Le smearing de Duan s'applique donc
+        ici aussi, exactement comme dans :meth:`predict`.
+        """
+        mu = np.asarray(self._res.fittedvalues, dtype=float)
+        if self.famille_severite == "lognormal":
+            return np.exp(mu) * self._duan
+        return mu
+
+    @property
+    def model(self):
+        """Le modèle sous-jacent — son ``endog`` porte la cible d'entraînement.
+
+        ⚠️⚠️ ``None`` POUR LA LOGNORMALE, ET C'EST LE CŒUR DU CORRECTIF. Son
+        ``endog`` est ``log(coût)`` quand :attr:`fittedvalues` est en EUROS :
+        apparier les deux compare des logarithmes à des euros. **Et cela ne
+        lève pas** — le couple rend un nombre parfaitement plausible.
+
+        Mesuré le 10/09/2026, 3 000 sinistres, mêmes données :
+
+            famille               échelle d'endog   Gini couple   Gini cohérent
+            gamma                            coût      0,186802        0,186802
+            inverse_gaussienne               coût      0,186795        0,186795
+            lognormal                   LOG(coût)      0,027333        0,186791
+
+        Soit **0,15 ×**, et sur le ratio de sur-apprentissage **0,1367 au lieu
+        de 0,9340**. Un ratio près de sept fois trop petit se lit « ce modèle
+        sur-apprend peu » et lui donne le MEILLEUR score de stabilité — c'est
+        exactement le défaut que ce correctif existe pour fermer, réintroduit
+        sur une autre famille.
+
+        ⚠️ **LA BORNE EST DANS LE CODE, PAS DANS CETTE DOCSTRING.** Une suite
+        documentée n'est pas une suite tenue : un lecteur qui apparie les deux
+        attributs sans avoir lu ce paragraphe obtiendrait un nombre faux et
+        silencieux. Ici il obtient ``None``, et l'appelant doit le traiter.
+
+        ⚠️ Même doctrine que :attr:`deviance` et :attr:`null_deviance`
+        ci-dessus : *une grandeur qui n'a pas de sens pour ce modèle n'a pas de
+        valeur.* Aucun plan ne déclare `lognormal` aujourd'hui (20/20 en
+        `gamma`, mesuré) : la branche est LATENTE, et c'est précisément pour
+        cela qu'elle doit être fermée maintenant.
+        """
+        if self.famille_severite == "lognormal":
+            return None
+        return self._res.model
+
 
 def ajuster_glm_cout(Xc: pd.DataFrame, y_cout: pd.Series,
                      famille_severite: str = "gamma") -> ModeleCout:

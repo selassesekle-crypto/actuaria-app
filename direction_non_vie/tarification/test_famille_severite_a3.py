@@ -57,6 +57,7 @@ for _c in (_RACINE, _ICI):
         sys.path.insert(0, _c)
 
 import numpy as np
+import pandas as pd
 
 from core.plan_tarifaire import PlanTarifaire
 from core.severite import ModeleCout, ajuster_glm_cout
@@ -286,6 +287,241 @@ class TestA3AjusteLaFamilleDeclaree(unittest.TestCase):
         self.assertIsNotNone(
             (second.get('metriques') or {}).get('gamma', {}).get('deviance'),
             "le second run n'a pas de deviance : il ajuste encore un OLS")
+
+    # ══════════════════════════════════════════════════════════════════════
+    #  D9 -- LA STABILITE DU GLM DE COUT SE MESURE, ET SUR LA BONNE ECHELLE
+    # ══════════════════════════════════════════════════════════════════════
+
+    def test_FS8_LE_SCEAU_A3_MESURE_enfin_la_stabilite_du_GLM_de_cout(self):
+        """⚠️⚠️ LE DEFAUT QUE CE LOT FERME. `_stabilite_train` lit
+        `modele.model.endog` et `modele.fittedvalues` ; `ModeleCout` n'exposait
+        NI L'UN NI L'AUTRE. L'erreur etait avalee, le ratio du Gamma sortait a
+        `None` -- et A6 RETIRE alors le critere du score et renormalise les
+        trois autres. *Le modele dont la stabilite n'a jamais ete mesuree etait
+        note sur ses trois MEILLEURS criteres, quand les autres l'etaient sur
+        quatre.*
+
+        Mesure du 10/09/2026 avant correctif : Poisson 2,5646, Tweedie 7,3239,
+        **Gamma `None`** -- seul le modele non mesure echappait a sa penalite.
+        """
+        _, resultat = self._a3('gamma')
+        gamma = (resultat.get('metriques') or {}).get('gamma') or {}
+        self.assertIsNotNone(
+            gamma.get('gini_train'),
+            "le Gini d'entrainement du GLM de cout est encore `None` : le "
+            "critere de stabilite sort du score et le Gamma est note sur ses "
+            "trois meilleurs criteres")
+        print(f"    FS-8 SCEAU : gini_train du Gamma MESURE "
+              f"({gamma.get('gini_train')})")
+
+    def test_FS8b_LE_SCEAU_le_couple_d_echelles_INCOHERENT_est_IMPOSSIBLE(
+            self):
+        """⚠️⚠️ LE CONTROLE LE PLUS IMPORTANT DE CE LOT, ET IL EST
+        *COMPORTEMENTAL*. La lognormale ajuste sur `log(cout)` : apparier son
+        `endog` a des `fittedvalues` en EUROS compare des logarithmes a des
+        euros. **Et cela NE LEVE PAS** -- le couple rend un nombre plausible.
+
+        Mesure du 10/09/2026, 3 000 sinistres : Gini du couple **0,027333**
+        contre **0,186791** pour le couple coherent, soit **0,15 x** ; sur le
+        ratio de sur-apprentissage, **0,1367 au lieu de 0,9340**. Un ratio pres
+        de sept fois trop petit se lit << ce modele sur-apprend peu >> et lui
+        donne le MEILLEUR score de stabilite : le defaut que D9 ferme,
+        reintroduit sur une autre famille.
+
+        ⚠️ Un plant qui rendrait `model` pour la lognormale -- ou qui
+        retirerait le smearing de `fittedvalues` -- doit faire rougir ceci.
+        """
+        import statsmodels.api as sm  # noqa: F401
+        rng = np.random.default_rng(7)
+        n = 1500
+        X = pd.DataFrame({
+            'const': 1.0,
+            'age': rng.uniform(18, 80, n).round(0),
+            'puissance': rng.uniform(4, 15, n).round(0),
+        })
+        mu = 900 * np.exp(0.012 * (X['age'] - 40)
+                          + 0.08 * (X['puissance'] - 8))
+        cout = pd.Series(rng.gamma(3.0, mu / 3.0, n))
+
+        for famille in _FAMILLES:
+            with self.subTest(famille=famille):
+                m = ajuster_glm_cout(X, cout, famille)
+                ajuste = np.asarray(m.fittedvalues, dtype=float)
+                # ⚠️ LA PROPRIETE : `fittedvalues` est sur l'echelle du COUT,
+                # la meme que `predict` -- pour les TROIS familles.
+                np.testing.assert_allclose(
+                    ajuste, m.predict(X), rtol=1e-9,
+                    err_msg=f"'{famille}' : `fittedvalues` n'est pas sur "
+                            f"l'echelle de `predict`")
+                if famille == 'lognormal':
+                    self.assertIsNone(
+                        m.model,
+                        "`model` est expose pour la lognormale : son `endog` "
+                        "est en log(cout) et l'apparier a `fittedvalues` rend "
+                        "un Gini environ 0,15 x trop petit, SANS LEVER")
+                else:
+                    self.assertIsNotNone(
+                        m.model,
+                        f"'{famille}' a perdu son `model` : sa stabilite "
+                        f"redevient NON MESUREE")
+                    endog = np.asarray(m.model.endog, dtype=float)
+                    # ⚠️ MEME ECHELLE, MESUREE : l'ordre de grandeur de la
+                    # cible et celui des valeurs ajustees se tiennent.
+                    self.assertLess(
+                        abs(np.log10(np.mean(endog) / np.mean(ajuste))), 0.5,
+                        f"'{famille}' : la cible et les valeurs ajustees ne "
+                        f"sont pas sur la meme echelle")
+        print("    FS-8b SCEAU : `fittedvalues` sur l'echelle du cout pour "
+              "3/3 familles, `model` refuse pour la seule lognormale")
+
+    def test_FS8c_la_borne_est_dans_le_CODE_et_non_dans_une_docstring(self):
+        """⚠️⚠️ *UNE SUITE DOCUMENTEE N'EST PAS UNE SUITE TENUE.* La premiere
+        redaction de ce correctif exposait `model` pour TOUTES les familles et
+        se contentait d'AVERTIR en docstring que le calcul ne vaut que pour
+        gamma et inverse-gaussienne. Un lecteur qui n'a pas lu le paragraphe
+        obtient alors un nombre faux et silencieux.
+
+        Ce controle exige que le refus soit un COMPORTEMENT, pas un texte : il
+        lit ce que l'objet REND, jamais ce que sa documentation annonce."""
+        m = ajuster_glm_cout(
+            pd.DataFrame({'const': 1.0,
+                          'x': np.linspace(1, 10, 400)}),
+            pd.Series(np.linspace(100, 900, 400)), 'lognormal')
+        self.assertIsNone(m.model)
+        # ⚠️ ET LE MIROIR : la docstring, elle, doit EXISTER -- un refus muet
+        # se lit comme une panne.
+        doc = (ModeleCout.model.__doc__ or '')
+        self.assertIn('lognormal', doc.lower(),
+                      "le refus ne dit pas POUR QUELLE famille il joue")
+        self.assertTrue(
+            any(mot in doc.lower() for mot in ('echelle', 'échelle')),
+            "le refus ne dit pas POURQUOI : sans le motif, un lecteur le "
+            "prend pour un oubli et le << repare >>")
+        print("    FS-8c la borne est un COMPORTEMENT, et elle dit son motif")
+
+    def test_FS8d_A3_sur_lognormale_REFUSE_au_lieu_de_publier_un_faux(self):
+        """⚠️ CONTRE-EPREUVE DE BOUT EN BOUT. Le correctif rend des mesures ; il
+        ne doit pas rendre une mesure FAUSSE. Sur un plan lognormal, A3 doit
+        publier `None` -- le refus -- et non le nombre 0,15 x trop petit."""
+        _, resultat = self._a3('lognormal')
+        gamma = (resultat.get('metriques') or {}).get('gamma') or {}
+        self.assertIsNone(
+            gamma.get('gini_train'),
+            "A3 publie un Gini d'entrainement pour un GLM lognormal : il "
+            "compare des logarithmes a des euros")
+        self.assertIsNone(gamma.get('overfit_ratio'))
+        print("    FS-8d lognormale : refus publie, aucun nombre faux")
+
+    def test_FS8f_le_refus_publie_un_MOTIF_LISIBLE_pas_une_panne(self):
+        """⚠️⚠️ SANS CE CONTROLE, LA GARDE POUVAIT DISPARAITRE SANS RIEN FAIRE
+        ROUGIR. `ModeleCout.model` rendant `None`, un `None.endog` leve, et
+        l'`except` general de `_stabilite_train` rattrape : le RESULTAT est le
+        meme -- `None` -- mais le motif publie devient
+        << 'NoneType' object has no attribute 'endog' >>, qui se lit comme une
+        PANNE au lieu d'un refus motive.
+
+        *Un refus muet -- ou incomprehensible -- se lit comme une panne, et une
+        panne on la << repare >> en retirant la garde.* Ce controle lit donc ce
+        que le journal DIT, pas seulement ce que la methode rend."""
+        from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
+
+        modele = ajuster_glm_cout(
+            pd.DataFrame({'const': 1.0, 'x': np.linspace(1, 10, 400)}),
+            pd.Series(np.linspace(100, 900, 400)), 'lognormal')
+        agent = AgentA3GLM(models_path='/tmp', audit_path='/tmp')
+
+        logging.disable(logging.NOTSET)
+        # ⚠️ LE NOM REEL DU JOURNAL, LU AU FICHIER ()
+        # -- le deduire du chemin du module donnait un journal VIDE, donc un
+        # controle qui passait sans rien lire.
+        journal = logging.getLogger('actuaria.a3')
+        capture = io.StringIO()
+        poignee = logging.StreamHandler(capture)
+        poignee.setLevel(logging.WARNING)
+        journal.addHandler(poignee)
+        try:
+            rendu = agent._stabilite_train(modele, 0.20)
+        finally:
+            journal.removeHandler(poignee)
+            logging.disable(logging.CRITICAL)
+
+        self.assertEqual(len(rendu), 4,
+                         "`_stabilite_train` ne rend plus quatre valeurs : "
+                         "l'effectif a disparu du contrat de sortie")
+        self.assertEqual(list(rendu), [None, None, None, None])
+        motif = capture.getvalue()
+        self.assertTrue(motif.strip(), "le refus est MUET")
+        self.assertNotIn(
+            'NoneType', motif,
+            "le motif publie est une trace d'exception : la garde explicite a "
+            "disparu et le refus se lit comme une panne")
+        # ⚠️ LES DEUX GRAPHIES, ACCENTUEE OU NON. Le motif ecrit << echelle >>
+        # avec son accent ; chercher la forme nue faisait echouer ce controle
+        # sur un message pourtant juste -- le piege de la graphie, deja paye
+        # six fois dans ce depot (voir `TX2b`).
+        for graphies in (('echelle', 'échelle'), ('log',)):
+            self.assertTrue(
+                any(g in motif.lower() for g in graphies),
+                f"le motif ne dit rien de {graphies[0]!r} : un lecteur ne "
+                f"peut pas savoir POURQUOI la stabilite n'est pas mesuree")
+        print("    FS-8f le refus publie un motif LISIBLE, pas une trace "
+              "d'exception")
+
+    def test_FS8e_CONTRE_EPREUVE_les_autres_moteurs_sont_INCHANGES(self):
+        """⚠️⚠️ LE CORRECTIF EST CIBLE, ET C'EST MESURE. Il touche le GLM de
+        COUT ; le Poisson et le Tweedie passent par des `GLMResults` de
+        statsmodels et ne doivent pas bouger d'un chiffre. Un correctif qui
+        deplacerait leurs ratios deplacerait le classement pour une raison
+        qui n'est pas la sienne."""
+        _, resultat = self._a3('gamma')
+        metriques = resultat.get('metriques') or {}
+        for moteur in ('poisson', 'tweedie'):
+            with self.subTest(moteur=moteur):
+                bloc = metriques.get(moteur) or {}
+                self.assertIsNotNone(
+                    bloc.get('gini_train'),
+                    f"'{moteur}' a PERDU sa stabilite : le correctif deborde "
+                    f"de son assiette")
+        print("    FS-8e Poisson et Tweedie gardent leur stabilite mesuree")
+
+    def test_FS9_le_ratio_VOYAGE_avec_son_effectif(self):
+        """⚠️⚠️ RESERVE MESUREE, ET ELLE NE RENVERSE PAS LA DECISION -- elle la
+        complete. Releve du 10/09/2026 sur trois plans et quatre tailles : le
+        ratio du Poisson va de **3,5715** (n = 800) a **0,7857** (n = 4 000)
+        sur le MEME plan et le MEME generateur -- facteur 4,5 par la seule
+        taille. Et a n = 800 sur `mrh`, le Poisson et le Tweedie sortent `None`
+        eux aussi : *l'absence n'est pas la signature d'une famille, c'est
+        celle du manque de sinistres.*
+
+        Restituer la mesure sans dire sur combien d'observations elle repose
+        echangerait une asymetrie contre une FAUSSE PRECISION -- et ce critere
+        pese 30 % du score qui designe le modele de production.
+        """
+        _, resultat = self._a3('gamma')
+        metriques = resultat.get('metriques') or {}
+        vus = 0
+        for moteur in ('poisson', 'gamma', 'tweedie'):
+            bloc = metriques.get(moteur) or {}
+            if 'overfit_ratio' not in bloc:
+                continue
+            vus += 1
+            with self.subTest(moteur=moteur):
+                self.assertIn(
+                    'overfit_n', bloc,
+                    f"'{moteur}' publie un ratio SANS son effectif : un "
+                    f"lecteur prend une propriete de l'assiette pour une "
+                    f"caracteristique du modele")
+                if bloc.get('overfit_ratio') is not None:
+                    self.assertIsInstance(bloc['overfit_n'], int)
+                    self.assertGreater(
+                        bloc['overfit_n'], 0,
+                        f"'{moteur}' : un ratio mesure sur zero observation "
+                        f"n'est pas un ratio")
+        self.assertGreaterEqual(
+            vus, 3, "l'assiette de ce controle s'est retrecie : des moteurs "
+                    "ont disparu du relevé")
+        print(f"    FS-9 les {vus} moteurs publient leur ratio AVEC son "
+              f"effectif")
 
 
 if __name__ == '__main__':
