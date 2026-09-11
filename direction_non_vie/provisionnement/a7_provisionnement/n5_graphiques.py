@@ -711,8 +711,16 @@ def g6_distribution_bootstrap(n3: Dict, n2: Optional[Dict] = None,
         hovertemplate="Réserve : <b>%{x:,.0f} €</b><br>Fréquence : <b>%{y}</b><extra></extra>",
     ))
 
+    # ⚠️⚠️ LA MEME PORTE QUE N4, ET LA FIGURE LA CONSULTE. Le §8 du meme
+    # rapport declare ces percentiles NON PUBLIES pendant que cette figure
+    # les annotait en grand — P75, P90, P99.5, sur le meme run.
+    # ⚠️ LA DISTRIBUTION RESTE TRACEE : c'est une FORME, pas un chiffre
+    # opposable. Ce sont ses ANNOTATIONS CHIFFREES qui sortent, et la
+    # figure DIT pourquoi elle n'en porte plus.
+    _porte_boot = (n4 or {}).get('reserve_p90_boot') is not None
+
     # Percentiles
-    percentiles_config = [
+    percentiles_config = [] if not _porte_boot else [
         (boot.get('p50',  0), 'P50',   CYAN,  'solid',  1.5),
         (boot.get('p75',  0), 'P75',   VERT,  'dash',   1.5),
         (boot.get('p90',  0), 'P90',   AMBRE, 'dash',   2),
@@ -722,6 +730,16 @@ def g6_distribution_bootstrap(n3: Dict, n2: Optional[Dict] = None,
         # 25 040 191 € pour une charge de capital publiée à 5 798 631 €.
         (boot.get('p99_5',0), 'P99.5', ROUGE, 'dash', 2.5),
     ]
+    if not _porte_boot:
+        # ⚠️ ELLE DIT POURQUOI. Une figure qui perd ses reperes sans un mot
+        # laisse croire que la distribution n'en avait pas ; le sujet est
+        # qu'ils EXISTENT et que la gouvernance des hypotheses les retient.
+        fig.add_annotation(
+            text=("Percentiles NON PUBLIÉS — BOOT-H3 ou BOOT-H4 non "
+                  "validée (gouvernance N4)."),
+            xref='paper', yref='paper', x=0.5, y=1.02,
+            showarrow=False, font=dict(size=10, color=ROUGE),
+        )
     for val, lbl, clr, dash, width in percentiles_config:
         if val > 0:
             fig.add_vline(

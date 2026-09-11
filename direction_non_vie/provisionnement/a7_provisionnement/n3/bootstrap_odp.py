@@ -474,7 +474,14 @@ def bootstrap_odp(
     ])
 
     # ── 2. Réserve CL de référence ────────────────────────────────────────────
+    # DEUX cibles, et la distinction est le sujet du correctif ci-dessous :
+    #   · `reserve_ref`      PORTE la queue — c'est elle qui recentre la
+    #     distribution, pour que le point estimate publié soit celui du BE ;
+    #   · `reserve_ref_hors_queue` ne la porte PAS — c'est la seule à laquelle
+    #     la moyenne simulée soit COMPARABLE, la simulation s'arrêtant à la
+    #     dernière colonne observée.
     reserve_ref = _reserve_cl_simple(C, facteurs, annee_base, tail_factor)
+    reserve_ref_hors_queue = _reserve_cl_simple(C, facteurs, annee_base, 1.0)
 
     # ── 3. Simulations Bootstrap ──────────────────────────────────────────────
     reserves_sim, reserves_par = _simuler(
@@ -488,6 +495,22 @@ def bootstrap_odp(
     moyenne_brute = float(np.mean(reserves_sim))
     biais         = moyenne_brute - reserve_ref
     reserves_sim  = reserves_sim - biais
+    # ⚠️⚠️ LE BIAIS PUBLIÉ SE MESURE HORS QUEUE, ET C'EST TOUT LE CORRECTIF.
+    # `_simuler` projette de `k_i` à `m-2` : AUCUNE simulation ne porte la
+    # queue. La cible de recentrage, elle, la porte depuis le lot « queue » —
+    # à raison, sans quoi le point estimate sortirait sous le Best Estimate.
+    # Leur différence mêlait donc deux grandeurs sans rapport, et c'est la
+    # SECONDE qui dominait. Mesuré, moyenne simulée INVARIANTE d'un tail à
+    # l'autre (60 471 EUR sur RAA, 18 982 939 EUR sur GenIns) :
+    #     tail 1,00  1,03  1,06  1,10
+    #     RAA     +15,99  +4,33  -5,21  -15,50 %
+    #     GenIns   +1,62  -5,82 -12,23  -19,55 %
+    # N4 déclenche une RECOMMANDATION au-delà de 2,5 % et lui donne une cause :
+    # « les gardes d'incrément mordent, vérifier la sur-dispersion et les
+    # incréments négatifs ». Sur GenIns à tail 1,06 elle se déclenchait à
+    # -12,23 % pour un écart qui est ENTIÈREMENT la queue — l'actuaire était
+    # envoyé chercher une cause qui n'existe pas.
+    biais_hors_queue = moyenne_brute - reserve_ref_hors_queue
 
     # ── 4. Distribution et statistiques ──────────────────────────────────────
     be_boot  = float(np.mean(reserves_sim))
@@ -525,8 +548,10 @@ def bootstrap_odp(
 
     return _resultat_nominal(
         reserves_sim, be_boot, std_boot, cv_boot, std_param, std_proc,
-        moyenne_brute, biais, reserve_ref, phi, n_obs, n_params, n_sim,
-        statut, msg, ip_neg)
+        moyenne_brute, biais_hors_queue, reserve_ref_hors_queue, phi,
+        n_obs, n_params, n_sim, statut, msg, ip_neg,
+        tail_factor=float(tail_factor),
+        translation_queue=float(reserve_ref - reserve_ref_hors_queue))
 
 
 def _resultat_nominal(
@@ -546,6 +571,8 @@ def _resultat_nominal(
     statut:    str,
     msg:       str,
     ip_neg:    Dict,
+    tail_factor: float = 1.0,
+    translation_queue: float = 0.0,
 ) -> Dict:
     """Contrat de sortie du Bootstrap nominal.
 
@@ -576,6 +603,22 @@ def _resultat_nominal(
         # 5,8 fois trop grand produisait +79,4 % sur RAA.
         'moyenne_avant_recentrage': round(moyenne_brute, 2),
         'biais_recentrage_pct':     round(biais / max(abs(reserve_ref), 1e-9), 6),
+        # ⚠️ CE QUE LA QUEUE AJOUTE, DIT SÉPARÉMENT — et non mêlé au biais.
+        # La distribution est translatée de ce montant : la queue entre donc
+        # dans le point estimate publié SANS porter la moindre dispersion.
+        # L'écart-type ci-dessus est INVARIANT au facteur de queue (mesuré :
+        # 2 457 950 EUR sur GenIns pour tail 1,00 comme pour 1,10), alors que
+        # la queue pèse jusqu'à 4,9 MEUR sur le Best Estimate. Les percentiles
+        # Bootstrap sont donc MINORÉS de l'incertitude de queue — c'est ce que
+        # CLM-H4 dit déjà de sigma_Mack, et que rien ne disait du Bootstrap.
+        'tail_factor_applique':     round(float(tail_factor), 6),
+        'translation_queue':        round(float(translation_queue), 2),
+        'queue_sans_dispersion': (
+            "La queue de développement est ajoutée par TRANSLATION de la "
+            "distribution : elle entre dans le point estimate et n'ajoute "
+            "AUCUNE dispersion. Les percentiles publiés ici ne couvrent donc "
+            "pas l'incertitude de la queue."
+            if float(tail_factor) > 1.0 + 1e-12 else None),
 
         # Percentiles (distribution empirique)
         'p50':            round(float(np.percentile(reserves_sim, 50)),   2),

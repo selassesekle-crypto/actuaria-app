@@ -45,7 +45,11 @@ from .n2_hypotheses_clm  import verifier_hypotheses_clm
 from .n2_hypotheses_bfcc import verifier_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import verifier_hypotheses_bootstrap
 from .n2_hypotheses_munich import MESSAGE_H4, verifier_hypotheses_munich
-from .geometrie_triangle import analyser_geometrie, appliquer_geometrie
+from .geometrie_triangle import (
+    MARQUE_GEOMETRIE,
+    analyser_geometrie,
+    appliquer_geometrie,
+)
 from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif, s2_non_calculable
 # Alias VOLONTAIRE — ne pas « nettoyer » : `generer_graphiques` est aussi un
 # PARAMÈTRE public de run() (compatibilité ancienne API, cf. plus bas). Sans
@@ -466,6 +470,17 @@ class AgentA7Provisionnement:
         triangle                        = None,
         result_a2                       = None,
         mode_declare:     str           = 'auto',
+        # ⚠️⚠️ LE MODULE DEMANDAIT DE DECLARER, ET L'API NE LE PERMETTAIT
+        # PAS. Les paiements pouvaient annoncer leur mode ; les charges
+        # non — `mode_charges='auto'` etait code en dur. Or la detection a
+        # trois etats REFUSE de trancher quand elle ne peut pas, et demande
+        # alors de declarer : un engage cumule a recours tombait sur
+        # « cumulativite AMBIGUE — cumule avec recours (subrogation) ou
+        # incremental ? » et le parametre pour y repondre n'existait pas.
+        # ⚠️ 'auto' RESTE LE DEFAUT : aucun appel existant ne change de
+        # comportement, et la detection garde le dernier mot quand elle
+        # sait trancher.
+        mode_charges:     str           = 'auto',
         ultime_apriori: Optional[np.ndarray] = None,  # charge ultime a priori (BF 1972)
         taux_bf_manuel: Optional[float] = None,   # alias lr_bf_manuel
         generer_graphiques: bool        = True,    # alias generer_graphiques_flag
@@ -567,7 +582,7 @@ class AgentA7Provisionnement:
                 primes             = primes,
                 chemin_mapping     = schema_mapping,   # dict {standard: fichier} accepté
                 mode_paiements     = mode_declare,
-                mode_charges       = 'auto',
+                mode_charges       = mode_charges,
                 triangle_reference = triangle_reference,
                 lob                = lob,
                 annee_debut        = annee_debut,
@@ -1649,6 +1664,12 @@ class AgentA7Provisionnement:
             'duree_sec':      round(duree, 2),
             'statut':         statut,
             'version':        'A7-v5.0',
+            # ⚠️⚠️ LA GEOMETRIE ENTRE DANS LE SEUL ARTEFACT QUI SURVIT. Ce
+            # fichier est ECRIT SUR DISQUE et scelle par empreinte SHA-256 ;
+            # un dossier dont le triangle a ete AGREGE avant tout calcul doit
+            # le porter la, pas seulement dans un champ que personne ne lit.
+            'geometrie':      [str(i) for i in (n1 or {}).get('infos', [])
+                               if str(i).startswith(MARQUE_GEOMETRIE)],
 
             # ⚠️ LE VERROU C2, CONSIGNÉ LÀ OÙ QUELQU'UN LE RELIRA. Un
             # `logger.info` dans une application Streamlit n'est lu par

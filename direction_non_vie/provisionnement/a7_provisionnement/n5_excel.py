@@ -572,14 +572,25 @@ def _ong4_methodes(wb, n3, n4):
     # l'arbitrage de N4 : la marque désigne la ligne qui porte réellement
     # `reserve_p90`, quelle qu'elle soit. « Mack natif » n'est jamais marqué —
     # il est centré sur la réserve de Mack, pas sur le BE publié.
+    # ⚠️ UN SEUL PREDICAT, LU SUR N4 — la gouvernance des hypotheses ferme
+    # la publication des percentiles Bootstrap en posant `reserve_p90_boot`
+    # a None. Toute surface qui publie un percentile Bootstrap le consulte.
+    _porte_boot = (n4 or {}).get('reserve_p90_boot') is not None
     diag_rows = [
         (marque_retenue(n4, CLE_COMPOSE, "Incertitude composée"),
          n4.get('reserve_p90_compose', 0),  n4.get('sigma_total_compose', 0), "BE pondéré"),
         (marque_retenue(n4, CLE_MACK, "Mack recentré"),
          n4.get('reserve_p90_mack', 0),     n4.get('sigma_mack', 0),          "BE pondéré"),
         ("Mack natif",                      _mk.get('reserve_p90', 0),     _mk.get('sigma_total', 0),        "réserve Mack"),
+        # ⚠️⚠️ LA PORTE DE N4 EST LA SEULE. Quand BOOT-H3 ou BOOT-H4 est non
+        # validee, N4 pose `reserve_p90_boot = None` et le HTML comme le Word
+        # ecrivent « — ». Cette ligne-ci lisait `n3['bootstrap']` EN DIRECT et
+        # publiait quand meme, dans le meme dossier que le §8 qui declare ces
+        # percentiles NON PUBLIES.
         (marque_retenue(n4, CLE_BOOT, "Bootstrap ODP"),
-         _bo.get('p90') or 0,               _bo.get('std_bootstrap') or 0,      "réserve Bootstrap"),
+         (_bo.get('p90') or 0) if _porte_boot else '—',
+         (_bo.get('std_bootstrap') or 0) if _porte_boot else '—',
+         "réserve Bootstrap"),
     ]
     for i, (appr, p90v, sigv, centre) in enumerate(diag_rows):
         r   = row_diag + 2 + i
@@ -874,7 +885,7 @@ def _ong6_hypotheses(wb, n2, n4):
 #  ONGLET 7 — BOOTSTRAP ODP
 # =============================================================================
 
-def _ong7_bootstrap(wb, n3):
+def _ong7_bootstrap(wb, n3, n4=None):
     ws = wb.create_sheet("7. Bootstrap ODP")
     ws.sheet_view.showGridLines = False
 
@@ -887,22 +898,49 @@ def _ong7_bootstrap(wb, n3):
         _header(ws, 2, j+1, h, width=w)
 
     be_boot = boot.get('be_bootstrap', 0)
+    _porte_boot = (n4 or {}).get('reserve_p90_boot') is not None
+
+    def _pct_boot(cle):
+        """Un percentile Bootstrap ne sort que si N4 a ouvert la porte."""
+        if not _porte_boot:
+            return '—'
+        v = boot.get(cle)
+        return '—' if v is None else v
+
     rows = [
         ("BE Bootstrap (moyenne)",    be_boot,                  0,           "Espérance distribution simulée"),
-        ("Écart-type σ",              boot.get('std_bootstrap') or 0, None,  "Incertitude totale Bootstrap"),
-        ("CV Bootstrap",              boot.get('cv_bootstrap') or 0, None,   "Coefficient de variation"),
-        ("IC 95% — Borne inférieure", boot.get('ic_95_inf',0),  None,        "Percentile 2.5%"),
-        ("IC 95% — Borne supérieure", boot.get('ic_95_sup',0),  None,        "Percentile 97.5%"),
-        ("P50 — Médiane",             boot.get('p50',0),         None,       "50ème percentile"),
-        ("P75",                       boot.get('p75',0),         None,       "75ème percentile"),
-        ("P90 — Stress test S2",      boot.get('p90',0),         None,       "90ème percentile"),
-        ("P95",                       boot.get('p95',0),         None,       "95ème percentile"),
-        ("P99.5 — Réserve extrême",   boot.get('p99_5',0),       None,       "99.5ème percentile (VaR S2)"),
+        # ⚠️⚠️ `or 0` FAISAIT LIRE « AUCUNE INCERTITUDE » LA OU IL N'Y AVAIT
+        # PAS DE CALCUL. `libelle_incertitude` existe exactement pour ce cas
+        # et son commentaire le dit : « afficher 0 se lirait AUCUNE
+        # INCERTITUDE, c'est-a-dire l'exact contraire de ce que le cas
+        # degrade signifie ». Elle est employee DEUX FONCTIONS PLUS HAUT,
+        # pour phi, et pas ici : la meme source unique, dans le meme
+        # fichier, appliquee a un onglet et pas a l'autre. Mesure : un 5x5 a
+        # recours passe par `run()`, le Bootstrap se declare NON CALCULE, et
+        # l'onglet publiait sigma = 0 et CV = 0.
+        ("Écart-type σ",              libelle_incertitude(boot), None,       "Incertitude totale Bootstrap"),
+        ("CV Bootstrap",              libelle_incertitude(boot, 'cv_bootstrap'), None, "Coefficient de variation"),
+        # ⚠️⚠️ SEPT LIGNES QUI PUBLIAIENT HORS DE LA PORTE DE N4. Mesure sur
+        # un seul run : le §8 du rapport imprime « les percentiles Bootstrap
+        # (P75/P90/P99.5) ne sont pas publies » pendant que ces cellules les
+        # portent. `_pct_boot` rend « — » quand la gouvernance a ferme.
+        ("IC 95% — Borne inférieure", _pct_boot('ic_95_inf'), None,        "Percentile 2.5%"),
+        ("IC 95% — Borne supérieure", _pct_boot('ic_95_sup'), None,        "Percentile 97.5%"),
+        ("P50 — Médiane",             _pct_boot('p50'),       None,       "50ème percentile"),
+        ("P75",                       _pct_boot('p75'),       None,       "75ème percentile"),
+        ("P90 — Stress test S2",      _pct_boot('p90'),       None,       "90ème percentile"),
+        ("P95",                       _pct_boot('p95'),       None,       "95ème percentile"),
+        ("P99.5 — Réserve extrême",   _pct_boot('p99_5'),     None,       "99.5ème percentile (VaR S2)"),
     ]
 
     for i, (lbl, val, vs_be, note) in enumerate(rows):
         bg = 'EAF3DE' if lbl.startswith('P99') else BLANC if i % 2 == 0 else GRIS_CLAIR
-        vs = (val/be_boot - 1) if (be_boot > 0 and val and vs_be != 0) else vs_be
+        # ⚠️ GARDE DE TYPE : la colonne « vs BE » divise la valeur, et elle
+        # peut desormais valoir « — ». Sans cette garde, fermer la porte
+        # ferait lever le classeur au lieu de le rendre honnete.
+        vs = ((val/be_boot - 1)
+              if (be_boot > 0 and isinstance(val, (int, float))
+                  and val and vs_be != 0) else vs_be)
 
         for j, (v, fmt) in enumerate([
             (lbl,  None),
@@ -1006,7 +1044,10 @@ def _ong8_comparatif(wb, n4, resultats_precedents=None):
     # une évolution du portefeuille. Voir la couleur, plus bas.
     indicateurs = [
         ("Best Estimate S2 (€)",    be_n,    be_nm1,    FMT_NB,   True),
-        ("Provision P90 (€)",       p90_n,   p90_nm1,   FMT_NB,   False),
+        # ⚠️ QUATRIEME SITE DE LA MEME REGLE, ET LE SEUL RESTE DANS CE
+        # CLASSEUR : les trois lignes de l'onglet « 1. Synthese » disent bien
+        # « Percentile prudentiel P75 ». Celle-ci est produite a CHAQUE run.
+        ("Percentile P90 (€)",      p90_n,   p90_nm1,   FMT_NB,   False),
         ("Incertitude Mack σ (€)",  sigma_n, sigma_nm1, FMT_NB,   True),
         ("CV inter-méthodes",       cv_n/100, (cv_nm1/100 if cv_nm1 is not None else None), FMT_PCT, True),
     ]
@@ -1285,7 +1326,12 @@ def export_excel(
         # deja a cote : `n5_rapport.ARRETE_ABSENT` nomme l'absence au lieu
         # de la combler, et `n5_commentaire` l'applique. Deux livrables sur
         # trois nommaient l'absence ; le troisieme la comblait.
-        date_generation = datetime.now().strftime('%d/%m/%Y')
+        # ⚠️ L'HEURE N'EST PAS UN ORNEMENT : elle DIT que cette date est une
+        # IMPRESSION et non un arrete. `gel_livrables` distingue les deux par
+        # cette forme exacte — une date seule est comparee comme du metier.
+        # Mesure sans l'heure : 7 ecarts a chaque minuit, sur le HTML et le
+        # Word, pour une date qui ne dit rien du calcul.
+        date_generation = datetime.now().strftime('%d/%m/%Y à %H h %M')
         libelle_arrete  = arrete or ARRETE_ABSENT
         ref             = ref_client or "ActuarIA"
 
@@ -1301,7 +1347,7 @@ def export_excel(
         _ong4_methodes(wb, n3, n4)
         _ong5_ibnr(wb, n3)
         _ong6_hypotheses(wb, n2, n4)
-        _ong7_bootstrap(wb, n3)
+        _ong7_bootstrap(wb, n3, n4)
         _ong8_comparatif(wb, n4, resultats_precedents)
         _ong9_scr(wb, n4)
         _ong10_sensibilites(wb, n4)

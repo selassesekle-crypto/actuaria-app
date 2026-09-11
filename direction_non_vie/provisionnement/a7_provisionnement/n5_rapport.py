@@ -57,6 +57,7 @@ from .n3.backtesting import SEUIL_ROUGE, SEUIL_AMBRE
 # Source UNIQUE du NOM de l'approche publiée dans `reserve_p*` — la même que
 # l'Excel et le commentaire. Ces libellés étaient écrits en dur dans les deux
 # formats de ce fichier, et « (retenue) » y était cloué sur le composé.
+from .geometrie_triangle import MARQUE_GEOMETRIE
 from .n4_best_estimate import (CLE_BOOT, CLE_COMPOSE, CLE_MACK,
                                libelle_percentiles, marque_retenue)
 
@@ -340,6 +341,7 @@ PAS de tableaux Markdown. PAS de blockquotes >. Sépare les sections par une lig
 5. ALERTES : Ne jamais minimiser. Présenter avec l'implication réelle pour le bilan S2.
 6. CAUSALITÉ : H1 rejetée (corr=0.52) → CL biaisé → BF retenu → impact sur le BE. \
 Les écarts et les rapports te sont FOURNIS : cite-les, ne les recalcule jamais.
+6ter. PERCENTILES : un percentile (P75, P90, P99,5) MESURE la dispersion autour du Best Estimate. Il ne s'inscrit pas au bilan et ne se nomme JAMAIS « provision » — sous l'Art. 77 les provisions techniques valent BE + marge de risque, le Best Estimate etant une esperance.
 6bis. CALCUL : tu ne calcules RIEN — ni différence, ni rapport, ni pourcentage. \
 Toute grandeur que tu publies figure telle quelle dans le dossier transmis.
 7. INCERTITUDE : Toujours quantifier via CV ou intervalles de confiance.
@@ -350,7 +352,7 @@ STRUCTURE OBLIGATOIRE EN 7 SECTIONS :
 §1 — CONTEXTE ET QUALITÉ DES DONNÉES
 §2 — VALIDATION DES HYPOTHÈSES ACTUARIELLES
 §3 — RÉSULTATS PAR MÉTHODE ET CONVERGENCE
-§4 — INCERTITUDE STOCHASTIQUE ET PROVISIONS DE PRÉCAUTION
+§4 — INCERTITUDE STOCHASTIQUE ET PERCENTILES DE DISPERSION
 §5 — BACK-TESTING ET QUALITÉ DU PROVISIONNEMENT HISTORIQUE
 §6 — EFFETS CALENDAIRE ET RISQUES IDENTIFIÉS
 §7 — CONCLUSION ET RECOMMANDATIONS POUR LE CONSEIL D'ADMINISTRATION\
@@ -391,7 +393,13 @@ def _ecarts_transmis(n3: dict, n4: dict) -> list:
         ('amplitude inter-methodes (CL - BF)',
          reserve(n3, 'chain_ladder'), reserve(n3, 'bornhuetter_ferguson')),
         ('P99,5 - BE', float(n4.get('reserve_p99_5', 0) or 0) or None, BE or None),
-        ('P75 - BE (provision de precaution)',
+        # ⚠️ LE PROMPT PRESCRIVAIT CE QUE LE TEXTE DETERMINISTE A CESSE DE
+        # DIRE. Le titre de section impose au modele d'ecrire sur des
+        # « provisions de precaution » et cette etiquette lui presente l'ecart
+        # P75 - BE comme telle : le document signe porte alors, cote narration,
+        # la notion que sa propre section deterministe declare sans objet sous
+        # l'Art. 77 (« une prudence discretionnaire en sus n'y a pas de place »).
+        ('P75 - BE (ecart de dispersion, non un montant a inscrire)',
          float(n4.get('reserve_p75', 0) or 0) or None, BE or None),
         ('Clark LDF - BE', clark.get('reserve_be_clark'), BE or None),
     ]
@@ -2255,8 +2263,22 @@ def lignes_qualite_donnees(n1: Dict) -> list:
     lignes.append('Triangle retenu : %s, mode %s. Statut de preparation : %s.'
                   % (_taille, _mode, n1.get('statut') or '—'))
     _al = [str(a) for a in (n1.get('alertes') or [])]
-    _ro = [str(i) for i in (n1.get('infos') or [])
-           if 'ROUGE' in str(i) or '🔴' in str(i)]
+    _infos = [str(i) for i in (n1.get('infos') or [])]
+    # ⚠️⚠️ CE QUI EST FAIT AU TRIANGLE SE DIT, ET AVANT LE RESTE. La porte
+    # de geometrie transforme la donnee AVANT tout calcul — elle retire des
+    # colonnes, elle agrege l'axe de developpement, elle perd la finesse
+    # infra-annuelle. Ces phrases n'atteignaient AUCUN livrable : ce lecteur
+    # etait le seul de `n1['infos']` dans les cinq modules N5, et il ne
+    # gardait que « ROUGE ». Celle des colonnes vides passait par accident,
+    # son texte citant « ROUGE → VERT », et s'affichait sous un intitule qui
+    # la decrivait faux.
+    _geo = [i for i in _infos if i.startswith(MARQUE_GEOMETRIE)]
+    _ro = [i for i in _infos
+           if ('ROUGE' in i or '🔴' in i) and i not in _geo]
+    if _geo:
+        lignes.append('Geometrie du triangle (%d) — transformations '
+                      'appliquees AVANT tout calcul :' % len(_geo))
+        lignes += ['  • ' + g for g in _geo]
     if _al:
         lignes.append('Alertes de preparation (%d) — elles colorent le '
                       'statut :' % len(_al))
@@ -2266,7 +2288,7 @@ def lignes_qualite_donnees(n1: Dict) -> list:
                       'PAS le statut (decision tranchee), et doivent etre '
                       'documentes :' % len(_ro))
         lignes += ['  • ' + r for r in _ro]
-    if not _al and not _ro:
+    if not _al and not _ro and not _geo:
         lignes.append('Aucune alerte de preparation ni controle de qualite '
                       'en ROUGE sur ce triangle.')
     return lignes
@@ -2359,7 +2381,13 @@ def _build_blocks(n1, n2, n3, n4, narration, source_narration, lob, cli, arr, dt
         # traite les deux etats (absent, present a None) de la meme facon.
         if (n4.get('risk_margin') or 0) > 0
         else '<div class="kpi-card">'
-        '<div class="kpi-card-label">Provision P99,5 (' + _appr_h + ')</div>'
+        # ⚠️ SIXIEME SITE DE LA MEME REGLE, ET IL EST DANS LE REPLI.
+        # Cette carte ne s'affiche QUE si la marge de risque est absente —
+        # c'est-a-dire quand le dossier est deja degrade, donc quand on la
+        # relit le moins. Le second rapport ferme cinq sites et ne nomme pas
+        # celui-ci ; le premier le nomme (« carte KPI de repli »). Un
+        # percentile mesure la dispersion, il ne s'inscrit pas au bilan.
+        '<div class="kpi-card-label">Percentile P99,5 (' + _appr_h + ')</div>'
         '<div class="kpi-card-value">' + _f(P99) + '</div>'
         '<div class="kpi-card-sub">P90 (' + _appr_h + ') : ' + _f(P90) + '</div>'
         '</div>'
@@ -3490,7 +3518,12 @@ def export_html(
                     + 'rapport actuariel : le run a echoue avant N5.</p>'
                     + '</body></html>')
 
-        dt      = datetime.now().strftime('%d/%m/%Y')
+        # ⚠️ L'HEURE N'EST PAS UN ORNEMENT : elle DIT que cette date est une
+        # IMPRESSION et non un arrete. `gel_livrables` distingue les deux par
+        # cette forme exacte — une date seule est comparee comme du metier.
+        # Mesure sans l'heure : 7 ecarts a chaque minuit, sur le HTML et le
+        # Word, pour une date qui ne dit rien du calcul.
+        dt      = datetime.now().strftime('%d/%m/%Y à %H h %M')
         # ⚠️ PLUS DE `arrete or dt` : la date du jour ne se fait plus
         # passer pour l'arrete. Voir ARRETE_ABSENT.
         arr     = arrete or ARRETE_ABSENT
@@ -3863,7 +3896,12 @@ def export_word(n1, n2, n3, n4,
         NR=rgb(NAVY); GR=rgb(GOLD); BR=rgb('#FFFFFF')
         GrR=rgb(SLATE); RgR=rgb(ROUGE); VR=rgb(VERT); AR=rgb(ORANGE)
 
-        dt      = datetime.now().strftime('%d/%m/%Y')
+        # ⚠️ L'HEURE N'EST PAS UN ORNEMENT : elle DIT que cette date est une
+        # IMPRESSION et non un arrete. `gel_livrables` distingue les deux par
+        # cette forme exacte — une date seule est comparee comme du metier.
+        # Mesure sans l'heure : 7 ecarts a chaque minuit, sur le HTML et le
+        # Word, pour une date qui ne dit rien du calcul.
+        dt      = datetime.now().strftime('%d/%m/%Y à %H h %M')
         # ⚠️ PLUS DE `arrete or dt` : la date du jour ne se fait plus
         # passer pour l'arrete. Voir ARRETE_ABSENT.
         arr     = arrete or ARRETE_ABSENT

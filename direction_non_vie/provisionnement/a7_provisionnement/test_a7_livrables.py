@@ -1069,8 +1069,15 @@ class T_Jugement_Nomme_Ses_Grandeurs(unittest.TestCase):
         attendu = libelle_percentiles(n4)
         j = n4['jugement']
         for cle in ('P75', 'P90', 'P99.5'):
+            # ⚠️ LOCALISEE PAR LE PERCENTILE, PLUS PAR LE LIBELLE. Le
+            # commentaire ci-dessus annonce << ils verrouillent une PROPRIETE,
+            # plus un libelle >> et << un libelle peut etre rearbitre >> — et
+            # la recherche portait pourtant sur le mot « Provision ». Il l'a
+            # ete : un percentile ne se nomme pas « provision », c'est le mot
+            # que l'Art. 77 reserve a ce qui S'INSCRIT au bilan. Le test suit
+            # desormais ce qu'il declare.
             ligne = next((x for x in j.splitlines()
-                          if f'Provision {cle}' in x), None)
+                          if cle in x and '€' in x), None)
             self.assertIsNotNone(ligne, f'{cle} absent du jugement')
             self.assertIn(attendu, ligne,
                           f'{cle} ne dit pas de quelle grandeur il parle')
@@ -1099,14 +1106,19 @@ class T_Jugement_Nomme_Ses_Grandeurs(unittest.TestCase):
         for cle, attendu in (('P75',   n4['reserve_p75']),
                              ('P90',   n4['reserve_p90']),
                              ('P99.5', n4['reserve_p99_5'])):
+            # ⚠️ MEME CORRECTION QU'AU TEST VOISIN, ET J'AVAIS OUBLIE CE
+            # SITE-CI : deux endroits localisaient la ligne par le mot
+            # « Provision », un seul a d'abord ete traite. C'est le motif
+            # « liste dupliquee mise a jour a moitie », commis ici meme.
             ligne = next(x for x in n4['jugement'].splitlines()
-                         if f'Provision {cle}' in x)
+                         if cle in x and '€' in x)
             self.assertIn(f'{attendu:,.0f}', ligne,
                           f'{cle} : le jugement ne publie pas le chiffre du rapport')
         # Et la contre-epreuve : Mack NATIF, l'ancienne source, a bien disparu
         # du bloc -- sinon les deux grandeurs cohabiteraient encore.
         mk = self.r['n3']['mack']
-        bloc = [x for x in n4['jugement'].splitlines() if 'Provision P' in x]
+        bloc = [x for x in n4['jugement'].splitlines()
+                if re.search(r'P(75|90|99\.5)\b', x) and '€' in x]
         self.assertNotIn(f"{mk.get('reserve_p99_5') or 0:,.0f}", ' '.join(bloc),
                          'le P99.5 de Mack natif est encore publie')
         print('    OK JUG-3 jugement et rapport publient les memes nombres')

@@ -49,18 +49,26 @@ def _les_deux_formats(nom, ia):
     return (('HTML', html), ('WORD', word))
 
 
+#: ⚠️⚠️ UN NOM REEL EMPLOYE COMME DONNEE DANS UNE FIXTURE
+#: VERSIONNEE, ET LE DEPOT EST PUBLIC. Ce que ce fichier verifie est que
+#: le nom TRANSMIS ressort dans les deux formats : n'importe quelle chaine
+#: non vide le demontre — celle-ci le demontre ET dit ce qu'elle est.
+#: Idiome repris du commit `1a76521`, qui a fait le meme geste ailleurs.
+_QUI = 'actuaire signataire (role)'
+
+
 class S1_LesDeuxEtats(unittest.TestCase):
     """Ce que `trace_relecture` répond, et ce qu'elle refuse de fabriquer."""
 
     def test_un_nom_donne_l_etat_valide(self):
-        t = trace_relecture('Selasse Sekle', '12345')
+        t = trace_relecture(_QUI, '12345')
         self.assertFalse(t.alerte)
-        self.assertIn('Relu et validé par Selasse Sekle', t.texte)
+        self.assertIn('Relu et validé par ' + _QUI, t.texte)
         self.assertIn('12345', t.texte)
         print('    OK S1 : un nom et un numéro donnent l\'état validé')
 
     def test_le_numero_est_FACULTATIF_le_nom_non(self):
-        self.assertFalse(trace_relecture('Selasse Sekle').alerte)
+        self.assertFalse(trace_relecture(_QUI).alerte)
         self.assertTrue(trace_relecture('', '12345').alerte)
         print('    OK S1-b : le nom décide, le numéro complète')
 
@@ -84,7 +92,7 @@ class S1_LesDeuxEtats(unittest.TestCase):
                                   arrete='31/12/2025', audit_id=AUDIT)
         html_signe = export_html({}, N2, {}, N4, ref_client='C',
                                  arrete='31/12/2025', audit_id=AUDIT,
-                                 actuaire_nom='Selasse Sekle')
+                                 actuaire_nom=_QUI)
         # ⚠️ L'ANCRE EST LE DIV DU PIED, PAS LA CLASSE : « pied-meta » apparaît
         # d'abord dans la feuille de style, et le test passait à côté.
         bloc_a = html_alerte[html_alerte.index('<div class="pied-meta">'):][:500]
@@ -97,7 +105,7 @@ class S1_LesDeuxEtats(unittest.TestCase):
     def test_aucune_date_n_est_fabriquee(self):
         """⚠️ Une date posée au rendu dirait quand le document a été PRODUIT,
         pas quand il a été RELU — et le dépôt n'enregistre pas la seconde."""
-        t = trace_relecture('Selasse Sekle', '12345')
+        t = trace_relecture(_QUI, '12345')
         self.assertNotIn('/20', t.texte)
         self.assertNotIn(', le ', t.texte)
         print('    OK S1-d : aucune date inventée dans la mention')
@@ -107,8 +115,8 @@ class S2_LesDeuxFormatsPortentLaMemeChose(unittest.TestCase):
     """⚠️ LE WORD ÉTAIT LE SEUL DES DEUX À NE RIEN PORTER."""
 
     def test_signe_les_deux_formats_nomment_l_actuaire(self):
-        for nom_fmt, texte in _les_deux_formats('Selasse Sekle', '12345'):
-            self.assertIn('Selasse Sekle', texte, nom_fmt)
+        for nom_fmt, texte in _les_deux_formats(_QUI, '12345'):
+            self.assertIn(_QUI, texte, nom_fmt)
             self.assertIn('12345', texte, nom_fmt)
             self.assertNotIn('non enregistr', texte, nom_fmt)
         print('    OK S2 : signé, les DEUX formats nomment l\'actuaire')
@@ -116,14 +124,14 @@ class S2_LesDeuxFormatsPortentLaMemeChose(unittest.TestCase):
     def test_non_signe_les_deux_formats_DISENT_l_absence(self):
         for nom_fmt, texte in _les_deux_formats('', ''):
             self.assertIn('non enregistr', texte, nom_fmt)
-            self.assertNotIn('Selasse Sekle', texte, nom_fmt)
+            self.assertNotIn(_QUI, texte, nom_fmt)
         print('    OK S2-b : non signé, les DEUX formats disent l\'absence')
 
     def test_l_AUDIT_ID_est_dans_les_deux_formats(self):
         """⚠️ `audit_id` ÉTAIT LE TROISIÈME PARAMÈTRE MORT d'`export_word`, et
         le plus grave : l'identifiant de traçabilité manquait au document qui
         voyage, alors que l'HTML l'imprimait."""
-        for nom_fmt, texte in _les_deux_formats('Selasse Sekle', '12345'):
+        for nom_fmt, texte in _les_deux_formats(_QUI, '12345'):
             self.assertIn(AUDIT, texte, nom_fmt)
         print('    OK S2-c : l\'Audit ID est dans les deux formats')
 

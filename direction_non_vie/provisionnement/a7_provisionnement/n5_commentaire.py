@@ -743,10 +743,18 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
     )
     if cv_m < 10:
         lignes.append(
+            # ⚠️ TROISIEME BRANCHE DU MEME `if`, ET LA SEULE RESTEE EN ARRIERE.
+            # Les deux soeurs (10-20 % et > 20 %) disent deja « il se documente
+            # au dossier actuariel, il ne s'inscrit pas au bilan (Art. 77) ».
+            # Celle-ci ecrivait « La provision de stress test P90 » — le mot que
+            # l'Art. 77 reserve a ce qui S'INSCRIT — et c'est la branche du
+            # dossier le plus sain, donc celle qu'on relit le moins.
             f"Ce niveau d'incertitude est faible — le triangle est bien "
-            f"développé et les facteurs sont stables. La provision de "
-            f"stress test P90 = {_e(p90_m)} représente une majoration "
-            f"de {_p((p90_m/max(mk_r,1)-1)*100)} par rapport au BE Mack. "
+            f"développé et les facteurs sont stables. Le percentile de "
+            f"stress P90 = {_e(p90_m)} représente une majoration "
+            f"de {_p((p90_m/max(mk_r,1)-1)*100)} par rapport au BE Mack ; "
+            f"il mesure la dispersion, il ne s'inscrit pas au bilan "
+            f"(Art. 77). "
             f"La distribution log-normale calibrée sur (BE, σ) "
             f"est conforme aux exigences QIS5 TP.5.26."
         )
@@ -2374,7 +2382,18 @@ def generer_commentaire(
     if not lob_label:
         lob_label = n2.get('lob_label', lob)
 
-    date_str = datetime.now().strftime('%d/%m/%Y')
+    # ⚠️ L'HEURE N'EST PAS UN ORNEMENT : elle DIT que cette date est une
+    # IMPRESSION et non un arrete. `gel_livrables` distingue les deux par
+    # cette forme exacte — une date seule est comparee comme du metier.
+    # Mesure sans l'heure : 7 ecarts a chaque minuit, sur le HTML et le
+    # Word, pour une date qui ne dit rien du calcul.
+    # ⚠️ ET LA FORME « à HH h MM » N'EST PAS UN STYLE : un espace NU entre
+    # la date et l'heure fabrique « 2026 17 », c'est-à-dire exactement le
+    # motif que `defauts_de_separateur` existe pour attraper — une virgule
+    # perdue (« p < 0 01 »). Mesuré : 2 tests rouges. Cette forme-ci est
+    # neutralisée par `gel_livrables` ET ne présente aucun groupe
+    # chiffre-espace-chiffre.
+    date_str = datetime.now().strftime('%d/%m/%Y à %H h %M')
     statut   = n4.get('statut', 'AMBRE')
     be       = n4.get('best_estimate', 0)
     n_ann    = n1.get('n_annees', 0)

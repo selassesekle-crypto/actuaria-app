@@ -2100,7 +2100,12 @@ class BestEstimateS2:
         h2          = n2.get('h2_stabilite', {})
         bfcc        = n2.get('bfcc', {}).get('hypotheses', {})
         lob_label   = cfg.get('label', 'Non précisée')
-        date_str    = datetime.now().strftime('%d/%m/%Y')
+        # ⚠️ L'HEURE N'EST PAS UN ORNEMENT : elle DIT que cette date est une
+        # IMPRESSION et non un arrete. `gel_livrables` distingue les deux par
+        # cette forme exacte — une date seule est comparee comme du metier.
+        # Mesure sans l'heure : 7 ecarts a chaque minuit, sur le HTML et le
+        # Word, pour une date qui ne dit rien du calcul.
+        date_str    = datetime.now().strftime('%d/%m/%Y à %H h %M')
         sigma       = n3['mack']['sigma_total']
         # ⚠️ LISAIT `n3['mack']`, C'EST-A-DIRE MACK NATIF — une autre grandeur
         # que celle des quatre livrables, et centree ailleurs. `pcts` porte
@@ -2219,9 +2224,14 @@ class BestEstimateS2:
             # publient dans leur table << decomposition de l'incertitude >>,
             # avec sa colonne Centre qui dit ou il est centre.
             f"  BE retenu         : {be:>16,.0f} €",
-            f"  Provision P75 ({appr})   : {p75_j:>16,.0f} €",
-            f"  Provision P90 ({appr})   : {p90:>16,.0f} €",
-            f"  Provision P99.5 ({appr}) : {p995:>16,.0f} €",
+            # ⚠️ « PROVISION » EST LE MOT DE L'ART. 77 POUR CE QUI S'INSCRIT.
+            # Le commentaire ci-dessus nomme lui-meme ce libelle « generique »
+            # et le tient pour la cause du defaut ferme par `fcfb3d3` — il est
+            # pourtant reste ici, dans le texte que l'application affiche sous
+            # « Jugement actuariel documente » et qui sert de narration de repli.
+            f"  Percentile P75 ({appr})   : {p75_j:>16,.0f} €",
+            f"  Percentile P90 ({appr})   : {p90:>16,.0f} €",
+            f"  Percentile P99.5 ({appr}) : {p995:>16,.0f} €",
             f"  Source : {source_pct}",
             f"  σ Mack total      : {sigma:>16,.0f} €",
             f"  CV inter-méthodes : {cv:>15.1f} %"

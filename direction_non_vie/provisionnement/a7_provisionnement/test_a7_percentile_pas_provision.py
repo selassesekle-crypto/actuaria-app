@@ -56,10 +56,24 @@ MOTIFS_INTERDITS = (
     r"provision\s+extrême",
     r"plancher\s+conservateur",
     r"buffer\s+de\s+prudence",
+    # ⚠️⚠️ LE MOTIF VISAIT LES TOURNURES QUALIFIEES, PAS LA PROPRIETE.
+    # « Provision prudentielle P75 », « Provision stress test P90 » etaient
+    # attrapees ; la forme NUE « Provision P90 » — celle qui a survecu a
+    # dix-neuf renommages — passait. Sept tests rendaient VERT en imprimant
+    # « n5_excel.py : net » sur un fichier qui portait la faute.
+    r"provisions?\s+de\s+pr[ée]caution",
+    r"provision\s+p\s*\d",
 )
 
-#: Les trois modules qui composent du texte signé.
-MODULES = ('n5_commentaire.py', 'n5_excel.py', 'n4_best_estimate.py')
+#: Les modules qui composent du texte signé.
+#: ⚠️⚠️ L'ASSIETTE OUBLIAIT `n5_rapport.py` — celui qui en compose DEUX (le
+#: HTML et le Word) et qui porte le PLAN IMPOSE au modele de langage :
+#: « §4 — INCERTITUDE STOCHASTIQUE ET PROVISIONS DE PRECAUTION ». Le sceau
+#: se declarait « les trois modules qui composent du texte signé » et le
+#: quatrieme en composait deux. Un controle hors de l'assiette du defaut
+#: est du decor, quelle que soit sa qualite.
+MODULES = ('n5_commentaire.py', 'n5_excel.py', 'n4_best_estimate.py',
+           'n5_rapport.py')
 
 
 def _sans_commentaires(src: str) -> str:

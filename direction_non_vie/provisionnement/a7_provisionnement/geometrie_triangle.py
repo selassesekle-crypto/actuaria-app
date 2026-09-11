@@ -81,12 +81,25 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 __all__ = [
+    'MARQUE_GEOMETRIE',
     'GeometrieRefusee',
     'analyser_geometrie',
     'appliquer_geometrie',
     'longueurs_observees',
     'pas_de_developpement',
 ]
+
+#: ⚠️⚠️ LES MESSAGES DE GEOMETRIE SIGNENT. Ils etaient composes, publies
+#: dans `n1['infos']` — et le SEUL lecteur de ce champ dans les cinq modules
+#: N5 ne gardait que les lignes contenant « ROUGE ». Les deux phrases
+#: d'agregation n'atteignaient donc AUCUN livrable : ni commentaire, ni
+#: HTML, ni Word, ni classeur, ni audit trail — le seul artefact ecrit sur
+#: disque et scelle par empreinte.
+#: ⚠️ ET CELLE QUI PASSAIT, PASSAIT PAR ACCIDENT : le message des colonnes
+#: vides cite « statut ROUGE → VERT » dans son propre texte. Il s'affichait
+#: donc sous l'intitule « Controles de qualite en ROUGE », qui le decrit
+#: faux. Une marque NOMMEE remplace cette coincidence.
+MARQUE_GEOMETRIE = '\U0001f535 Géométrie'
 
 #: Ce qu'une cellule vaut quand elle n'est pas observee. C'est la convention
 #: du module, ecrite dans `chain_ladder.calculer_facteurs` : « Zeros utilises
@@ -299,11 +312,13 @@ def analyser_geometrie(C: np.ndarray) -> Dict:
         f"— sinon la frontière i+j<n écarterait la majeure partie des "
         f"paiements observés en silence.")
     infos.append(
-        "⚠️ Le profil d'écoulement est désormais au pas de la survenance : la "
-        "finesse infra-annuelle est perdue pour l'actualisation en aval.")
+        f"{MARQUE_GEOMETRIE} — ⚠️ le profil d'écoulement est désormais au "
+        f"pas de la survenance : la finesse infra-annuelle est perdue pour "
+        f"l'actualisation en aval.")
     if part_ecartee > 0.01:
         infos.append(
-            f"⚠️ L'arrêté tombe en milieu de sous-période : {part_ecartee:.2f} % "
-            f"des paiements observés tombent dans une sous-période incomplète "
-            f"et ne sont pas retenus par l'agrégation.")
+            f"{MARQUE_GEOMETRIE} — ⚠️ l'arrêté tombe en milieu de "
+            f"sous-période : {part_ecartee:.2f} % des paiements observés "
+            f"tombent dans une sous-période incomplète et ne sont pas "
+            f"retenus par l'agrégation.")
     return {'triangle': B, 'pas': pas, 'infos': infos, 'transforme': True}
