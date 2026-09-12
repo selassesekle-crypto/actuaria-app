@@ -57,7 +57,21 @@ except ImportError:
                 "ROUGE":"Statut RAG : Rouge — Surveillance renforcée"}.get(s,"Statut : " + s)
     def _nettoyer_narration(t): return t or ""
     def _md_to_html(t): return f'<p style="font-size:9.5pt;">{t}</p>' if t else ""
-    def _css(): return "<style>body{font-family:Inter,sans-serif;}</style>"
+    # ⚠️ CORRIGÉ LE 12/09/2026 — ce repli rendait 50 caractères de style
+    # là où la feuille d'origine en fait 18 774, et il ne redéfinissait PAS
+    # `LOGO_SVG` (neuf noms sur dix l'étaient). Mesuré : HTML 41 728 -> 17 498
+    # caractères, -58,1 %, logo vide, et surtout `var(--rouge)` NON DEFINIE —
+    # les hypothèses rejetées perdaient leur couleur de rejet. Cette couleur
+    # portait une information ; le repli la supprimait sans rien signaler.
+    from .sp_style import (
+        CSS_AUTONOME as _CSS_AUTONOME,
+        LOGO_SVG_AUTONOME as LOGO_SVG,
+        uri_svg as _uri_svg,
+    )
+    LOGO_URI = _uri_svg(LOGO_SVG)
+
+    def _css():
+        return _CSS_AUTONOME
 
 
 # =============================================================================

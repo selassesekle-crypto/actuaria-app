@@ -94,8 +94,11 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
 CHOC_MORBIDITE_HAUSSE  = 0.35   # +35% taux incidence ITT/IP — Art.145 §2(a)
 CHOC_CESSATION_BAISSE  = 0.20   # -20% taux cessation (moins guérisons) — Art.145 §2(b)
 
-# ── MCR Prévoyance — Art.252 RD 2015/35 ──────────────────────────────────
-# Source : Art.252 RD 2015/35 | Art.129 §1(d) Directive S2
+# ── MCR Prevoyance — art. 250 et ANNEXE XIX du RD (UE) 2015/35 ─────────
+# Source : art. 250 par. 1 point d) + annexe XIX RD (UE) 2015/35 |
+# plancher absolu : art. 129 par. 1 point d) de la DIRECTIVE 2009/138/CE.
+# L article 252 -- longtemps cite ici -- s intitule « entreprises
+# d assurance multibranches » et ne contient AUCUN coefficient.
 MCR_PLANCHER_ABS       = 3_700_000.0  # plancher absolu prévoyance — Art.129 S2
 # NB : plancher niveau entreprise — ROUGE sur petit portefeuille = normal
 # ⚠️ CORRIGÉ LE 12/09/2026 — ces deux valeurs ne figurent nulle part dans le

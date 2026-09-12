@@ -175,7 +175,7 @@ PAS de tableaux Markdown. PAS de blockquotes >. Sépare les sections par une lig
 2. RIGUEUR : Chaque affirmation est justifiée par les données fournies.
 3. CHIFFRES : En euros avec séparateurs (ex : 2\u202f526\u202f597\u202f€). Pourcentages avec une décimale.
 4. RÉFÉRENCES : DREES 2023, FNMF 2023, ANI 2013, Art.148 RD 2015/35 (SCR NSLT), \
-IFRS 17 §B91 (CoC 6%), Art.252 RD 2015/35 (MCR), Art.129 S2 (seuils).
+IFRS 17 §B91 (CoC 6%), Art.250 et annexe XIX RD 2015/35 (MCR), Art.129 S2 (seuils).
 5. ALERTES : Ne jamais minimiser. Présenter avec l'implication réelle pour la solvabilité.
 6. POSTURE : Assertif mais prudent. Recommandations claires avec justification.
 7. INTERDIT : Phrases génériques sans données. Toujours lier chaque observation aux chiffres.

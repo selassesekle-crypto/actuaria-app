@@ -65,7 +65,8 @@ def _impl_test_p4_mcr_plancher_art129(pipeline_p4):
     *_, r_p4 = pipeline_p4
     mcr = r_p4.get("mcr_prevoyance", 0)
     assert mcr >= 0, "MCR doit être ≥ 0"
-    # MCR ≥ plancher si formulaire actif — cohérence S2 Art.252
+    # MCR >= plancher si formulaire actif — art. 248 par. 1 (plancher
+    # absolu) et annexe XIX pour les coefficients, PAS l article 252.
     assert r_p4["success"], "P4 doit réussir même avec plancher MCR"
 
 

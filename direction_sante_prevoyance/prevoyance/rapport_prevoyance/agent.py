@@ -105,7 +105,9 @@ SEUIL_SCR_CIBLE  = 130.0   # seuil cible interne
 # SCR Invalidité EIOPA — Art.145 RD 2015/35
 CHOC_MORB_HAUT   = 0.35    # choc morbidité +35% (1ère année)
 CHOC_CESSATION   = 0.20    # choc cessation −20%
-# MCR Prévoyance — Art.252 RD 2015/35
+# MCR Prevoyance — art. 250 et ANNEXE XIX du RD (UE) 2015/35
+# (l article 252 ne contient aucun coefficient : il traite des
+#  entreprises multibranches)
 # ⚠️ CORRIGÉ LE 12/09/2026 — ce module appliquait a la PREVOYANCE les
 # coefficients de la branche SANTE : MCR 92 383 EUR contre 54 284 EUR
 # pour P4 sur le meme portefeuille (+70,2 %). Aucune des deux valeurs ne
@@ -203,7 +205,7 @@ PAS de tableaux Markdown. PAS de blockquotes >. Sépare les sections par une lig
 3. CHIFFRES : En euros avec séparateurs (ex : 2\u202f526\u202f597\u202f€). Pourcentages avec une décimale.
 4. RÉFÉRENCES : BCAC 2019, TD 88-90, TH0002, CTIP 2023, Mack (1993) ASTIN Bulletin 23(2), \
 England & Verrall (2002), Art.145 RD 2015/35 (SCR Invalidité), IFRS 17 §B91 (CoC 6%), \
-Art.252 RD 2015/35 (MCR), Art.129 S2.
+Art.250 et annexe XIX RD 2015/35 (MCR), Art.129 S2.
 5. ALERTES : Ne jamais minimiser. Présenter avec l'implication réelle pour le bilan S2.
 6. POSTURE : Assertif mais prudent. Recommandations claires avec justification.
 7. INTERDIT : Phrases génériques sans données. Toujours lier chaque observation aux chiffres.

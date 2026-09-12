@@ -74,7 +74,20 @@ except ImportError:
     def _md_to_html(t):
         if not t: return '<p class="comm-p" style="color:#8A9BB0;font-style:italic;">Narration non disponible.</p>'
         return '<p class="comm-p">' + t + '</p>'
-    def _css(): return '<style>body{font-family:Inter,sans-serif;}</style>'
+    # CORRIGE LE 12/09/2026 -- ce repli rendait 50 caracteres de style la ou
+    # la feuille d origine en fait 18 774, et il ne redefinissait PAS
+    # `LOGO_SVG`. Mesure : HTML 41 728 -> 17 498 caracteres, -58,1 %, logo
+    # vide, et `var(--rouge)` NON DEFINIE -- les hypotheses rejetees perdaient
+    # leur couleur de rejet. Cette couleur portait une information.
+    from .sp_style import (
+        CSS_AUTONOME as _CSS_AUTONOME,
+        LOGO_SVG_AUTONOME as LOGO_SVG,
+        uri_svg as _uri_svg,
+    )
+    LOGO_URI = _uri_svg(LOGO_SVG)
+
+    def _css():
+        return _CSS_AUTONOME
 
 # =============================================================================
 #  SYSTEM PROMPT CLAUDE API — ACTUAIRE PRÉVOYANCE SENIOR
