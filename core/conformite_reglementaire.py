@@ -1797,6 +1797,54 @@ def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
 
 
 
+def synthese_sensibilite_profils(table) -> str | None:
+    """SOURCE UNIQUE — le modèle retenu dépend-il du PROFIL de pondération ?
+
+    ⚠️⚠️ POURQUOI CE TEXTE EXISTE — MESURÉ LE 29/08/2026, ET PUBLIÉ SUR DEUX
+    SURFACES SUR SIX JUSQU'AU 12/09. Le profil de pondération est choisi par
+    un humain et son nom est tracé (`profil_valide_par`), mais
+    `gouvernance_validee` ne vérifie qu'**un nom non vide** : elle dit QUI a
+    assumé le choix, jamais CE QUE le choix a changé. Recalculé sur quatre
+    portefeuilles avec la formule qui décide : **le modèle retenu bascule
+    dans 3 cas sur 4 sur la cible coût**, et les marges #1-#2 tombent à
+    0,008 · 0,016 · 0,021 selon le profil.
+
+    > *Le profil est un levier sur le prix ; rien ne le montrait au lecteur
+    > du rapport qui circule, ni à celui du classeur signé.*
+
+    ⚠️⚠️ RIEN N'EST RECALCULÉ ICI, ET C'EST LA CONDITION. A6 produit la table
+    avec `_calculer_scores_multicriteres`, la formule qui DÉCIDE ; cette
+    fonction la LIT. Une seconde formule de présentation serait `a6/C3`
+    recommencé — deux vérités possibles pour le même fait.
+
+    ⚠️ ET LE SECOND SENS SE DIT AUSSI. Quand tous les profils désignent le
+    même modèle, le texte l'affirme : c'est une information, pas un silence.
+    *Taire la stabilité laisserait croire qu'elle n'a pas été regardée.*
+
+    `None` quand A6 n'a pas produit la table — on ne suppose rien.
+    """
+    lignes = [x for x in (table or []) if isinstance(x, dict)]
+    if not lignes:
+        return None
+    modeles = {str(x.get('modele')) for x in lignes}
+    actif = next((x for x in lignes if x.get('actif')), None)
+    detail = ' · '.join(
+        f"{x.get('profil')} → {x.get('modele')}"
+        + (' (profil retenu)' if x.get('actif') else '')
+        for x in lignes)
+    if len(modeles) == 1:
+        return (f"Sensibilité au profil de pondération : le classement NE "
+                f"dépend PAS du profil — {modeles.pop()} est retenu sous les "
+                f"{len(lignes)} profils examinés. {detail}")
+    retenu = actif.get('modele') if actif else '?'
+    return (
+        f"⚠ LE MODÈLE RETENU DÉPEND DU PROFIL DE PONDÉRATION — "
+        f"{len(modeles)} modèles différents sortent selon le profil, sur "
+        f"{len(lignes)} profils examinés. Le profil actif retient {retenu}. "
+        f"Le profil est choisi par un humain : sa trace dit QUI l'a assumé, "
+        f"jamais ce qu'il a changé. {detail}")
+
+
 def synthese_exemptions_effet(exemptees) -> str | None:
     """SOURCE UNIQUE — texte disant quelles colonnes ont été SOUSTRAITES au
     contrôle par l'effet, et pourquoi. `None` s'il n'y en a aucune.

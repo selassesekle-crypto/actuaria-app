@@ -19,6 +19,9 @@ from core.conformite_reglementaire import (
     synthese_exclusions, synthese_alertes_experience,
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
     synthese_modele_dl,
+    # ⚠️⚠️ 2 surfaces sur 6 avant le 12/09/2026 : la table vivait dans le
+    # rapport modeles, et ce classeur SIGNE n'en portait rien.
+    synthese_sensibilite_profils,
 )
 from core.elasticite import synthese_elasticite
 from core.qualite_donnees import (MARQUEUR_QUALITE_NON_EXECUTEE,
@@ -846,6 +849,19 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
         # ⚠️ Le choix automatique se dit contestable — il ne bloque rien.
         if arb_contest:
             _kpi(ws3, r, "⚠ Arbitrage contestable", arb_contest,
+                 statut="AMBRE", wrap=True); r += 1
+        # ⚠️⚠️ LE PROFIL DE PONDÉRATION EST UN LEVIER SUR LE PRIX, et ce
+        # classeur est SIGNÉ. Mesuré le 29/08/2026 : le modèle retenu
+        # bascule dans 3 cas sur 4 sur la cible coût selon le profil. La
+        # gouvernance trace QUI a choisi le profil, jamais ce que le choix
+        # a changé — et jusqu'au 12/09/2026 ce classeur n'en disait rien.
+        # ⚠️ AMBRE et non ROUGE : le classement a bien eu lieu, il est
+        # seulement sensible à une décision humaine tracée. Le ROUGE dirait
+        # une faute là où il y a un arbitrage à relire.
+        _sens_a6 = synthese_sensibilite_profils(
+            result_a6.get('sensibilite_profils'))
+        if _sens_a6:
+            _kpi(ws3, r, "Sensibilité au profil de pondération", _sens_a6,
                  statut="AMBRE", wrap=True); r += 1
         _avert_ce = avertissement_controle_effet(ctrl_effet)
         if _avert_ce:

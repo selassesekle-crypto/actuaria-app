@@ -49,6 +49,7 @@ import io
 import unittest
 import zipfile
 
+from core.conformite_reglementaire import synthese_sensibilite_profils
 from direction_non_vie.tarification.services import (
     rapport_equipe_tarif as RE,
 )
@@ -270,6 +271,64 @@ class T3_LesSixSurfaces(unittest.TestCase):
                     f"parle toujours ne signale plus rien")
         print(f"    CS-7 le garde-fou n4 atteint {len(surfaces)}/6 surfaces, "
               f"et se tait quand il n'a rien a dire")
+
+    def test_cs_8_la_SENSIBILITE_AU_PROFIL_atteint_les_SIX_surfaces(self):
+        """CS-8 : le profil de ponderation est un LEVIER SUR LE PRIX.
+
+        ⚠️⚠️ CE QUI ETAIT EN JEU, ET IL EST CHIFFRE. Le profil est choisi par
+        un humain ; `gouvernance_validee` ne verifie qu'un NOM NON VIDE --
+        elle dit QUI a assume le choix, jamais CE QUE le choix a change.
+        Mesure du 29/08/2026, sur quatre portefeuilles, avec la formule qui
+        DECIDE : **le modele retenu bascule dans 3 cas sur 4 sur la cible
+        cout**, marges #1-#2 a 0,008 / 0,016 / 0,021 selon le profil.
+
+        Mesure du 12/09/2026 : la table n'atteignait que le rapport modeles
+        -- 2 surfaces sur 6. Ni le rapport qui CIRCULE, ni le classeur
+        SIGNE n'en portaient rien.
+
+        ⚠️ LES DEUX SENS, ET LE SECOND EST UNE INFORMATION. Quand tous les
+        profils designent le meme modele, le texte l'AFFIRME : *taire la
+        stabilite laisserait croire qu'elle n'a pas ete regardee.*
+        """
+        temoin = 'ZZPROFILSENSZZ'
+        table = [{'profil': temoin, 'modele': 'glm_poisson',
+                  'score': 0.81, 'marge': 0.008, 'actif': True},
+                 {'profil': 'discrimination', 'modele': 'xgboost',
+                  'score': 0.79, 'marge': 0.021, 'actif': False}]
+        r6 = _r6(sensibilite_profils=table)
+        res = {'a6': r6}
+        surfaces = {
+            'equipe.html': RE.export_html_equipe(res),
+            'equipe.word': _docx(RE.export_word_equipe(res)),
+            'equipe.excel': _xlsx(RE.export_excel_equipe(res)),
+            'modeles.html': RM.export_html({}, {}, r6),
+            'modeles.word': _docx(RM.export_word({}, {}, r6)),
+            'a6.excel': _xlsx(TX.export_excel_a6(r6)),
+        }
+        manquantes = [nom for nom, txt in surfaces.items()
+                      if temoin not in txt]
+        self.assertFalse(
+            manquantes,
+            f"la sensibilite au profil n'atteint pas {manquantes} : un "
+            f"lecteur y voit un modele retenu sans savoir qu'un autre "
+            f"profil en aurait retenu un autre")
+
+        #: ⚠️ SECOND SENS : profils UNANIMES -> la stabilite est AFFIRMEE,
+        #: pas passee sous silence.
+        stable = [{'profil': 'equilibre', 'modele': 'glm', 'actif': True},
+                  {'profil': 'discrimination', 'modele': 'glm'}]
+        texte = synthese_sensibilite_profils(stable) or ''
+        self.assertIn(
+            'NE dépend PAS', texte,
+            "des profils unanimes ne produisent aucune phrase : le lecteur "
+            "ne peut pas distinguer « stable » de « pas regarde »")
+        #: ⚠️ TROISIEME SENS : pas de table -> RIEN. On ne suppose pas.
+        self.assertIsNone(
+            synthese_sensibilite_profils(None),
+            "une table absente produit un texte : le rapport affirmerait "
+            "une sensibilite qu'A6 n'a jamais calculee")
+        print(f"    CS-8 la sensibilite au profil atteint {len(surfaces)}/6 "
+              f"surfaces, et dit la stabilite au lieu de la taire")
 
 
 if __name__ == '__main__':

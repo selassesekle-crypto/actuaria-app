@@ -33,6 +33,9 @@ from core.conformite_reglementaire import (
     # ⚠️⚠️ « A AFFICHER DANS TOUT LIVRABLE », dit sa docstring — et elle
     # n'atteignait que l'Excel A6, 1 surface sur 6 (mesure du 12/09/2026).
     avertissement_controle_effet,
+    # ⚠️⚠️ 2 surfaces sur 6 avant le 12/09/2026 : le rapport modeles portait
+    # la TABLE, ce rapport-ci et le classeur signe ne portaient RIEN.
+    synthese_sensibilite_profils,
 )
 from core.elasticite import synthese_elasticite
 from core.qualite_donnees import (MARQUEUR_QUALITE_NON_EXECUTEE,
@@ -296,6 +299,8 @@ _LABELS_SYNTHESES = (
     # le word ignorent la clé en silence.
     ('controle_effet',
      "Contrôle anti-fuite par l'effet — garde-fou n°4"),
+    ('sensibilite_profils',
+     'Sensibilité du classement au profil de pondération'),
 )
 
 
@@ -388,6 +393,13 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
         # seraient deux vérités possibles pour le même fait.
         'controle_effet': avertissement_controle_effet(
             r6.get('controle_effet')),
+        # ⚠️⚠️ LE PROFIL EST UN LEVIER SUR LE PRIX. Le rapport modèles porte
+        # la TABLE complète ; ce rapport-ci n'en portait RIEN — et c'est lui
+        # qui circule. On RELAIE la source unique : A6 a déjà calculé la
+        # table avec la formule qui décide, une seconde formule de
+        # présentation serait `a6/C3` recommencé.
+        'sensibilite_profils': synthese_sensibilite_profils(
+            r6.get('sensibilite_profils')),
     }
     return {k: v for k, v in brut.items() if v}
 
