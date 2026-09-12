@@ -44,6 +44,20 @@ from typing import Dict, Optional
 
 import numpy as np
 
+# ── Fonds propres et MCR d entite ──────────────────────────────────────────
+# Ordre des operations du RD (UE) 2015/35, art. 248, 249 et 252.
+try:
+    from ..services.sp_fonds_propres import (
+        fonds_propres_declares, mcr_entite,
+    )
+    from ..services.sp_contrats import valeur_qrt
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_fonds_propres import (
+        fonds_propres_declares, mcr_entite,
+    )
+    from direction_sante_prevoyance.services.sp_contrats import valeur_qrt
+
+
 warnings.filterwarnings("ignore")
 logging.basicConfig(
     level=logging.INFO,
@@ -168,7 +182,16 @@ class AgentSPCoord:
 
             # ── 4. MCR CONSOLIDÉ ──────────────────────────────────────────────
             # MCR consolidé = max(MCR_santé + MCR_prévoyance, plancher)
-            mcr_consolide = src["mcr_sante"] + src["mcr_prev"]
+            # ⚠️ CORRIGÉ LE 12/09/2026 — additionner deux MCR de branche
+            # additionne aussi DEUX FOIS le plancher absolu, qui n'est dû
+            # qu'une seule fois. Le Règlement délégué (UE) 2015/35 fixe
+            # l'ordre : sommer les termes LINÉAIRES (art. 249), appliquer le
+            # corridor 25–45 % du SCR (art. 248 §2), puis le plancher absolu
+            # une seule fois (art. 248 §1). L'article 252 confirme le même
+            # ordre pour les entreprises multibranches.
+            mcr_lineaire = src["mcr_sante"] + src["mcr_prev"]
+            mcr_consolide, mcr_contrainte = mcr_entite(
+                mcr_lineaire, scr_consolide)
 
             # ── 5. RATIOS DE SOLVABILITÉ ──────────────────────────────────────
             fpp = src["fpp"]
@@ -233,6 +256,12 @@ class AgentSPCoord:
                 "diversification":  round(diversification, 2),
                 "rho_eiopa":        RHO_SANTE_INVALIDITE,
                 "mcr_consolide":    round(mcr_consolide, 2),
+                # Quelle contrainte a effectivement mordu : lineaire,
+                # corridor, ou plancher absolu.
+                "mcr_contrainte":   mcr_contrainte,
+                "mcr_lineaire":     round(mcr_lineaire, 2),
+                "fonds_propres_estimes": src["fpp_estime"],
+                "fonds_propres_mention": src["fpp_mention"],
                 "fonds_propres":    round(fpp, 2),
                 "ratio_scr_pct":    round(ratio_scr, 1),
                 "ratio_mcr_pct":    round(ratio_mcr, 1),
@@ -272,8 +301,19 @@ class AgentSPCoord:
         scr_sante = float(result_s3.get("scr_sante", 0))
         mcr_sante = float(result_s3.get("mcr_sante", 0))
         fpp_s3    = float(result_s3.get("fonds_propres", 0))
-        pa_sante  = float(result_s3.get("qrt_s13", {}).get("lignes", [{}])[-1]
-                          .get("C0010", be_sante * 2) if result_s3.get("qrt_s13") else be_sante * 2)
+        # ⚠️ CORRIGÉ LE 12/09/2026 — lecture par POSITION, `lignes[-1]`.
+        # Elle fonctionnait par accident : la ligne des primes acquises se
+        # trouve être la dernière du QRT S.13. Toute ligne ajoutée — un total,
+        # une ligne de contrôle, une ventilation — déplaçait la lecture sans
+        # la moindre erreur. Planté : en ajoutant une ligne « Total », le
+        # consolidé devenait faux, sans exception ni avertissement. Le
+        # producteur ne garantit d'ailleurs aucun ordre : les lignes sont
+        # construites par appends successifs. La clé est désormais attachée
+        # à la donnée — c'est le code R0100 qui porte les primes acquises.
+        _pa_qrt, _pa_trouvee = valeur_qrt(
+            result_s3.get("qrt_s13"), "R0100", "C0010")
+        pa_sante = float(_pa_qrt) if _pa_trouvee else float(
+            result_s3.get("primes_acquises", be_sante * 2))
 
         # Prévoyance (P4)
         be_prev   = float(result_p4.get("be_prevoyance", 0))
@@ -284,14 +324,26 @@ class AgentSPCoord:
         pa_prev   = result_p4.get("sorties_naomie", {}).get("primes_acquises", be_prev)
 
         # FP consolidés
-        if fonds_propres > 0:
-            fpp = fonds_propres
+        # ⚠️ CORRIGÉ LE 12/09/2026 — le `max` ÉCRASAIT la donnée client.
+        # `max(fpp_s3, fpp_p4, (be_sante + be_prev) x 1,5)` retenait la plus
+        # grande des trois, y compris quand la valeur fournie leur était
+        # inférieure : testé à 1 200 000 EUR, elle était remplacée. Un `max`
+        # sur une donnée fournie n'est pas un repli, c'est une substitution.
+        # Et l'avertissement ne se déclenchait que si le TROISIÈME terme
+        # l'emportait : quand `fpp_p4` gagnait — une estimation elle aussi —
+        # rien n'était signalé. Le garde-fou couvrait un tiers de son assiette.
+        #
+        # Mesuré : le consolidé valait 3 309 743 EUR contre 1 256 757 EUR pour
+        # la somme des deux branches, soit 2,63x, sans aucun apport de capital.
+        if float(fonds_propres) > 0:
+            fpp = float(fonds_propres)
+            fpp_estime, fpp_mention = False, ""
         else:
-            fpp = max(fpp_s3, fpp_p4, (be_sante + be_prev) * 1.5)
-            if fpp == (be_sante + be_prev) * 1.5:
-                self.logger.warning(
-                    f"fonds_propres consolidés non fournis → estimés à {fpp:,.0f}€"
-                )
+            fpp = float(be_sante) + float(be_prev)
+            fpp, fpp_estime, fpp_mention = fonds_propres_declares(
+                0.0, fpp, 1.5, "SP-Coord consolide")
+            self.logger.warning(
+                "fonds_propres consolides non fournis -> %s", fpp_mention)
 
         return {
             "be_sante":   be_sante, "ra_sante":   ra_sante,
@@ -300,6 +352,9 @@ class AgentSPCoord:
             "scr_prev":   scr_prev, "mcr_prev":   mcr_prev,
             "pa_sante":   pa_sante, "pa_prev":     pa_prev,
             "fpp":        fpp,
+            # La mention voyage AVEC la valeur jusqu au document.
+            "fpp_estime":  fpp_estime,
+            "fpp_mention": fpp_mention,
         }
 
     # =========================================================================

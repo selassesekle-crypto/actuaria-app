@@ -33,6 +33,16 @@ try:
 except ImportError:
     PLOTLY_OK = False
 
+# ── Fonds propres ──────────────────────────────────────────────────────────
+# Des fonds propres ne se calculent pas : une estimation doit se
+# DECLARER, et sa mention doit atteindre le document.
+try:
+    from ...services.sp_fonds_propres import fonds_propres_declares
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_fonds_propres import (
+        fonds_propres_declares,
+    )
+
 # ── Trace console tolerante a l encodage ─────────────────────────────────────
 # `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
 # une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
@@ -213,6 +223,11 @@ class AgentS3ReportingSante:
                 'ratio_scr_pct': round(ratio_scr, 1),
                 'ratio_mcr_pct': round(ratio_mcr, 1),
                 'fonds_propres': round(fpp, 2),
+                # La mention d estimation atteint le document, et non
+                # seulement le journal : c est toute la difference
+                # entre signaler et etre lu.
+                'fonds_propres_estimes': src.get('fonds_propres_estimes', False),
+                'fonds_propres_mention': src.get('fonds_propres_mention', ''),
 
                 # ── QRT ──────────────────────────────────────────────────────
                 'qrt_s13': qrt,
@@ -237,8 +252,14 @@ class AgentS3ReportingSante:
         pa = float(s3.get('primes_acquises',
                    result_s1.get('primes_acquises', 5_000_000) if result_s1 else 5_000_000))
         be = float(s3.get('be_sante', result_s2.get('psap_total', 0)))
-        fpp_fournis = float(fonds_propres) > 0
-        fpp = float(fonds_propres) if fpp_fournis else pa * 0.80
+        # ⚠️ CORRIGÉ LE 12/09/2026 — l'estimation ne se déclarait nulle part.
+        # Le `logger.warning` ci-dessous n'atteint PAS le document : la valeur
+        # sortait indiscernable d'un chiffre de bilan. Mesuré : S3 publiait
+        # 379 652 EUR, P4 877 105 EUR et SP-Coord 3 309 743 EUR pour la MÊME
+        # entité, dont deux dans le même dépôt réglementaire.
+        fpp, fpp_estime, fpp_mention = fonds_propres_declares(
+            fonds_propres, pa, 0.80, "S3 reporting sante")
+        fpp_fournis = not fpp_estime
         if not fpp_fournis:
             self.logger.warning(
                 f"fonds_propres non fournis → estimés à {fpp:,.0f}€ (80% PA). "
@@ -248,6 +269,9 @@ class AgentS3ReportingSante:
             )
         return {
             'primes_acquises': pa,
+            # La mention voyage AVEC la valeur, jusque dans le QRT.
+            'fonds_propres_estimes': fpp_estime,
+            'fonds_propres_mention': fpp_mention,
             'be_sante':        be,
             'fonds_propres':   fpp,
             'loss_ratio':      float(s3.get('loss_ratio', 0.72)),

@@ -45,6 +45,16 @@ try:
 except ImportError:
     PLOTLY_OK = False
 
+# ── Fonds propres ──────────────────────────────────────────────────────────
+# Des fonds propres ne se calculent pas : une estimation doit se
+# DECLARER, et sa mention doit atteindre le document.
+try:
+    from ...services.sp_fonds_propres import fonds_propres_declares
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_fonds_propres import (
+        fonds_propres_declares,
+    )
+
 # ── Trace console tolerante a l encodage ─────────────────────────────────────
 # `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
 # une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
@@ -202,6 +212,9 @@ class AgentP4ReportingPrevoyance:
                 'ratio_mcr_pct':     round(ratio_mcr, 1),
                 'fonds_propres':     round(fpp, 2),
 
+                # La mention d estimation atteint le document.
+                'fonds_propres_estimes': src.get('fonds_propres_estimes', False),
+                'fonds_propres_mention': src.get('fonds_propres_mention', ''),
                 # ── QRT ──────────────────────────────────────────────────────
                 'qrt_s14': qrt,
 
@@ -262,8 +275,13 @@ class AgentP4ReportingPrevoyance:
         sal = float(p2_src.get('salaire_brut', 45_000))
 
         # Fonds propres
-        fpp_fournis = float(fonds_propres) > 0
-        fpp = float(fonds_propres) if fpp_fournis else max(fpp_est, pa * 2.0)
+        # ⚠️ CORRIGÉ LE 12/09/2026 — même défaut que S3, autre coefficient.
+        # `max(fpp_est, pa x 2,0)` produisait 877 105 EUR là où S3 publiait
+        # 379 652 EUR pour la même entité, et rien ne le signalait dans le
+        # document. Un avertissement de journal n'est pas une mention.
+        fpp, fpp_estime, fpp_mention = fonds_propres_declares(
+            fonds_propres, pa, 2.00, "P4 reporting prevoyance")
+        fpp_fournis = not fpp_estime
         if not fpp_fournis:
             self.logger.warning(
                 f"fonds_propres non fournis → estimés à {fpp:,.0f}€ (max(P3, 2×PA)). "
@@ -273,6 +291,8 @@ class AgentP4ReportingPrevoyance:
 
         return {
             'be_prevoyance':  be_prev,
+            'fonds_propres_estimes': fpp_estime,
+            'fonds_propres_mention': fpp_mention,
             'pm_rentes_ip':   pm_rentes,
             'psap_total':     psap_total,
             'prec':           prec,

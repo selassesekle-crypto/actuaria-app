@@ -30,7 +30,7 @@ une ligne courte. Ce qui disparaît, c'est le troisième cas — celui où la va
 manque et où personne ne l'apprend.
 """
 
-__all__ = ["lire_alm", "lire_nombre", "lire_premiere_cle"]
+__all__ = ["lire_alm", "lire_nombre", "lire_premiere_cle", "valeur_qrt"]
 
 
 def _nombre(valeur, defaut=0.0):
@@ -119,3 +119,28 @@ def lire_alm(alm):
         # des zeros qu un lecteur prendrait pour des mesures.
         "disponible":         bool(duration or lcr or bv01),
     }
+
+
+def valeur_qrt(qrt, code_ligne, colonne, defaut=None):
+    """Lit une ligne de QRT par son CODE, jamais par son rang.
+
+    LE DEFAUT FERME (D24)
+    `pa_sante = qrt_s13["lignes"][-1][...]` attrapait la valeur par la DERNIERE
+    LIGNE du QRT. Toute ligne ajoutee -- un total, une ligne de controle, une
+    ventilation supplementaire -- deplacait la lecture sans la moindre erreur.
+    Planté : en ajoutant une ligne « Total » en fin de QRT, `pa_sante` devenait
+    ce total, le consolide etait faux, et AUCUNE exception n etait levee.
+    Le producteur ne garantissait par ailleurs aucun ordre : les lignes sont
+    construites par appends successifs, sans contrat ni test le verrouillant.
+
+    Returns
+    -------
+    (valeur, trouvee) : `trouvee` vaut False si le code est absent -- la
+    fonction DIT qu elle n a pas trouve au lieu d inventer un zero.
+    """
+    for ligne in (qrt or {}).get("lignes", []):
+        if str(ligne.get("code", "")).strip() == str(code_ligne).strip():
+            if colonne in ligne:
+                return ligne[colonne], True
+            return defaut, False
+    return defaut, False
