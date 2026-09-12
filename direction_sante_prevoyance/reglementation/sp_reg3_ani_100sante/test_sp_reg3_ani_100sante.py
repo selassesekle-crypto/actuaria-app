@@ -4,14 +4,14 @@ Direction Santé-Prévoyance · Équipe Réglementation & Finance
 Sources : ANI 11/01/2013, Art. L911-7 CSS, Décrets 2019-21, Art. L871-1 CSS
 """
 import pytest
+import unittest
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../.."))
 
 from direction_sante_prevoyance.reglementation.sp_reg3_ani_100sante.agent import AgentSPReg3ANI100Sante
 
 
-@pytest.fixture(scope="module")
-def r_s1_collectif():
+def _fx_r_s1_collectif():
     from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
     return AgentS1TarificationSante(verbose=False).run(
         nb_assures=1000, age_moyen=40, contrat="collectif",
@@ -19,8 +19,7 @@ def r_s1_collectif():
         generer_graphiques=False)
 
 
-@pytest.fixture(scope="module")
-def r_s1_individuel():
+def _fx_r_s1_individuel():
     from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
     return AgentS1TarificationSante(verbose=False).run(
         nb_assures=200, age_moyen=35, contrat="individuel",
@@ -29,7 +28,7 @@ def r_s1_individuel():
 
 
 # ── T1 : Succès collectif et individuel ───────────────────────────────────────
-def test_reg3_success(r_s1_collectif, r_s1_individuel):
+def _impl_test_reg3_success(r_s1_collectif, r_s1_individuel):
     """Succès pour contrat collectif et individuel."""
     reg3 = AgentSPReg3ANI100Sante(verbose=False)
     r_c = reg3.run(result_s1=r_s1_collectif, contrat="collectif",
@@ -41,7 +40,7 @@ def test_reg3_success(r_s1_collectif, r_s1_individuel):
 
 
 # ── T2 : ANI individuel → conforme automatiquement ────────────────────────────
-def test_reg3_ani_individuel_conforme(r_s1_individuel):
+def _impl_test_reg3_ani_individuel_conforme(r_s1_individuel):
     """ANI 2013 ne s'applique qu'aux collectifs (Art. L911-7 CSS).
     Un contrat individuel doit toujours être conforme ANI.
     """
@@ -58,7 +57,7 @@ def test_reg3_ani_individuel_conforme(r_s1_individuel):
 
 
 # ── T3 : ANI collectif vérifié poste par poste ────────────────────────────────
-def test_reg3_ani_collectif_postes(r_s1_collectif):
+def _impl_test_reg3_ani_collectif_postes(r_s1_collectif):
     """Pour un contrat collectif, chaque poste ANI doit être vérifié."""
     reg3 = AgentSPReg3ANI100Sante(verbose=False)
     r = reg3.run(result_s1=r_s1_collectif, contrat="collectif",
@@ -71,7 +70,7 @@ def test_reg3_ani_collectif_postes(r_s1_collectif):
 
 
 # ── T4 : 100% Santé vérifié ───────────────────────────────────────────────────
-def test_reg3_100_sante_verifie(r_s1_collectif):
+def _impl_test_reg3_100_sante_verifie(r_s1_collectif):
     """La vérification 100% Santé (RAC 0) doit couvrir optique et dentaire.
     Source : Décrets 2019-21.
     """
@@ -88,7 +87,7 @@ def test_reg3_100_sante_verifie(r_s1_collectif):
 
 
 # ── T5 : Contrat responsable vérifié ─────────────────────────────────────────
-def test_reg3_contrat_responsable(r_s1_collectif):
+def _impl_test_reg3_contrat_responsable(r_s1_collectif):
     """Le contrat responsable doit être vérifié (Art. L871-1 CSS)."""
     reg3 = AgentSPReg3ANI100Sante(verbose=False)
     r = reg3.run(result_s1=r_s1_collectif, contrat="collectif",
@@ -100,7 +99,7 @@ def test_reg3_contrat_responsable(r_s1_collectif):
 
 
 # ── T6 : 3 hypothèses présentes ───────────────────────────────────────────────
-def test_reg3_hypotheses(r_s1_collectif):
+def _impl_test_reg3_hypotheses(r_s1_collectif):
     """SP-Reg3 doit produire 3 hypothèses : ANI, 100%S, contrat responsable."""
     reg3 = AgentSPReg3ANI100Sante(verbose=False)
     r = reg3.run(result_s1=r_s1_collectif, contrat="collectif",
@@ -111,9 +110,47 @@ def test_reg3_hypotheses(r_s1_collectif):
 
 
 # ── T7 : Erreur si S1 absent ──────────────────────────────────────────────────
-def test_reg3_erreur_sans_s1():
+def _impl_test_reg3_erreur_sans_s1():
     """SP-Reg3 doit retourner success=False si result_s1 est absent."""
     reg3 = AgentSPReg3ANI100Sante(verbose=False)
     r = reg3.run(result_s1=None, contrat="collectif", generer_graphiques=False)
     assert r["success"] is False, "Doit échouer sans S1"
     assert r["erreur"] is not None, "Message d'erreur attendu"
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestSpReg3Ani100sante(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_r_s1_collectif = _fx_r_s1_collectif()
+        cls._fxv_r_s1_individuel = _fx_r_s1_individuel()
+
+    def test_reg3_success(self):
+        _impl_test_reg3_success(self._fxv_r_s1_collectif, self._fxv_r_s1_individuel)
+
+    def test_reg3_ani_individuel_conforme(self):
+        _impl_test_reg3_ani_individuel_conforme(self._fxv_r_s1_individuel)
+
+    def test_reg3_ani_collectif_postes(self):
+        _impl_test_reg3_ani_collectif_postes(self._fxv_r_s1_collectif)
+
+    def test_reg3_100_sante_verifie(self):
+        _impl_test_reg3_100_sante_verifie(self._fxv_r_s1_collectif)
+
+    def test_reg3_contrat_responsable(self):
+        _impl_test_reg3_contrat_responsable(self._fxv_r_s1_collectif)
+
+    def test_reg3_hypotheses(self):
+        _impl_test_reg3_hypotheses(self._fxv_r_s1_collectif)
+
+    def test_reg3_erreur_sans_s1(self):
+        _impl_test_reg3_erreur_sans_s1()

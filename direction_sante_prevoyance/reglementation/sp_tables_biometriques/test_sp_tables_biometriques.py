@@ -4,6 +4,7 @@ Direction Santé-Prévoyance — Équivalent SP de A14 (Non-Vie/Vie)
 BCAC 2019, TD 88-90, TH 00-02, annuités rentes IP, validation A/E
 """
 import pytest
+import unittest
 import numpy as np
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../.."))
@@ -15,20 +16,18 @@ from direction_sante_prevoyance.reglementation.sp_tables_biometriques.agent impo
 )
 
 
-@pytest.fixture(scope="module")
-def agent():
+def _fx_agent():
     return AgentSPTablesBiometriques(verbose=False)
 
 
-@pytest.fixture(scope="module")
-def r_nominal(agent):
+def _fx_r_nominal(agent):
     return agent.run(age=42.0, csp="employe", table="BCAC2019",
                      taux_actu=EIOPA_RFR_PROXY, horizon_rente=20,
                      generer_graphiques=False)
 
 
 # ── T1 : Succès et structure standard ────────────────────────────────────────
-def test_tables_success_et_structure(r_nominal):
+def _impl_test_tables_success_et_structure(r_nominal):
     """SP-TABLES doit réussir et retourner les 5 modules biométriques."""
     assert r_nominal["success"] is True, "Doit réussir"
     assert r_nominal["erreur"] is None, "Pas d'erreur"
@@ -40,7 +39,7 @@ def test_tables_success_et_structure(r_nominal):
 
 
 # ── T2 : BCAC 2019 — cohérence cadre/non-cadre et monotonie ─────────────────
-def test_tables_bcac2019_coherence(agent):
+def _impl_test_tables_bcac2019_coherence(agent):
     """BCAC 2019 : taux cadre < non-cadre à tout âge (segmentation CSP).
     Monotonie croissante : taux augmente avec l'âge (vieillissement).
     Source : BCAC 2019 — Statistiques arrêts de travail.
@@ -62,7 +61,7 @@ def test_tables_bcac2019_coherence(agent):
 
 
 # ── T3 : TD 88-90 — décroissance stricte du maintien ────────────────────────
-def test_tables_td8890_decroissance(r_nominal):
+def _impl_test_tables_td8890_decroissance(r_nominal):
     """TD 88-90 : P(maintien t mois) doit être strictement décroissante.
     Un assuré ne peut pas revenir en arrêt après guérison dans cette table.
     Source : TD 88-90 — Tables de maintien INSEE/BCAC.
@@ -79,7 +78,7 @@ def test_tables_td8890_decroissance(r_nominal):
 
 
 # ── T4 : TH 00-02 — mortalité croissante avec l'âge ─────────────────────────
-def test_tables_th0002_monotonie(agent):
+def _impl_test_tables_th0002_monotonie(agent):
     """TH 00-02 : qx doit croître avec l'âge (mortalité population active).
     Source : INSEE/BCAC — Tables réglementaires TH 00-02.
     """
@@ -100,7 +99,7 @@ def test_tables_th0002_monotonie(agent):
 
 
 # ── T5 : Annuités viagères — propriétés mathématiques ────────────────────────
-def test_tables_annuites_proprietes(agent):
+def _impl_test_tables_annuites_proprietes(agent):
     """Annuités ä_x : décroissantes avec le taux d'actualisation.
     Annuité différée < annuité immédiate (actualisation sur n années).
     Source : actuariat standard + EIOPA RFR Art.77 S2.
@@ -122,7 +121,7 @@ def test_tables_annuites_proprietes(agent):
 
 
 # ── T6 : A/E ratio — cohérence et alertes ────────────────────────────────────
-def test_tables_ae_ratio(agent):
+def _impl_test_tables_ae_ratio(agent):
     """A/E ratio : validation données client vs BCAC 2019.
     A/E ≈ 1.0 pour portefeuille cohérent BCAC.
     A/E > 1.2 → ROUGE (sur-sinistralité), A/E < 0.8 → VERT ou AMBRE.
@@ -159,7 +158,7 @@ def test_tables_ae_ratio(agent):
 
 
 # ── T7 : Normalisation CSP ───────────────────────────────────────────────────
-def test_tables_normalisation_csp(agent):
+def _impl_test_tables_normalisation_csp(agent):
     """Normalisation CSP : "cadre", "cadre_sup" → cadre ; autres → non_cadre.
     Les deux groupes doivent donner des taux différents (segmentation BCAC).
     """
@@ -173,3 +172,41 @@ def test_tables_normalisation_csp(agent):
         assert r["csp"] == "non_cadre", (
             f"CSP='{csp_nc}' doit être normalisée en 'non_cadre', obtenu '{r['csp']}'"
         )
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestSpTablesBiometriques(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_agent = _fx_agent()
+        cls._fxv_r_nominal = _fx_r_nominal(cls._fxv_agent)
+
+    def test_tables_success_et_structure(self):
+        _impl_test_tables_success_et_structure(self._fxv_r_nominal)
+
+    def test_tables_bcac2019_coherence(self):
+        _impl_test_tables_bcac2019_coherence(self._fxv_agent)
+
+    def test_tables_td8890_decroissance(self):
+        _impl_test_tables_td8890_decroissance(self._fxv_r_nominal)
+
+    def test_tables_th0002_monotonie(self):
+        _impl_test_tables_th0002_monotonie(self._fxv_agent)
+
+    def test_tables_annuites_proprietes(self):
+        _impl_test_tables_annuites_proprietes(self._fxv_agent)
+
+    def test_tables_ae_ratio(self):
+        _impl_test_tables_ae_ratio(self._fxv_agent)
+
+    def test_tables_normalisation_csp(self):
+        _impl_test_tables_normalisation_csp(self._fxv_agent)

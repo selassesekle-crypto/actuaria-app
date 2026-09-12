@@ -4,6 +4,7 @@ Direction Santé-Prévoyance — Équivalent SP de A9 Marcus (Non-Vie)
 6 contrôles C1-C6 + alertes proactives
 """
 import pytest
+import unittest
 import numpy as np
 import pandas as pd
 import sys, os
@@ -12,8 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../.."))
 from direction_sante_prevoyance.reglementation.sp_coherence.agent import AgentSPCoherence
 
 
-@pytest.fixture(scope="module")
-def pipeline_complet():
+def _fx_pipeline_complet():
     from direction_sante_prevoyance.services.sp_data_builder import SPDataBuilder
     from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
     from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvissionnementSante
@@ -46,8 +46,7 @@ def pipeline_complet():
     return r_s1, r_s2, r_s3, r_p4, r_coord, r_reg2, r_reg3
 
 
-@pytest.fixture(scope="module")
-def r_coh(pipeline_complet):
+def _fx_r_coh(pipeline_complet):
     r_s1,r_s2,r_s3,r_p4,r_coord,r_reg2,r_reg3 = pipeline_complet
     return AgentSPCoherence(verbose=False).run(
         result_s1=r_s1, result_s2=r_s2, result_s3=r_s3, result_p4=r_p4,
@@ -56,7 +55,7 @@ def r_coh(pipeline_complet):
 
 
 # ── T1 : Succès et structure ───────────────────────────────────────────────────
-def test_coh_success_et_structure(r_coh):
+def _impl_test_coh_success_et_structure(r_coh):
     """SP-Cohérence doit réussir et retourner la structure standard."""
     assert r_coh["success"] is True, "SP-Cohérence doit réussir"
     assert r_coh["erreur"] is None, "Pas d'erreur attendue"
@@ -67,7 +66,7 @@ def test_coh_success_et_structure(r_coh):
 
 
 # ── T2 : 6 contrôles C1-C6 ───────────────────────────────────────────────────
-def test_coh_six_controles(r_coh):
+def _impl_test_coh_six_controles(r_coh):
     """6 contrôles C1-C6 doivent tous être présents avec un statut valide."""
     controles = r_coh["controles"]
     assert len(controles) == 6, f"Attendu 6 contrôles, obtenu {len(controles)}"
@@ -81,7 +80,7 @@ def test_coh_six_controles(r_coh):
 
 
 # ── T3 : C1 — LR cohérent entre S1 et S2 ─────────────────────────────────────
-def test_coh_c1_lr_coherent(r_coh):
+def _impl_test_coh_c1_lr_coherent(r_coh):
     """C1 vérifie l'écart LR tarification (S1) ↔ LR provisionnement (S2).
     Seuil : ≤ 15pp — pratique marché FNMF 2023.
     """
@@ -93,7 +92,7 @@ def test_coh_c1_lr_coherent(r_coh):
 
 
 # ── T4 : C2 + C3 — Réconciliation BE S2/IFRS17 ────────────────────────────────
-def test_coh_c2_c3_be_reconciliation(r_coh):
+def _impl_test_coh_c2_c3_be_reconciliation(r_coh):
     """C2 et C3 vérifient la cohérence BE S2 ↔ BE IFRS17 (santé + prévoyance).
     Seuil : ≤ 5% — ACPR Q&A IFRS17 2023.
     """
@@ -109,7 +108,7 @@ def test_coh_c2_c3_be_reconciliation(r_coh):
 
 
 # ── T5 : C4 — SCR deux chemins identiques ────────────────────────────────────
-def test_coh_c4_scr_coherent(r_coh):
+def _impl_test_coh_c4_scr_coherent(r_coh):
     """C4 vérifie que SP-Coord et SP-REG1 calculent le même SCR.
     Seuil : ≤ 2% — même formule EIOPA Annexe IV, doit être quasi-identique.
     """
@@ -123,7 +122,7 @@ def test_coh_c4_scr_coherent(r_coh):
 
 
 # ── T6 : Dégradation gracieuse — C1 calculé avec S1+S2 ──────────────────────
-def test_coh_degradation_gracieuse(pipeline_complet):
+def _impl_test_coh_degradation_gracieuse(pipeline_complet):
     """Avec seulement S1+S2, C1 doit être calculé et C2-C5 doivent être N/A."""
     r_s1,r_s2,*_ = pipeline_complet
     r = AgentSPCoherence(verbose=False).run(
@@ -137,7 +136,7 @@ def test_coh_degradation_gracieuse(pipeline_complet):
 
 
 # ── T7 : Alertes proactives ───────────────────────────────────────────────────
-def test_coh_alertes_proactives(r_coh):
+def _impl_test_coh_alertes_proactives(r_coh):
     """Les alertes proactives doivent être une liste (vide ou avec des messages).
     Elles doivent détecter des patterns SP-spécifiques (ANI, PSAP, SCR tendu).
     """
@@ -146,3 +145,41 @@ def test_coh_alertes_proactives(r_coh):
     # Toutes les alertes doivent être des strings non vides
     for a in alertes:
         assert isinstance(a, str) and len(a) > 0, f"Alerte invalide : {a}"
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestSpCoherence(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_pipeline_complet = _fx_pipeline_complet()
+        cls._fxv_r_coh = _fx_r_coh(cls._fxv_pipeline_complet)
+
+    def test_coh_success_et_structure(self):
+        _impl_test_coh_success_et_structure(self._fxv_r_coh)
+
+    def test_coh_six_controles(self):
+        _impl_test_coh_six_controles(self._fxv_r_coh)
+
+    def test_coh_c1_lr_coherent(self):
+        _impl_test_coh_c1_lr_coherent(self._fxv_r_coh)
+
+    def test_coh_c2_c3_be_reconciliation(self):
+        _impl_test_coh_c2_c3_be_reconciliation(self._fxv_r_coh)
+
+    def test_coh_c4_scr_coherent(self):
+        _impl_test_coh_c4_scr_coherent(self._fxv_r_coh)
+
+    def test_coh_degradation_gracieuse(self):
+        _impl_test_coh_degradation_gracieuse(self._fxv_pipeline_complet)
+
+    def test_coh_alertes_proactives(self):
+        _impl_test_coh_alertes_proactives(self._fxv_r_coh)

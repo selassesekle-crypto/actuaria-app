@@ -4,6 +4,7 @@ Direction Santé-Prévoyance · Équipe Prévoyance
 Sources : BCAC 2019, TD 88-90, TH 00-02, CTIP 2023, CCN Cadres 1947
 """
 import pytest
+import unittest
 import numpy as np
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../.."))
@@ -11,19 +12,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../.."))
 from direction_sante_prevoyance.prevoyance.p1_tarification.agent import AgentP1TarificationPrevoyance
 
 
-@pytest.fixture(scope="module")
-def p1():
+def _fx_p1():
     return AgentP1TarificationPrevoyance(verbose=False)
 
 
-@pytest.fixture(scope="module")
-def r_base(p1):
+def _fx_r_base(p1):
     return p1.run(age=42, salaire_brut=45000, categorie="employe",
                   franchise_jours=90, generer_graphiques=False)
 
 
 # ── T1 : Succès et structure ───────────────────────────────────────────────────
-def test_p1_success(r_base):
+def _impl_test_p1_success(r_base):
     assert r_base["success"] is True
     assert r_base["statut_rag"] in ("VERT", "AMBRE", "ROUGE")
     assert r_base["erreur"] is None
@@ -33,7 +32,7 @@ def test_p1_success(r_base):
 
 
 # ── T2 : Probabilité franchise — loi exponentielle BCAC 2019 ──────────────────
-def test_p1_prob_franchise_expo_bcac(p1):
+def _impl_test_p1_prob_franchise_expo_bcac(p1):
     """P(arrêt > franchise) = exp(-franchise / duree_moy_bcac).
     BCAC 2019 : duree_moy = 45j → P(>90j) = exp(-2) ≈ 13.5%.
     Propriété : ratio prime(f=0) / prime(f=90j) = exp(90/45) = exp(2) ≈ 7.39.
@@ -53,7 +52,7 @@ def test_p1_prob_franchise_expo_bcac(p1):
 
 
 # ── T3 : Hiérarchie CSP sur ITT à salaire égal ────────────────────────────────
-def test_p1_hierarchie_csp_itt(p1):
+def _impl_test_p1_hierarchie_csp_itt(p1):
     """À salaire égal : ITT_ouvrier > ITT_employe > ITT_cadre > ITT_cadre_sup.
     Source : BCAC 2019 facteurs CSP (1.35 / 1.00 / 0.75 / 0.60).
     """
@@ -70,7 +69,7 @@ def test_p1_hierarchie_csp_itt(p1):
 
 
 # ── T4 : Capital décès différencié par CSP ────────────────────────────────────
-def test_p1_capital_deces_csp(p1):
+def _impl_test_p1_capital_deces_csp(p1):
     """Capital décès différencié par CSP — CTIP 2023 + CCN Cadres 1947.
     Cadres sup : 4× | Cadres : 3× | Employés : 1.5× | Ouvriers : 1×.
     """
@@ -87,7 +86,7 @@ def test_p1_capital_deces_csp(p1):
 
 
 # ── T5 : ITT dominant sur non-cadres avec franchise courte ───────────────────
-def test_p1_itt_dominant_franchise_courte(p1):
+def _impl_test_p1_itt_dominant_franchise_courte(p1):
     """Pour employe et ouvrier avec franchise courte (3j),
     la prime ITT doit être supérieure à la prime décès.
     """
@@ -103,7 +102,7 @@ def test_p1_itt_dominant_franchise_courte(p1):
 
 
 # ── T6 : Taux de cotisation dans la norme CCN ────────────────────────────────
-def test_p1_taux_cotisation_norme_ccn(p1):
+def _impl_test_p1_taux_cotisation_norme_ccn(p1):
     """Taux cotisation ∈ [0.5%, 6%] selon les paramètres.
     Norme CCN : 1.5-4% pour les régimes standards.
     """
@@ -116,7 +115,7 @@ def test_p1_taux_cotisation_norme_ccn(p1):
 
 
 # ── T7 : Données réelles depuis builder ───────────────────────────────────────
-def test_p1_donnees_reelles(p1):
+def _impl_test_p1_donnees_reelles(p1):
     """P1 doit utiliser les données IP réelles du builder."""
     import pandas as pd
     from direction_sante_prevoyance.services.sp_data_builder import SPDataBuilder
@@ -133,3 +132,41 @@ def test_p1_donnees_reelles(p1):
     assert r["success"] is True
     assert r.get("source_donnees") == "donnees_reelles_a2"
     assert r["nb_assures"] == n
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestP1Axel(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_p1 = _fx_p1()
+        cls._fxv_r_base = _fx_r_base(cls._fxv_p1)
+
+    def test_p1_success(self):
+        _impl_test_p1_success(self._fxv_r_base)
+
+    def test_p1_prob_franchise_expo_bcac(self):
+        _impl_test_p1_prob_franchise_expo_bcac(self._fxv_p1)
+
+    def test_p1_hierarchie_csp_itt(self):
+        _impl_test_p1_hierarchie_csp_itt(self._fxv_p1)
+
+    def test_p1_capital_deces_csp(self):
+        _impl_test_p1_capital_deces_csp(self._fxv_p1)
+
+    def test_p1_itt_dominant_franchise_courte(self):
+        _impl_test_p1_itt_dominant_franchise_courte(self._fxv_p1)
+
+    def test_p1_taux_cotisation_norme_ccn(self):
+        _impl_test_p1_taux_cotisation_norme_ccn(self._fxv_p1)
+
+    def test_p1_donnees_reelles(self):
+        _impl_test_p1_donnees_reelles(self._fxv_p1)

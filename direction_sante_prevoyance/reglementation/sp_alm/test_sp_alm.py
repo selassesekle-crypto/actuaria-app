@@ -4,6 +4,7 @@ Direction Santé-Prévoyance — Équivalent SP de A12 Aisha (Non-Vie)
 Duration SP, gap, BV01, LCR Art.L212-7 CSS
 """
 import pytest
+import unittest
 import numpy as np
 import pandas as pd
 import sys, os
@@ -15,8 +16,7 @@ from direction_sante_prevoyance.reglementation.sp_alm.agent import (
 )
 
 
-@pytest.fixture(scope="module")
-def r_p3():
+def _fx_r_p3():
     from direction_sante_prevoyance.services.sp_data_builder import SPDataBuilder
     from direction_sante_prevoyance.prevoyance.p1_tarification.agent import AgentP1TarificationPrevoyance
     from direction_sante_prevoyance.prevoyance.p2_tables_morbidite.agent import AgentP2TablesMorbidite
@@ -39,15 +39,14 @@ def r_p3():
         result_p1=rp1, result_p2=rp2, generer_graphiques=False)
 
 
-@pytest.fixture(scope="module")
-def r_alm(r_p3):
+def _fx_r_alm(r_p3):
     return AgentSPAlm(verbose=False).run(
         result_p3=r_p3, fonds_propres=15_000_000,
         generer_graphiques=False)
 
 
 # ── T1 : Succès et structure ───────────────────────────────────────────────────
-def test_alm_success_et_structure(r_alm):
+def _impl_test_alm_success_et_structure(r_alm):
     """SP-ALM doit réussir et retourner duration, BV01, LCR."""
     assert r_alm["success"] is True, "Doit réussir"
     assert r_alm["erreur"] is None, "Pas d'erreur"
@@ -59,7 +58,7 @@ def test_alm_success_et_structure(r_alm):
 
 
 # ── T2 : Duration passif SP — rentes IP longues, santé courte ────────────────
-def test_alm_duration_passif_hierarchie(r_alm):
+def _impl_test_alm_duration_passif_hierarchie(r_alm):
     """Duration rentes IP > Duration PSAP prév > Duration PSAP santé.
     Les PM rentes IP ont une duration 10-18 ans (long terme).
     Le PSAP santé a une duration < 1 an (remboursements rapides).
@@ -83,7 +82,7 @@ def test_alm_duration_passif_hierarchie(r_alm):
 
 
 # ── T3 : BV01 — identité BV01_net = BV01_actif - BV01_passif ─────────────────
-def test_alm_bv01_identite(r_alm):
+def _impl_test_alm_bv01_identite(r_alm):
     """BV01_net = BV01_actif - BV01_passif (identité comptable).
     Convention : hausse taux → valeur obligation baisse → BV01 négatif.
     Source : actuariat ALM standard + EIOPA Art.105 S2.
@@ -102,7 +101,7 @@ def test_alm_bv01_identite(r_alm):
 
 
 # ── T4 : LCR ≥ seuil → VERT/AMBRE ; LCR < seuil → ROUGE ────────────────────
-def test_alm_lcr_conformite(r_alm, r_p3):
+def _impl_test_alm_lcr_conformite(r_alm, r_p3):
     """LCR ≥ 100% (Art. L212-7 CSS) → conforme.
     LCR < 100% → ROUGE (exigence réglementaire).
     """
@@ -126,7 +125,7 @@ def test_alm_lcr_conformite(r_alm, r_p3):
 
 
 # ── T5 : Gap duration = D_actif - D_passif ───────────────────────────────────
-def test_alm_gap_coherence(r_alm):
+def _impl_test_alm_gap_coherence(r_alm):
     """Gap = D_actif - D_passif.
     Signe et valeur absolue doivent être cohérents.
     """
@@ -138,7 +137,7 @@ def test_alm_gap_coherence(r_alm):
 
 
 # ── T6 : Sans P3 → erreur ─────────────────────────────────────────────────────
-def test_alm_erreur_sans_p3():
+def _impl_test_alm_erreur_sans_p3():
     """P3 est requis. Sans lui, l'agent doit retourner success=False."""
     r = AgentSPAlm(verbose=False).run(result_p3=None, generer_graphiques=False)
     assert r["success"] is False, "Doit échouer sans P3"
@@ -147,7 +146,7 @@ def test_alm_erreur_sans_p3():
 
 
 # ── T7 : Allocation actif personnalisée ───────────────────────────────────────
-def test_alm_allocation_personnalisee(r_p3):
+def _impl_test_alm_allocation_personnalisee(r_p3):
     """Une allocation personnalisée doit modifier la duration actif.
     Allocation 100% OAT (duration 7.5a) vs 100% monétaire (duration 0.25a).
     """
@@ -172,3 +171,41 @@ def test_alm_allocation_personnalisee(r_p3):
     assert r_mon["lcr"]["lcr_ratio"] > LCR_MIN, (
         f"LCR 100% monétaire doit être ≥ {LCR_MIN:.0%}"
     )
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestSpAlm(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_r_p3 = _fx_r_p3()
+        cls._fxv_r_alm = _fx_r_alm(cls._fxv_r_p3)
+
+    def test_alm_success_et_structure(self):
+        _impl_test_alm_success_et_structure(self._fxv_r_alm)
+
+    def test_alm_duration_passif_hierarchie(self):
+        _impl_test_alm_duration_passif_hierarchie(self._fxv_r_alm)
+
+    def test_alm_bv01_identite(self):
+        _impl_test_alm_bv01_identite(self._fxv_r_alm)
+
+    def test_alm_lcr_conformite(self):
+        _impl_test_alm_lcr_conformite(self._fxv_r_alm, self._fxv_r_p3)
+
+    def test_alm_gap_coherence(self):
+        _impl_test_alm_gap_coherence(self._fxv_r_alm)
+
+    def test_alm_erreur_sans_p3(self):
+        _impl_test_alm_erreur_sans_p3()
+
+    def test_alm_allocation_personnalisee(self):
+        _impl_test_alm_allocation_personnalisee(self._fxv_r_p3)

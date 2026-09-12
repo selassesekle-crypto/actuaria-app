@@ -4,6 +4,7 @@ Direction Santé-Prévoyance
 Équivalent SP de A7 Ibrahim (Non-Vie) — Pipeline M1→M5
 """
 import pytest
+import unittest
 import numpy as np
 import pandas as pd
 import sys, os
@@ -12,8 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../.."))
 from direction_sante_prevoyance.rapport_actuariel.agent import AgentSPRapportActuariel
 
 
-@pytest.fixture(scope="module")
-def pipeline_complet():
+def _fx_pipeline_complet():
     """Pipeline complet S1→S3 + P1→P4 + Coord + REG2 + REG3."""
     from direction_sante_prevoyance.services.sp_data_builder import SPDataBuilder
     from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
@@ -66,8 +66,7 @@ def pipeline_complet():
     return r_s1, r_s2, r_s3, r_p1, r_p2, r_p3, r_p4, r_coord
 
 
-@pytest.fixture(scope="module")
-def r_rapport(pipeline_complet):
+def _fx_r_rapport(pipeline_complet):
     r_s1,r_s2,r_s3,r_p1,r_p2,r_p3,r_p4,r_coord = pipeline_complet
     return AgentSPRapportActuariel(verbose=False).run(
         result_s1=r_s1, result_s2=r_s2, result_s3=r_s3,
@@ -78,7 +77,7 @@ def r_rapport(pipeline_complet):
 
 
 # ── T1 : Succès et structure standard ────────────────────────────────────────
-def test_rapport_success_et_structure(r_rapport):
+def _impl_test_rapport_success_et_structure(r_rapport):
     """Pipeline M1→M5 doit réussir et retourner toutes les clés standard."""
     assert r_rapport["success"] is True, "SP-Rapport doit réussir"
     assert r_rapport["erreur"] is None, "Pas d'erreur attendue"
@@ -89,7 +88,7 @@ def test_rapport_success_et_structure(r_rapport):
 
 
 # ── T2 : 10 modules chargés (S1-S3, P1-P4, SP-Coord) ────────────────────────
-def test_rapport_modules_disponibles(r_rapport):
+def _impl_test_rapport_modules_disponibles(r_rapport):
     """Le rapport doit détecter et utiliser tous les modules du pipeline SP."""
     modules = r_rapport["modules_disponibles"]
     for attendu in ["S1","S2","S3","P1","P2","P3","P4","SP-Coord"]:
@@ -97,7 +96,7 @@ def test_rapport_modules_disponibles(r_rapport):
 
 
 # ── T3 : BE total = BE_santé + BE_prévoyance ─────────────────────────────────
-def test_rapport_be_identite(r_rapport):
+def _impl_test_rapport_be_identite(r_rapport):
     """Identité comptable : BE_total = BE_santé + BE_prévoyance."""
     m1  = r_rapport["m1"]
     m4  = r_rapport["m4"]
@@ -109,7 +108,7 @@ def test_rapport_be_identite(r_rapport):
 
 
 # ── T4 : Livrables M5 produits (Excel + Word + PDF) ──────────────────────────
-def test_rapport_livrables_m5(r_rapport):
+def _impl_test_rapport_livrables_m5(r_rapport):
     """Les 3 livrables M5 doivent être des bytes non vides.
     Équivalent des excel_bytes/word_bytes/pdf_bytes de A7 Ibrahim (Non-Vie).
     """
@@ -126,7 +125,7 @@ def test_rapport_livrables_m5(r_rapport):
 
 
 # ── T5 : Hash de session SHA-256 cohérent ────────────────────────────────────
-def test_rapport_hash_session(r_rapport):
+def _impl_test_rapport_hash_session(r_rapport):
     """Le hash de session doit être présent et identique dans le retour et l'audit.
     Garantit l'intégrité des résultats (équivalent du hash A13 Non-Vie).
     """
@@ -139,7 +138,7 @@ def test_rapport_hash_session(r_rapport):
 
 
 # ── T6 : Dégradation gracieuse (S3+P4 seulement) ────────────────────────────
-def test_rapport_degradation_gracieuse(pipeline_complet):
+def _impl_test_rapport_degradation_gracieuse(pipeline_complet):
     """Le rapport doit fonctionner même avec seulement S3 et P4 disponibles.
     Propriété différenciante : pas de plantage si certains agents sont absents.
     """
@@ -154,7 +153,7 @@ def test_rapport_degradation_gracieuse(pipeline_complet):
 
 
 # ── T7 : Avis actuariel conforme aux 3 valeurs attendues ─────────────────────
-def test_rapport_avis_actuariel(r_rapport):
+def _impl_test_rapport_avis_actuariel(r_rapport):
     """L'avis actuariel doit être FAVORABLE, AVEC RÉSERVES ou DÉFAVORABLE.
     C'est le verdict final du rapport — présenté au CA et à l'ACPR.
     """
@@ -168,3 +167,41 @@ def test_rapport_avis_actuariel(r_rapport):
     assert avis == avis_attendu, (
         f"Incohérence RAG/Avis : RAG={rag} → attendu {avis_attendu}, obtenu {avis}"
     )
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestSpRapport(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_pipeline_complet = _fx_pipeline_complet()
+        cls._fxv_r_rapport = _fx_r_rapport(cls._fxv_pipeline_complet)
+
+    def test_rapport_success_et_structure(self):
+        _impl_test_rapport_success_et_structure(self._fxv_r_rapport)
+
+    def test_rapport_modules_disponibles(self):
+        _impl_test_rapport_modules_disponibles(self._fxv_r_rapport)
+
+    def test_rapport_be_identite(self):
+        _impl_test_rapport_be_identite(self._fxv_r_rapport)
+
+    def test_rapport_livrables_m5(self):
+        _impl_test_rapport_livrables_m5(self._fxv_r_rapport)
+
+    def test_rapport_hash_session(self):
+        _impl_test_rapport_hash_session(self._fxv_r_rapport)
+
+    def test_rapport_degradation_gracieuse(self):
+        _impl_test_rapport_degradation_gracieuse(self._fxv_pipeline_complet)
+
+    def test_rapport_avis_actuariel(self):
+        _impl_test_rapport_avis_actuariel(self._fxv_r_rapport)

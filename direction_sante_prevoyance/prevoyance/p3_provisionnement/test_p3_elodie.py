@@ -4,6 +4,7 @@ Direction Santé-Prévoyance · Équipe Prévoyance
 Sources : CTIP 2023, IFRS 17 §B91, EIOPA RFR Art.77, RD 2015/35 Art.145
 """
 import pytest
+import unittest
 import numpy as np
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../.."))
@@ -13,8 +14,7 @@ from direction_sante_prevoyance.prevoyance.p2_tables_morbidite.agent import Agen
 from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvissionnementPrevoyance
 
 
-@pytest.fixture(scope="module")
-def pipeline_p3():
+def _fx_pipeline_p3():
     import pandas as pd
     from direction_sante_prevoyance.services.sp_data_builder import SPDataBuilder
     np.random.seed(42)
@@ -36,7 +36,7 @@ def pipeline_p3():
 
 
 # ── T1 : Succès et structure ───────────────────────────────────────────────────
-def test_p3_success(pipeline_p3):
+def _impl_test_p3_success(pipeline_p3):
     _, _, r_p3 = pipeline_p3
     assert r_p3["success"] is True
     assert r_p3["statut_rag"] in ("VERT", "AMBRE", "ROUGE")
@@ -44,7 +44,7 @@ def test_p3_success(pipeline_p3):
 
 
 # ── T2 : BE = BE_ITT + PM + PSAP_IP + PREC (identité comptable) ──────────────
-def test_p3_be_identite_comptable(pipeline_p3):
+def _impl_test_p3_be_identite_comptable(pipeline_p3):
     """BE_prévoyance = BE_ITT + PM_rentes_IP + PSAP_IP + PREC.
     Identité fondamentale du provisionnement prévoyance (Art. 77 §1 S2).
     """
@@ -61,7 +61,7 @@ def test_p3_be_identite_comptable(pipeline_p3):
 
 
 # ── T3 : TP = BE + RA ─────────────────────────────────────────────────────────
-def test_p3_tp_identite(pipeline_p3):
+def _impl_test_p3_tp_identite(pipeline_p3):
     """TP = BE + Risk Adjustment — IFRS 17."""
     _, _, r_p3 = pipeline_p3
     be  = r_p3["be_prevoyance"]
@@ -73,7 +73,7 @@ def test_p3_tp_identite(pipeline_p3):
 
 
 # ── T4 : RA ≥ 3% BE (floor prévoyance) ───────────────────────────────────────
-def test_p3_ra_floor_prevoyance(pipeline_p3):
+def _impl_test_p3_ra_floor_prevoyance(pipeline_p3):
     """RA prévoyance ≥ 3% BE (floor marché — risque long terme).
     Calculé via CoC : SCR_morbidité × 6% — RD 2015/35 Art.145 + IFRS 17 §B91.
     """
@@ -86,7 +86,7 @@ def test_p3_ra_floor_prevoyance(pipeline_p3):
 
 
 # ── T5 : FP absents de sorties_p4 ────────────────────────────────────────────
-def test_p3_fp_absents_sorties_p4(pipeline_p3):
+def _impl_test_p3_fp_absents_sorties_p4(pipeline_p3):
     """P3 ne doit pas estimer les FP — c'est le rôle de P4."""
     _, _, r_p3 = pipeline_p3
     s4 = r_p3.get("sorties_p4", {})
@@ -96,7 +96,7 @@ def test_p3_fp_absents_sorties_p4(pipeline_p3):
 
 
 # ── T6 : nb_inv cohérent (sans division par age) ─────────────────────────────
-def test_p3_nb_inv_formule_correcte(pipeline_p3):
+def _impl_test_p3_nb_inv_formule_correcte(pipeline_p3):
     """nb_inv = nb_assures × taux_ip × 0.60 — sans division par age/10.
     Sur un grand portefeuille (1000 salariés), PM rentes doit être > 0.
     """
@@ -110,7 +110,7 @@ def test_p3_nb_inv_formule_correcte(pipeline_p3):
 
 
 # ── T7 : Sorties vers P4 complètes ────────────────────────────────────────────
-def test_p3_sorties_p4_completes(pipeline_p3):
+def _impl_test_p3_sorties_p4_completes(pipeline_p3):
     """sorties_p4 doit contenir toutes les clés attendues par P4."""
     _, _, r_p3 = pipeline_p3
     s4 = r_p3.get("sorties_p4", {})
@@ -119,3 +119,40 @@ def test_p3_sorties_p4_completes(pipeline_p3):
         assert cle in s4, f"Clé manquante dans sorties_p4 : '{cle}'"
     assert s4["be_prevoyance"] > 0
     assert s4["tp_prevoyance"] > s4["be_prevoyance"]
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestP3Elodie(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_pipeline_p3 = _fx_pipeline_p3()
+
+    def test_p3_success(self):
+        _impl_test_p3_success(self._fxv_pipeline_p3)
+
+    def test_p3_be_identite_comptable(self):
+        _impl_test_p3_be_identite_comptable(self._fxv_pipeline_p3)
+
+    def test_p3_tp_identite(self):
+        _impl_test_p3_tp_identite(self._fxv_pipeline_p3)
+
+    def test_p3_ra_floor_prevoyance(self):
+        _impl_test_p3_ra_floor_prevoyance(self._fxv_pipeline_p3)
+
+    def test_p3_fp_absents_sorties_p4(self):
+        _impl_test_p3_fp_absents_sorties_p4(self._fxv_pipeline_p3)
+
+    def test_p3_nb_inv_formule_correcte(self):
+        _impl_test_p3_nb_inv_formule_correcte(self._fxv_pipeline_p3)
+
+    def test_p3_sorties_p4_completes(self):
+        _impl_test_p3_sorties_p4_completes(self._fxv_pipeline_p3)

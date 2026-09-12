@@ -4,6 +4,7 @@ Direction Santé-Prévoyance — Équivalent SP de A13 (Non-Vie)
 5 modules : logs SP, RGPD Art.30, versioning hypothèses, hash SHA-256, rapport
 """
 import pytest
+import unittest
 import numpy as np
 import pandas as pd
 import sys, os
@@ -14,8 +15,7 @@ from direction_sante_prevoyance.reglementation.sp_audit.agent import (
 )
 
 
-@pytest.fixture(scope="module")
-def resultats_sp():
+def _fx_resultats_sp():
     """Pipeline S1-S3 + P1-P4 — inputs complets pour SP-AUDIT."""
     from direction_sante_prevoyance.services.sp_data_builder import SPDataBuilder
     from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
@@ -54,8 +54,7 @@ def resultats_sp():
     return {"s1":r_s1,"s2":r_s2,"s3":r_s3,"p1":r_p1,"p2":r_p2,"p3":r_p3,"p4":r_p4}
 
 
-@pytest.fixture(scope="module")
-def r_audit(resultats_sp):
+def _fx_r_audit(resultats_sp):
     return AgentSPAuditTrail(verbose=False).run(
         resultats_agents=resultats_sp,
         client_nom="Mutuelle Test",
@@ -65,7 +64,7 @@ def r_audit(resultats_sp):
 
 
 # ── T1 : Succès et structure standard ────────────────────────────────────────
-def test_audit_success_et_structure(r_audit):
+def _impl_test_audit_success_et_structure(r_audit):
     """SP-AUDIT doit réussir et retourner les 5 modules + standard ActuarIA."""
     assert r_audit["success"] is True, "SP-AUDIT doit réussir"
     assert r_audit["erreur"] is None, "Pas d'erreur attendue"
@@ -76,7 +75,7 @@ def test_audit_success_et_structure(r_audit):
 
 
 # ── T2 : Module 1 — Collecte logs SP ─────────────────────────────────────────
-def test_audit_collecte_logs(r_audit):
+def _impl_test_audit_collecte_logs(r_audit):
     """Les 7 agents fournis (S1-S3, P1-P4) doivent être collectés.
     Agents manquants (SP-Coord, REG, etc.) doivent être listés comme optionnels.
     """
@@ -95,7 +94,7 @@ def test_audit_collecte_logs(r_audit):
 
 
 # ── T3 : Module 2 — Registre RGPD Art.30 ─────────────────────────────────────
-def test_audit_registre_rgpd(r_audit):
+def _impl_test_audit_registre_rgpd(r_audit):
     """Le registre RGPD Art.30 doit couvrir les 4 catégories de données SP.
     Données de santé et données d'arrêts ITT doivent être marquées sensibles.
     """
@@ -114,7 +113,7 @@ def test_audit_registre_rgpd(r_audit):
 
 
 # ── T4 : Module 3 — Versioning hypothèses SP ─────────────────────────────────
-def test_audit_versioning_hypotheses(r_audit):
+def _impl_test_audit_versioning_hypotheses(r_audit):
     """12 hypothèses de référence SP doivent être versionnées et sourcées.
     Couvre BCAC 2019, TD 88-90, TH 00-02, ANI 2013, DREES, EIOPA RFR, SCR.
     """
@@ -132,7 +131,7 @@ def test_audit_versioning_hypotheses(r_audit):
 
 
 # ── T5 : Module 4 — Hash SHA-256 reproductible ───────────────────────────────
-def test_audit_hash_reproductible(resultats_sp):
+def _impl_test_audit_hash_reproductible(resultats_sp):
     """Le hash SHA-256 doit être identique pour les mêmes inputs et date.
     Garantit la reproductibilité et l'intégrité des calculs SP.
     """
@@ -152,7 +151,7 @@ def test_audit_hash_reproductible(resultats_sp):
 
 
 # ── T6 : Agents critiques manquants → RAG ROUGE ──────────────────────────────
-def test_audit_rouge_si_critiques_manquants():
+def _impl_test_audit_rouge_si_critiques_manquants():
     """Sans aucun agent, H1 (agents critiques absents) → RAG ROUGE.
     Comportement de sécurité : l'audit ne peut pas être VERT sans les agents métier.
     """
@@ -172,7 +171,7 @@ def test_audit_rouge_si_critiques_manquants():
 
 
 # ── T7 : Module 5 — Rapport d'audit 5 sections ──────────────────────────────
-def test_audit_rapport_cinq_sections(r_audit):
+def _impl_test_audit_rapport_cinq_sections(r_audit):
     """Le rapport d'audit doit contenir les 5 sections obligatoires.
     Sections : identification, chaîne traitement, hypothèses, alertes, RGPD.
     """
@@ -190,3 +189,41 @@ def test_audit_rapport_cinq_sections(r_audit):
     assert rapport["hash_session"] == r_audit["hash_session"], (
         "Hash session incohérent entre retour et rapport"
     )
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestSpAudit(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_resultats_sp = _fx_resultats_sp()
+        cls._fxv_r_audit = _fx_r_audit(cls._fxv_resultats_sp)
+
+    def test_audit_success_et_structure(self):
+        _impl_test_audit_success_et_structure(self._fxv_r_audit)
+
+    def test_audit_collecte_logs(self):
+        _impl_test_audit_collecte_logs(self._fxv_r_audit)
+
+    def test_audit_registre_rgpd(self):
+        _impl_test_audit_registre_rgpd(self._fxv_r_audit)
+
+    def test_audit_versioning_hypotheses(self):
+        _impl_test_audit_versioning_hypotheses(self._fxv_r_audit)
+
+    def test_audit_hash_reproductible(self):
+        _impl_test_audit_hash_reproductible(self._fxv_resultats_sp)
+
+    def test_audit_rouge_si_critiques_manquants(self):
+        _impl_test_audit_rouge_si_critiques_manquants()
+
+    def test_audit_rapport_cinq_sections(self):
+        _impl_test_audit_rapport_cinq_sections(self._fxv_r_audit)

@@ -4,6 +4,7 @@ Direction Santé-Prévoyance · Équipe Réglementation & Finance
 Sources : IFRS 17 §33/37/38/49/53/B91/B119
 """
 import pytest
+import unittest
 import numpy as np
 import pandas as pd
 import sys, os
@@ -12,8 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../.."))
 from direction_sante_prevoyance.reglementation.sp_reg2_ifrs17.agent import AgentSPReg2IFRS17
 
 
-@pytest.fixture(scope="module")
-def pipeline_reg2():
+def _fx_pipeline_reg2():
     from direction_sante_prevoyance.services.sp_data_builder import SPDataBuilder
     from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
     from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvissionnementSante
@@ -60,15 +60,14 @@ def pipeline_reg2():
     return r_s3, r_p4
 
 
-@pytest.fixture(scope="module")
-def r_reg2(pipeline_reg2):
+def _fx_r_reg2(pipeline_reg2):
     r_s3, r_p4 = pipeline_reg2
     return AgentSPReg2IFRS17(verbose=False).run(
         result_s3=r_s3, result_p4=r_p4, generer_graphiques=False)
 
 
 # ── T1 : Succès et structure ───────────────────────────────────────────────────
-def test_reg2_success(r_reg2):
+def _impl_test_reg2_success(r_reg2):
     """Succès et présence de toutes les clés IFRS 17."""
     assert r_reg2["success"] is True, "SP-Reg2 doit réussir"
     assert r_reg2["erreur"] is None, "Pas d'erreur attendue"
@@ -78,7 +77,7 @@ def test_reg2_success(r_reg2):
 
 
 # ── T2 : FCF = BE + RA (§33 IFRS 17) ─────────────────────────────────────────
-def test_reg2_fcf_identite(r_reg2):
+def _impl_test_reg2_fcf_identite(r_reg2):
     """FCF (Fulfillment Cash Flows) = BE + RA — IFRS 17 §33."""
     fcf = r_reg2["fcf_total"]
     be  = r_reg2["be_total"]
@@ -90,7 +89,7 @@ def test_reg2_fcf_identite(r_reg2):
 
 
 # ── T3 : Classification PAA santé / GMM prévoyance ────────────────────────────
-def test_reg2_classification_paa_gmm(r_reg2):
+def _impl_test_reg2_classification_paa_gmm(r_reg2):
     """Santé → PAA (contrats ≤ 12 mois) | Prévoyance → GMM (rentes longues).
     Source : IFRS 17 §53.
     """
@@ -104,7 +103,7 @@ def test_reg2_classification_paa_gmm(r_reg2):
 
 
 # ── T4 : CSM ≥ 0 ou LC ≥ 0 (exclusifs) ──────────────────────────────────────
-def test_reg2_csm_lc_exclusifs(r_reg2):
+def _impl_test_reg2_csm_lc_exclusifs(r_reg2):
     """CSM et LC sont mutuellement exclusifs : §38 (CSM) vs §49 (LC) IFRS 17.
     Globalement : si CSM > 0 alors LC = 0, et inversement.
     """
@@ -115,7 +114,7 @@ def test_reg2_csm_lc_exclusifs(r_reg2):
 
 
 # ── T5 : Réconciliation BEL cohérente ─────────────────────────────────────────
-def test_reg2_reconciliation_bel(r_reg2):
+def _impl_test_reg2_reconciliation_bel(r_reg2):
     """La réconciliation BEL doit contenir toutes les lignes de variation.
     Source : IFRS 17 §100-109.
     """
@@ -130,7 +129,7 @@ def test_reg2_reconciliation_bel(r_reg2):
 
 
 # ── T6 : RA/BE ∈ [1%, 20%] — cohérence CoC §B91 ─────────────────────────────
-def test_reg2_ratio_ra_be(r_reg2):
+def _impl_test_reg2_ratio_ra_be(r_reg2):
     """RA/BE doit être dans [1%, 20%] pour être cohérent avec la méthode CoC.
     Source : IFRS 17 §B91.
     """
@@ -141,10 +140,48 @@ def test_reg2_ratio_ra_be(r_reg2):
 
 
 # ── T7 : Erreur si S3 absent ──────────────────────────────────────────────────
-def test_reg2_erreur_sans_inputs(pipeline_reg2):
+def _impl_test_reg2_erreur_sans_inputs(pipeline_reg2):
     """SP-Reg2 doit retourner success=False si result_s3 est absent."""
     _, r_p4 = pipeline_reg2
     reg2 = AgentSPReg2IFRS17(verbose=False)
     r = reg2.run(result_s3=None, result_p4=r_p4, generer_graphiques=False)
     assert r["success"] is False, "Doit échouer sans S3"
     assert r["erreur"] is not None, "Message d'erreur attendu"
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestSpReg2Ifrs17(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_pipeline_reg2 = _fx_pipeline_reg2()
+        cls._fxv_r_reg2 = _fx_r_reg2(cls._fxv_pipeline_reg2)
+
+    def test_reg2_success(self):
+        _impl_test_reg2_success(self._fxv_r_reg2)
+
+    def test_reg2_fcf_identite(self):
+        _impl_test_reg2_fcf_identite(self._fxv_r_reg2)
+
+    def test_reg2_classification_paa_gmm(self):
+        _impl_test_reg2_classification_paa_gmm(self._fxv_r_reg2)
+
+    def test_reg2_csm_lc_exclusifs(self):
+        _impl_test_reg2_csm_lc_exclusifs(self._fxv_r_reg2)
+
+    def test_reg2_reconciliation_bel(self):
+        _impl_test_reg2_reconciliation_bel(self._fxv_r_reg2)
+
+    def test_reg2_ratio_ra_be(self):
+        _impl_test_reg2_ratio_ra_be(self._fxv_r_reg2)
+
+    def test_reg2_erreur_sans_inputs(self):
+        _impl_test_reg2_erreur_sans_inputs(self._fxv_pipeline_reg2)

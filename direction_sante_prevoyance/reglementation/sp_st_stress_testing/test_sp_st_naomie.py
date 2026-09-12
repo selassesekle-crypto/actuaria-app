@@ -4,6 +4,7 @@ Direction Santé-Prévoyance
 Sources : RD 2015/35 Art.145/159, EIOPA ORSA Guidelines 2016
 """
 import pytest
+import unittest
 import numpy as np
 import pandas as pd
 import sys, os
@@ -14,8 +15,7 @@ from direction_sante_prevoyance.reglementation.sp_st_stress_testing.agent import
 )
 
 
-@pytest.fixture(scope="module")
-def pipeline_st():
+def _fx_pipeline_st():
     from direction_sante_prevoyance.services.sp_data_builder import SPDataBuilder
     from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
     from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvissionnementSante
@@ -62,8 +62,7 @@ def pipeline_st():
     return r_s3, r_p4
 
 
-@pytest.fixture(scope="module")
-def r_st(pipeline_st):
+def _fx_r_st(pipeline_st):
     r_s3, r_p4 = pipeline_st
     return AgentSPStressTestingNaomie(verbose=False).run(
         result_s3=r_s3, result_p4=r_p4,
@@ -71,7 +70,7 @@ def r_st(pipeline_st):
 
 
 # ── T1 : Succès et 4 scénarios ────────────────────────────────────────────────
-def test_st_success_et_scenarios(r_st):
+def _impl_test_st_success_et_scenarios(r_st):
     """4 scénarios calculés : pandémie, morbidité, cessation, adverse."""
     assert r_st["success"] is True, "Naomie doit réussir"
     assert r_st["erreur"] is None, "Pas d'erreur attendue"
@@ -82,7 +81,7 @@ def test_st_success_et_scenarios(r_st):
 
 
 # ── T2 : Ratio stressé toujours ≤ ratio baseline ─────────────────────────────
-def test_st_ratios_stresses_inferieurs(r_st):
+def _impl_test_st_ratios_stresses_inferieurs(r_st):
     """Un stress test doit toujours dégrader le ratio SCR.
     Ratio stressé ≤ ratio baseline pour tous les scénarios.
     """
@@ -95,7 +94,7 @@ def test_st_ratios_stresses_inferieurs(r_st):
 
 
 # ── T3 : Perte positive pour chaque scénario ─────────────────────────────────
-def test_st_pertes_positives(r_st):
+def _impl_test_st_pertes_positives(r_st):
     """Chaque scénario de stress doit générer une perte (delta BE > 0).
     Aucun stress ne peut améliorer le bilan.
     """
@@ -106,7 +105,7 @@ def test_st_pertes_positives(r_st):
 
 
 # ── T4 : Scénario adverse = perte max ─────────────────────────────────────────
-def test_st_adverse_pire_scenario(r_st):
+def _impl_test_st_adverse_pire_scenario(r_st):
     """Le scénario adverse (combiné) doit être le pire de tous.
     Il cumule pandémie + morbidité + cessation + mortalité.
     Source : EIOPA ORSA Guidelines 2016.
@@ -121,7 +120,7 @@ def test_st_adverse_pire_scenario(r_st):
 
 
 # ── T5 : Choc morbidité EIOPA ≥ choc cessation ────────────────────────────────
-def test_st_morbidite_superieur_cessation(r_st):
+def _impl_test_st_morbidite_superieur_cessation(r_st):
     """Le choc morbidité (+35%) doit générer plus de pertes que la cessation (-20%).
     Source : RD 2015/35 Art.145 — choc morbidité > choc cessation.
     """
@@ -133,7 +132,7 @@ def test_st_morbidite_superieur_cessation(r_st):
 
 
 # ── T6 : 3 hypothèses ORSA ────────────────────────────────────────────────────
-def test_st_hypotheses_orsa(r_st):
+def _impl_test_st_hypotheses_orsa(r_st):
     """3 hypothèses ORSA : baseline, pandémie, pire scénario."""
     hyp = r_st["hypotheses"]
     assert len(hyp) == 3
@@ -142,10 +141,48 @@ def test_st_hypotheses_orsa(r_st):
 
 
 # ── T7 : Erreur si S3 absent ──────────────────────────────────────────────────
-def test_st_erreur_sans_inputs(pipeline_st):
+def _impl_test_st_erreur_sans_inputs(pipeline_st):
     """Naomie doit retourner success=False si result_s3 est absent."""
     _, r_p4 = pipeline_st
     naomie = AgentSPStressTestingNaomie(verbose=False)
     r = naomie.run(result_s3=None, result_p4=r_p4, generer_graphiques=False)
     assert r["success"] is False, "Doit échouer sans S3"
     assert r["erreur"] is not None, "Message d'erreur attendu"
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestSpStNaomie(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_pipeline_st = _fx_pipeline_st()
+        cls._fxv_r_st = _fx_r_st(cls._fxv_pipeline_st)
+
+    def test_st_success_et_scenarios(self):
+        _impl_test_st_success_et_scenarios(self._fxv_r_st)
+
+    def test_st_ratios_stresses_inferieurs(self):
+        _impl_test_st_ratios_stresses_inferieurs(self._fxv_r_st)
+
+    def test_st_pertes_positives(self):
+        _impl_test_st_pertes_positives(self._fxv_r_st)
+
+    def test_st_adverse_pire_scenario(self):
+        _impl_test_st_adverse_pire_scenario(self._fxv_r_st)
+
+    def test_st_morbidite_superieur_cessation(self):
+        _impl_test_st_morbidite_superieur_cessation(self._fxv_r_st)
+
+    def test_st_hypotheses_orsa(self):
+        _impl_test_st_hypotheses_orsa(self._fxv_r_st)
+
+    def test_st_erreur_sans_inputs(self):
+        _impl_test_st_erreur_sans_inputs(self._fxv_pipeline_st)

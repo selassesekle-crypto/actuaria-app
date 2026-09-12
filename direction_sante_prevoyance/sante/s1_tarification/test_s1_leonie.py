@@ -4,26 +4,25 @@ Direction Santé-Prévoyance · Équipe Santé
 Sources : DREES 2023, ANI 2013, Art. L911-7 CSS
 """
 import pytest
+import unittest
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../.."))
 
 from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
 
 
-@pytest.fixture(scope="module")
-def s1():
+def _fx_s1():
     return AgentS1TarificationSante(verbose=False)
 
 
-@pytest.fixture(scope="module")
-def r_confort(s1):
+def _fx_r_confort(s1):
     return s1.run(nb_assures=1000, age_moyen=40, contrat="collectif",
                   garantie_niveau="confort", chargement_pct=0.18,
                   generer_graphiques=False)
 
 
 # ── T1 : Succès et structure du retour ────────────────────────────────────────
-def test_s1_success_et_structure(r_confort):
+def _impl_test_s1_success_et_structure(r_confort):
     """Le retour doit contenir toutes les clés standard ActuarIA."""
     assert r_confort["success"] is True
     assert r_confort["statut_rag"] in ("VERT", "AMBRE", "ROUGE")
@@ -34,7 +33,7 @@ def test_s1_success_et_structure(r_confort):
 
 
 # ── T2 : Prime pure > 0 et < seuil raisonnable ────────────────────────────────
-def test_s1_prime_pure_positive(r_confort):
+def _impl_test_s1_prime_pure_positive(r_confort):
     """Prime pure unitaire doit être positive et cohérente avec le marché.
     Référence : marché mutuelles individuelles France (FNMF 2023) = 500-1500€/an.
     """
@@ -44,7 +43,7 @@ def test_s1_prime_pure_positive(r_confort):
 
 
 # ── T3 : Hiérarchie des niveaux de garantie ───────────────────────────────────
-def test_s1_hierarchie_garanties(s1):
+def _impl_test_s1_hierarchie_garanties(s1):
     """eco < confort < premium — fact_garantie appliqué correctement sur la charge."""
     r_eco     = s1.run(nb_assures=1000, age_moyen=40, contrat="collectif",
                        garantie_niveau="eco",     generer_graphiques=False)
@@ -64,7 +63,7 @@ def test_s1_hierarchie_garanties(s1):
 
 
 # ── T4 : ANI individuel vs collectif ──────────────────────────────────────────
-def test_s1_ani_individuel_conforme(s1):
+def _impl_test_s1_ani_individuel_conforme(s1):
     """ANI 2013 ne s'applique qu'aux collectifs (Art. L911-7 CSS).
     Un contrat individuel doit toujours retourner ani_conforme=True.
     """
@@ -81,7 +80,7 @@ def test_s1_ani_individuel_conforme(s1):
 
 
 # ── T5 : Loss Ratio = 1/(1+chargement) ────────────────────────────────────────
-def test_s1_lr_tarification(s1):
+def _impl_test_s1_lr_tarification(s1):
     """LR de tarification = prime_pure / prime_comm = 1/(1+chargement).
     C'est le LR que la tarification vise, pas un LR observé.
     """
@@ -98,7 +97,7 @@ def test_s1_lr_tarification(s1):
 
 
 # ── T6 : Sorties vers S2 complètes ────────────────────────────────────────────
-def test_s1_sorties_s2(r_confort):
+def _impl_test_s1_sorties_s2(r_confort):
     """sorties_s2 doit contenir toutes les clés attendues par S2."""
     s2 = r_confort.get("sorties_s2", {})
     for cle in ["primes_acquises", "sinistres_attendus", "loss_ratio_attendu",
@@ -110,7 +109,7 @@ def test_s1_sorties_s2(r_confort):
 
 
 # ── T7 : Données réelles depuis builder ───────────────────────────────────────
-def test_s1_donnees_reelles(s1):
+def _impl_test_s1_donnees_reelles(s1):
     """S1 doit utiliser les données réelles du builder quand result_a2 est fourni."""
     import numpy as np
     import pandas as pd
@@ -132,3 +131,41 @@ def test_s1_donnees_reelles(s1):
         f"Source attendue 'donnees_reelles_a2', obtenu : {r.get('source_donnees')}"
     )
     assert r["nb_assures"] == n
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestS1Leonie(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_s1 = _fx_s1()
+        cls._fxv_r_confort = _fx_r_confort(cls._fxv_s1)
+
+    def test_s1_success_et_structure(self):
+        _impl_test_s1_success_et_structure(self._fxv_r_confort)
+
+    def test_s1_prime_pure_positive(self):
+        _impl_test_s1_prime_pure_positive(self._fxv_r_confort)
+
+    def test_s1_hierarchie_garanties(self):
+        _impl_test_s1_hierarchie_garanties(self._fxv_s1)
+
+    def test_s1_ani_individuel_conforme(self):
+        _impl_test_s1_ani_individuel_conforme(self._fxv_s1)
+
+    def test_s1_lr_tarification(self):
+        _impl_test_s1_lr_tarification(self._fxv_s1)
+
+    def test_s1_sorties_s2(self):
+        _impl_test_s1_sorties_s2(self._fxv_r_confort)
+
+    def test_s1_donnees_reelles(self):
+        _impl_test_s1_donnees_reelles(self._fxv_s1)

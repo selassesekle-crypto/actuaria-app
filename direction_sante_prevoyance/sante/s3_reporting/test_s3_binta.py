@@ -4,6 +4,7 @@ Direction Santé-Prévoyance · Équipe Santé
 Sources : RD 2015/35 Art.148/252/159, IFRS 17 §B91
 """
 import pytest
+import unittest
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../.."))
 
@@ -12,8 +13,7 @@ from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2Pro
 from direction_sante_prevoyance.sante.s3_reporting.agent import AgentS3ReportingSante
 
 
-@pytest.fixture(scope="module")
-def pipeline_s3():
+def _fx_pipeline_s3():
     s1 = AgentS1TarificationSante(verbose=False)
     s2 = AgentS2ProvissionnementSante(verbose=False)
     s3 = AgentS3ReportingSante(verbose=False)
@@ -25,7 +25,7 @@ def pipeline_s3():
 
 
 # ── T1 : Succès avec FP réels ─────────────────────────────────────────────────
-def test_s3_success_avec_fp(pipeline_s3):
+def _impl_test_s3_success_avec_fp(pipeline_s3):
     s3, r_s1, r_s2 = pipeline_s3
     r = s3.run(result_s1=r_s1, result_s2=r_s2,
                fonds_propres=5_000_000, generer_graphiques=False)
@@ -35,7 +35,7 @@ def test_s3_success_avec_fp(pipeline_s3):
 
 
 # ── T2 : SCR > 0 et MCR > 0 ──────────────────────────────────────────────────
-def test_s3_scr_mcr_positifs(pipeline_s3):
+def _impl_test_s3_scr_mcr_positifs(pipeline_s3):
     """SCR et MCR doivent être positifs.
     SCR NSLT formule standard EIOPA — RD 2015/35 Art.148.
     MCR plancher 2.5M€ — Art.252 + Art.129.
@@ -48,7 +48,7 @@ def test_s3_scr_mcr_positifs(pipeline_s3):
 
 
 # ── T3 : Ratio SCR > 100% avec FP suffisants ─────────────────────────────────
-def test_s3_ratio_scr_suffisant(pipeline_s3):
+def _impl_test_s3_ratio_scr_suffisant(pipeline_s3):
     """Avec 5M€ de FP sur un portefeuille ~500k€ de BE, ratio SCR >> 100%."""
     s3, r_s1, r_s2 = pipeline_s3
     r = s3.run(result_s1=r_s1, result_s2=r_s2,
@@ -59,7 +59,7 @@ def test_s3_ratio_scr_suffisant(pipeline_s3):
 
 
 # ── T4 : VERT avec FP > SCR ───────────────────────────────────────────────────
-def test_s3_vert_fp_suffisants(pipeline_s3):
+def _impl_test_s3_vert_fp_suffisants(pipeline_s3):
     """S3 doit retourner VERT si FP >> SCR (ratio > 130%)."""
     s3, r_s1, r_s2 = pipeline_s3
     r = s3.run(result_s1=r_s1, result_s2=r_s2,
@@ -70,7 +70,7 @@ def test_s3_vert_fp_suffisants(pipeline_s3):
 
 
 # ── T5 : Success même sans FP + message explicite ─────────────────────────────
-def test_s3_success_sans_fp(pipeline_s3):
+def _impl_test_s3_success_sans_fp(pipeline_s3):
     """S3 doit fonctionner sans FP (fallback 80% PA) avec message d'avertissement."""
     s3, r_s1, r_s2 = pipeline_s3
     r = s3.run(result_s1=r_s1, result_s2=r_s2,
@@ -79,7 +79,7 @@ def test_s3_success_sans_fp(pipeline_s3):
 
 
 # ── T6 : QRT S.13.01 présent ──────────────────────────────────────────────────
-def test_s3_qrt_s13(pipeline_s3):
+def _impl_test_s3_qrt_s13(pipeline_s3):
     """Le QRT S.13.01 (Health NSLT) doit être généré."""
     s3, r_s1, r_s2 = pipeline_s3
     r = s3.run(result_s1=r_s1, result_s2=r_s2,
@@ -94,7 +94,7 @@ def test_s3_qrt_s13(pipeline_s3):
 
 
 # ── T7 : TP = BE + RA ─────────────────────────────────────────────────────────
-def test_s3_tp_identite(pipeline_s3):
+def _impl_test_s3_tp_identite(pipeline_s3):
     """Identité : TP = BE + Risk Adjustment — IFRS 17."""
     s3, r_s1, r_s2 = pipeline_s3
     r = s3.run(result_s1=r_s1, result_s2=r_s2,
@@ -105,3 +105,40 @@ def test_s3_tp_identite(pipeline_s3):
     assert abs(tp - (be + ra)) < 0.01, (
         f"TP ({tp:.2f}) ≠ BE ({be:.2f}) + RA ({ra:.2f})"
     )
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestS3Binta(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_pipeline_s3 = _fx_pipeline_s3()
+
+    def test_s3_success_avec_fp(self):
+        _impl_test_s3_success_avec_fp(self._fxv_pipeline_s3)
+
+    def test_s3_scr_mcr_positifs(self):
+        _impl_test_s3_scr_mcr_positifs(self._fxv_pipeline_s3)
+
+    def test_s3_ratio_scr_suffisant(self):
+        _impl_test_s3_ratio_scr_suffisant(self._fxv_pipeline_s3)
+
+    def test_s3_vert_fp_suffisants(self):
+        _impl_test_s3_vert_fp_suffisants(self._fxv_pipeline_s3)
+
+    def test_s3_success_sans_fp(self):
+        _impl_test_s3_success_sans_fp(self._fxv_pipeline_s3)
+
+    def test_s3_qrt_s13(self):
+        _impl_test_s3_qrt_s13(self._fxv_pipeline_s3)
+
+    def test_s3_tp_identite(self):
+        _impl_test_s3_tp_identite(self._fxv_pipeline_s3)

@@ -4,6 +4,7 @@ Direction Santé-Prévoyance · Sous Amira
 Sources : Annexe IV RD 2015/35 (ρ=0.25), IFRS 17, CTIP/FNMF
 """
 import pytest
+import unittest
 import numpy as np
 import pandas as pd
 import sys, os
@@ -12,8 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../.."))
 from direction_sante_prevoyance.coordination.sp_coord.agent import AgentSPCoord
 
 
-@pytest.fixture(scope="module")
-def pipeline():
+def _fx_pipeline():
     """Pipeline complet S1→S3 + P1→P4 pour alimenter SP-Coord."""
     from direction_sante_prevoyance.services.sp_data_builder import SPDataBuilder
     from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
@@ -64,8 +64,7 @@ def pipeline():
     return r_s3, r_p4, r_bm
 
 
-@pytest.fixture(scope="module")
-def r_coord(pipeline):
+def _fx_r_coord(pipeline):
     r_s3, r_p4, r_bm = pipeline
     return AgentSPCoord(verbose=False).run(
         result_s3=r_s3, result_p4=r_p4, result_builder=r_bm,
@@ -73,7 +72,7 @@ def r_coord(pipeline):
 
 
 # ── T1 : Succès et structure ───────────────────────────────────────────────────
-def test_coord_success(r_coord):
+def _impl_test_coord_success(r_coord):
     """Succès et structure du retour — toutes les clés standard présentes."""
     assert r_coord["success"] is True, "SP-Coord doit réussir"
     assert r_coord["erreur"] is None, "Pas d'erreur attendue"
@@ -84,7 +83,7 @@ def test_coord_success(r_coord):
 
 
 # ── T2 : BE consolidé = BE_santé + BE_prévoyance ─────────────────────────────
-def test_coord_be_identite(r_coord):
+def _impl_test_coord_be_identite(r_coord):
     """Identité comptable : BE_consolidé = BE_santé + BE_prévoyance."""
     be_c = r_coord["be_consolide"]
     be_s = r_coord["be_sante"]
@@ -96,7 +95,7 @@ def test_coord_be_identite(r_coord):
 
 
 # ── T3 : SCR consolidé < SCR_S + SCR_P (bénéfice diversification) ────────────
-def test_coord_diversification_eiopa(r_coord):
+def _impl_test_coord_diversification_eiopa(r_coord):
     """SCR consolidé < SCR_S + SCR_P grâce à ρ=0.25 EIOPA (Annexe IV RD 2015/35).
     Formule : SCR_tot = √(SCR_S² + 2×0.25×SCR_S×SCR_P + SCR_P²).
     """
@@ -110,7 +109,7 @@ def test_coord_diversification_eiopa(r_coord):
 
 
 # ── T4 : ρ EIOPA = 0.25 ───────────────────────────────────────────────────────
-def test_coord_rho_eiopa(r_coord):
+def _impl_test_coord_rho_eiopa(r_coord):
     """Corrélation EIOPA entre NSLT et SLT = 0.25 (Annexe IV RD 2015/35)."""
     assert r_coord["rho_eiopa"] == 0.25, (
         f"ρ EIOPA = {r_coord['rho_eiopa']}, attendu 0.25"
@@ -118,7 +117,7 @@ def test_coord_rho_eiopa(r_coord):
 
 
 # ── T5 : Ratio SCR consolidé > 100% ──────────────────────────────────────────
-def test_coord_ratio_scr_suffisant(r_coord):
+def _impl_test_coord_ratio_scr_suffisant(r_coord):
     """Avec 15M€ de FP sur un portefeuille consolidé, ratio SCR > 100%."""
     assert r_coord["ratio_scr_pct"] > 100, (
         f"Ratio SCR = {r_coord['ratio_scr_pct']:.1f}% insuffisant"
@@ -126,7 +125,7 @@ def test_coord_ratio_scr_suffisant(r_coord):
 
 
 # ── T6 : 3 hypothèses présentes ───────────────────────────────────────────────
-def test_coord_hypotheses(r_coord):
+def _impl_test_coord_hypotheses(r_coord):
     """SP-Coord doit produire 3 hypothèses : TP/BE, ratio SCR, poly-sinistralité."""
     hyp = r_coord["hypotheses"]
     assert len(hyp) == 3, f"Attendu 3 hypothèses, obtenu {len(hyp)}"
@@ -135,10 +134,48 @@ def test_coord_hypotheses(r_coord):
 
 
 # ── T7 : Erreur si S3 absent ──────────────────────────────────────────────────
-def test_coord_erreur_sans_s3(pipeline):
+def _impl_test_coord_erreur_sans_s3(pipeline):
     """SP-Coord doit retourner success=False si result_s3 est absent."""
     _, r_p4, _ = pipeline
     coord = AgentSPCoord(verbose=False)
     r = coord.run(result_s3=None, result_p4=r_p4, generer_graphiques=False)
     assert r["success"] is False, "Doit échouer sans S3"
     assert r["erreur"] is not None, "Message d'erreur attendu"
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestSpCoord(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_pipeline = _fx_pipeline()
+        cls._fxv_r_coord = _fx_r_coord(cls._fxv_pipeline)
+
+    def test_coord_success(self):
+        _impl_test_coord_success(self._fxv_r_coord)
+
+    def test_coord_be_identite(self):
+        _impl_test_coord_be_identite(self._fxv_r_coord)
+
+    def test_coord_diversification_eiopa(self):
+        _impl_test_coord_diversification_eiopa(self._fxv_r_coord)
+
+    def test_coord_rho_eiopa(self):
+        _impl_test_coord_rho_eiopa(self._fxv_r_coord)
+
+    def test_coord_ratio_scr_suffisant(self):
+        _impl_test_coord_ratio_scr_suffisant(self._fxv_r_coord)
+
+    def test_coord_hypotheses(self):
+        _impl_test_coord_hypotheses(self._fxv_r_coord)
+
+    def test_coord_erreur_sans_s3(self):
+        _impl_test_coord_erreur_sans_s3(self._fxv_pipeline)

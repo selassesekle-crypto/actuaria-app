@@ -30,6 +30,7 @@ import io
 import numpy as np
 import pandas as pd
 import pytest
+import unittest
 
 from direction_sante_prevoyance.prevoyance.rapport_prevoyance.agent import (
     AgentRapportPrevoyance,
@@ -44,8 +45,7 @@ GRAINE = 42
 N_LIGNES = 1000
 
 
-@pytest.fixture(scope="module")
-def chaine_amont():
+def _fx_chaine_amont():
     """S1→S3 et P1→P4 : exactement ce que les deux rapports consomment.
 
     ⚠️ Recopiée de `rapport_actuariel/test_sp_rapport.py` plutôt qu'importée :
@@ -122,8 +122,7 @@ def chaine_amont():
             "p1": p1, "p2": p2, "p3": p3, "p4": p4}
 
 
-@pytest.fixture(scope="module")
-def rapport_sante(chaine_amont):
+def _fx_rapport_sante(chaine_amont):
     return AgentRapportSante(verbose=False).run(
         result_s1=chaine_amont["s1"], result_s2=chaine_amont["s2"],
         result_s3=chaine_amont["s3"], entite="Mutuelle Test",
@@ -131,8 +130,7 @@ def rapport_sante(chaine_amont):
         generer_graphiques=False)
 
 
-@pytest.fixture(scope="module")
-def rapport_prevoyance(chaine_amont):
+def _fx_rapport_prevoyance(chaine_amont):
     return AgentRapportPrevoyance(verbose=False).run(
         result_p1=chaine_amont["p1"], result_p2=chaine_amont["p2"],
         result_p3=chaine_amont["p3"], result_p4=chaine_amont["p4"],
@@ -155,16 +153,14 @@ def _paragraphes(word_bytes):
     return [x for x in textes if x.strip()]
 
 
-@pytest.mark.parametrize("nom", ["sante", "prevoyance"])
-def test_la_chaine_va_au_bout(nom, rapport_sante, rapport_prevoyance):
+def _impl_test_la_chaine_va_au_bout(nom, rapport_sante, rapport_prevoyance):
     """⚠️ Rien ne vérifiait que ces deux agents s'exécutent sans lever."""
     r = rapport_sante if nom == "sante" else rapport_prevoyance
     assert r.get("success") is True, r.get("erreur")
     assert r.get("statut_rag") in ("VERT", "AMBRE", "ROUGE")
 
 
-@pytest.mark.parametrize("nom", ["sante", "prevoyance"])
-def test_les_deux_formats_signes_sortent_non_vides(nom, rapport_sante,
+def _impl_test_les_deux_formats_signes_sortent_non_vides(nom, rapport_sante,
                                                    rapport_prevoyance):
     """⚠️ Le Word rend `b''` en cas d'echec — un livrable vide est le seul
     symptôme, et rien ne le regardait."""
@@ -174,8 +170,7 @@ def test_les_deux_formats_signes_sortent_non_vides(nom, rapport_sante,
     assert len(r["word_bytes"]) > 5000, f"{nom} : .docx suspicieusement court"
 
 
-@pytest.mark.parametrize("nom", ["sante", "prevoyance"])
-def test_le_docx_s_ouvre_et_porte_du_texte(nom, rapport_sante,
+def _impl_test_le_docx_s_ouvre_et_porte_du_texte(nom, rapport_sante,
                                            rapport_prevoyance):
     """Des octets non vides ne prouvent pas un document lisible."""
     r = rapport_sante if nom == "sante" else rapport_prevoyance
@@ -183,8 +178,7 @@ def test_le_docx_s_ouvre_et_porte_du_texte(nom, rapport_sante,
     assert len(paras) > 20, f"{nom} : {len(paras)} paragraphes seulement"
 
 
-@pytest.mark.parametrize("nom", ["sante", "prevoyance"])
-def test_le_docx_n_est_pas_une_coquille_vide(nom, rapport_sante,
+def _impl_test_le_docx_n_est_pas_une_coquille_vide(nom, rapport_sante,
                                              rapport_prevoyance):
     """Le plancher de texte réellement mesuré, tableaux compris.
 
@@ -198,8 +192,7 @@ def test_le_docx_n_est_pas_une_coquille_vide(nom, rapport_sante,
         f"{nom} : le .docx ne porte que {total} caracteres de texte")
 
 
-@pytest.mark.parametrize("nom", ["sante", "prevoyance"])
-def test_la_mention_d_origine_est_dans_LES_DEUX_formats(nom, rapport_sante,
+def _impl_test_la_mention_d_origine_est_dans_LES_DEUX_formats(nom, rapport_sante,
                                                         rapport_prevoyance):
     """⚠️ C5c-1b — le Word ne nommait JAMAIS l'origine de sa narration : on ne
     lui passait meme pas la source. L'HTML ne la nommait qu'en cas de SUCCES.
@@ -221,3 +214,51 @@ def test_la_mention_d_origine_est_dans_LES_DEUX_formats(nom, rapport_sante,
         f"HTML {dans_html}, Word {dans_word}")
     assert "engage l'actuaire signataire" in word, (
         f"{nom} : la phrase d'engagement manque au .docx")
+
+# ────────────────────────────────────────────────────────────────────────────
+# Enveloppe unittest.TestCase
+#
+# La gate du dépôt lance `unittest discover`, qui ne collecte QUE les
+# sous-classes de TestCase : les fonctions nues lui sont invisibles.
+# Cette classe rend les tests ci-dessus visibles des DEUX lanceurs, sans
+# modifier un seul de leurs asserts. Les fixtures sont résolues une fois
+# par `setUpClass`, ce qui reproduit le `scope="module"` d'origine.
+# ────────────────────────────────────────────────────────────────────────────
+class TestRapportsSp(unittest.TestCase):
+    """Tests de ce module, exposés à unittest discover."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._fxv_chaine_amont = _fx_chaine_amont()
+        cls._fxv_rapport_sante = _fx_rapport_sante(cls._fxv_chaine_amont)
+        cls._fxv_rapport_prevoyance = _fx_rapport_prevoyance(cls._fxv_chaine_amont)
+
+    def test_la_chaine_va_au_bout__sante(self):
+        _impl_test_la_chaine_va_au_bout('sante', self._fxv_rapport_sante, self._fxv_rapport_prevoyance)
+
+    def test_la_chaine_va_au_bout__prevoyance(self):
+        _impl_test_la_chaine_va_au_bout('prevoyance', self._fxv_rapport_sante, self._fxv_rapport_prevoyance)
+
+    def test_les_deux_formats_signes_sortent_non_vides__sante(self):
+        _impl_test_les_deux_formats_signes_sortent_non_vides('sante', self._fxv_rapport_sante, self._fxv_rapport_prevoyance)
+
+    def test_les_deux_formats_signes_sortent_non_vides__prevoyance(self):
+        _impl_test_les_deux_formats_signes_sortent_non_vides('prevoyance', self._fxv_rapport_sante, self._fxv_rapport_prevoyance)
+
+    def test_le_docx_s_ouvre_et_porte_du_texte__sante(self):
+        _impl_test_le_docx_s_ouvre_et_porte_du_texte('sante', self._fxv_rapport_sante, self._fxv_rapport_prevoyance)
+
+    def test_le_docx_s_ouvre_et_porte_du_texte__prevoyance(self):
+        _impl_test_le_docx_s_ouvre_et_porte_du_texte('prevoyance', self._fxv_rapport_sante, self._fxv_rapport_prevoyance)
+
+    def test_le_docx_n_est_pas_une_coquille_vide__sante(self):
+        _impl_test_le_docx_n_est_pas_une_coquille_vide('sante', self._fxv_rapport_sante, self._fxv_rapport_prevoyance)
+
+    def test_le_docx_n_est_pas_une_coquille_vide__prevoyance(self):
+        _impl_test_le_docx_n_est_pas_une_coquille_vide('prevoyance', self._fxv_rapport_sante, self._fxv_rapport_prevoyance)
+
+    def test_la_mention_d_origine_est_dans_LES_DEUX_formats__sante(self):
+        _impl_test_la_mention_d_origine_est_dans_LES_DEUX_formats('sante', self._fxv_rapport_sante, self._fxv_rapport_prevoyance)
+
+    def test_la_mention_d_origine_est_dans_LES_DEUX_formats__prevoyance(self):
+        _impl_test_la_mention_d_origine_est_dans_LES_DEUX_formats('prevoyance', self._fxv_rapport_sante, self._fxv_rapport_prevoyance)
