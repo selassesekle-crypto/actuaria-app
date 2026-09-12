@@ -164,6 +164,10 @@ from .n2_hypotheses_clm import (
     A_JUSTIFIER, NON_TESTABLE, NON_VALIDEE, VALIDEE,
     SOURCE_GUIDE, SOURCE_JUGEMENT,
     ResultatHypothese, SCIPY_OK,
+    # ⚠️ IMPORTEE, PAS RECOPIEE. Deux implementations d'une correction de
+    # multiplicite divergeraient au premier ajustement, et le depot a deja
+    # paye ce motif sur deux tables de libelles.
+    _holm_bonferroni,
 )
 from .n3.bootstrap_odp import calculer_fitted_et_residus
 from .n3.chain_ladder import calculer_facteurs
@@ -503,10 +507,15 @@ def boot_h3_homogeneite_phi(
     """
     base = dict(code='BOOT-H3',
                 libelle="Homogénéité de la sur-dispersion φ",
+                # ⚠️ LE CRITERE PUBLIE DIT QU'IL CORRIGE, ET SUR QUOI.
+                # Sans cette mention, un relecteur compare une p-valeur brute
+                # a un seuil qui n'est plus celui qui decide.
                 critere=(f"ρ de rang |résidu| vs indice, nulle paramétrique "
                          f"({n_rep} régénérations, graine {graine}) ; "
                          f"p < {P_REJET} → rejet, "
-                         f"p < {P_VIGILANCE} → à justifier"),
+                         f"p < {P_VIGILANCE} → à justifier ; "
+                         f"correction de multiplicité Holm-Bonferroni sur les "
+                         f"{len(AXES)} axes"),
                 source_critere=SOURCE_JUGEMENT,
                 critique_pour=(PERCENTILES_BOOT,))
 
@@ -584,10 +593,14 @@ def boot_h3_homogeneite_phi(
             continue
         p = float((np.abs(tirages) >= abs(r)).mean())
         p_valeurs[axe] = p
+        # ⚠️ LE STATUT PAR AXE EST POSE PLUS BAS, APRES CORRECTION. Le poser
+        # ici reviendrait a publier un verdict de colonne non corrige a cote
+        # d'un verdict global corrige — le defaut que `_statuts_corriges`
+        # nomme deja pour CLM : « LA CORRECTION PORTE SUR LES COLONNES, PAS
+        # SUR LE SEUL VERDICT GLOBAL ».
         detail.append({
             'axe': axe, 'rho': round(r, 6), 'p': round(p, 6), 'n_nulle': n_nulle,
-            'statut': (NON_VALIDEE if p < P_REJET else
-                       A_JUSTIFIER if p < P_VIGILANCE else VALIDEE),
+            'statut': None,
             'n_groupes': len(carte.get(axe, {})),
         })
 
@@ -599,19 +612,58 @@ def boot_h3_homogeneite_phi(
                      "calibrer la corrélation de rang."),
             detail=tuple(detail), extras=extras)
 
-    # Le PIRE des axes fait le verdict : une hétérogénéité sur un seul suffit à
-    # invalider l'hypothèse d'un φ unique.
+    # ⚠️⚠️ TROIS AXES TESTES, UN SEUL SEUIL : C'EST UNE FAMILLE, PAS UN TEST.
+    # Ce bloc prenait le MINIMUM des trois p-valeurs et le comparait au seuil
+    # NOMINAL. Sous la nulle, la probabilite qu'au moins une des trois descende
+    # sous 0,10 vaut 1 - (1 - 0,10)^3 = 27,1 % si les axes etaient
+    # independants — pour un nominal annonce de 10 %.
+    #
+    # MESURES CONCORDANTES. Le depot l'avait deja ecrit en tete de
+    # `test_a7_puissance_p2` : « a son reglage de production (400
+    # regenerations), BOOT-H3 rejette 21 a 30 % des cas [...] pour un nominal
+    # de 10 %. Le constat appelle un lot a lui seul. » Mesure du 11/09/2026 sur
+    # 106 triangles tires de la nulle EXACTE, au reglage de production :
+    # 17,0 % de signalements, IC95 [10,4 ; 25,5], p = 0,018 contre 10 %. La
+    # valeur se tient entre le nominal et la borne independante — ce qu'on
+    # attend d'axes CORRELES, qui partagent le meme triangle et les memes
+    # residus.
+    #
+    # ⚠️ LA CORRECTION VIENT DU DEPOT, PAS D'AILLEURS. `_holm_bonferroni` est
+    # employee pour les colonnes de CLM, avec une justification qui vaut mot
+    # pour mot ici : elle controle le risque FAMILIAL « sous une dependance
+    # ARBITRAIRE ».
+    #
+    # ⚠️⚠️ ARBITRAGE ASSUME : LE TEST DEVIENT MOINS SENSIBLE. On echange de la
+    # puissance contre un niveau juste. Les taux de detection cites dans cette
+    # docstring ont ete mesures SANS correction : ils sont a RE-MESURER.
+    rejetes_fort   = _holm_bonferroni(list(p_valeurs.values()), P_REJET)
+    rejetes_souple = _holm_bonferroni(list(p_valeurs.values()), P_VIGILANCE)
+    axes_ordonnes  = list(p_valeurs)
+    par_axe = {}
+    for k, a in enumerate(axes_ordonnes):
+        par_axe[a] = (NON_VALIDEE if k in rejetes_fort else
+                      A_JUSTIFIER if k in rejetes_souple else VALIDEE)
+    for d in detail:
+        if d.get('statut') is None:
+            d['statut'] = par_axe.get(d['axe'], NON_TESTABLE)
+
     axe_pire = min(p_valeurs, key=lambda a: p_valeurs[a])
     p_pire = p_valeurs[axe_pire]
-    if p_pire < P_REJET:
+    if rejetes_fort:
         statut = NON_VALIDEE
-    elif p_pire < P_VIGILANCE:
+    elif rejetes_souple:
         statut = A_JUSTIFIER
     else:
         statut = VALIDEE
 
     extras['axe_le_plus_defavorable'] = axe_pire
     extras['p_par_axe'] = {a: round(p, 6) for a, p in p_valeurs.items()}
+    extras['correction_multiplicite'] = 'Holm-Bonferroni'
+    extras['n_axes_familles'] = len(p_valeurs)
+    # ⚠️ LE SEUIL EFFECTIF EST PUBLIE : sans lui, un relecteur compare la
+    # p-valeur brute au seuil nominal et conclut de travers.
+    extras['seuil_effectif_le_plus_strict'] = round(
+        P_VIGILANCE / max(len(p_valeurs), 1), 6)
 
     if statut == VALIDEE:
         suite = ("Aucune tendance de dispersion détectable sur les axes testés — "

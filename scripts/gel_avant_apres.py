@@ -45,6 +45,22 @@ TAILLE = 1200
 ARRETE = '2026-06-30'
 ANNEES = (2021, 2022, 2023, 2024, 2025)
 
+#: ⚠️⚠️ LE TRIANGLE DU PROVISIONNEMENT VOYAGE AVEC LA MESURE, COMME LA GRAINE.
+#: C'est RAA (Reinsurance Association of America), triangle public, cumule,
+#: 7x7 — aucune donnee client n'entre donc dans un depot PUBLIC, et le jeu
+#: reste lisible par qui veut refaire la mesure.
+TRIANGLE_A7 = (
+    (5012., 8269., 10907., 11805., 13539., 16181., 18009.),
+    (106., 4285., 5396., 10666., 13782., 15599., 0.),
+    (3410., 8992., 13873., 16141., 18735., 0., 0.),
+    (5655., 11555., 15766., 21266., 0., 0., 0.),
+    (1092., 9565., 15836., 0., 0., 0., 0.),
+    (1513., 6445., 0., 0., 0., 0., 0.),
+    (557., 0., 0., 0., 0., 0., 0.),
+)
+ANNEE_DEBUT_A7 = 2019
+LOB_A7 = 'rc_generale'
+
 
 def _tete_git() -> str:
     """La tete, ET l'etat de l'arbre de travail.
@@ -142,8 +158,26 @@ def produire_la_chaine() -> dict:
         col_cible='nb_sinistres', plan=plan, environnement='production',
         profil_valide_par='Gel', generer_graphiques=True,
         generer_rapport_equipe=False, arrete=ARRETE)
+    # ⚠️⚠️ A7 EST DANS LA MESURE, ET IL N'Y ETAIT PAS. `livrables_de_la_chaine`
+    # enumere les sources qu'on lui donne : elle n'a jamais eu A7 en argument,
+    # donc les TROIS livrables signes du provisionnement — Excel, Word, HTML —
+    # ne sont entres dans AUCUNE empreinte, et la reference versionnee ne
+    # porte que des surfaces de tarification. *Un instrument juste, braque sur
+    # une direction sur deux, certifie ce qu'il n'a pas regarde.*
+    # ⚠️ LE PROVISIONNEMENT NE DEPEND D'AUCUN RESULTAT DE TARIFICATION : la
+    # tranche est autonome, et un echec ici ne doit pas effacer les 29
+    # surfaces deja gardees — il doit se voir. On laisse donc remonter.
+    from direction_non_vie.provisionnement.a7_provisionnement.agent import (
+        AgentA7Provisionnement,
+    )
+    r7 = AgentA7Provisionnement(verbose=False).run(
+        source=[list(ligne) for ligne in TRIANGLE_A7],
+        mode_declare='cumule', lob=LOB_A7, annee_debut=ANNEE_DEBUT_A7,
+        ref_client='GEL', arrete=ARRETE, date_arrete=ARRETE,
+        seed=GRAINE, generer_graphiques_flag=True,
+        generer_word=True, generer_html=True)
     return {
-        'a1': r1, 'a2': r2, 'a3': r3, 'a4': r4, 'a5': r5, 'a6': r6,
+        'a1': r1, 'a2': r2, 'a3': r3, 'a4': r4, 'a5': r5, 'a6': r6, 'a7': r7,
         'rapport_modeles': RM.generer_rapport_tarification(
             result_a3=r3, result_a4=r4, result_a6=r6,
             result_a5=r5 if r5.get('success') else None,
@@ -199,7 +233,11 @@ CHEMIN_REFERENCE = os.path.join(
 #: l'univers.*
 ASSIETTE_NON_COUVERTE = (
     "un seul plan (auto), une seule graine, AUCUN mapping client declare, "
-    "aucun modele de Deep Learning si torch est absent"
+    "aucun modele de Deep Learning si torch est absent ; cote "
+    "provisionnement, UN SEUL triangle (RAA, 7x7, cumule, annuel, une seule "
+    "LoB) : ni triangle d engagements — donc Munich Chain Ladder inerte —, "
+    "ni granularite infra-annuelle, ni Best Estimate negatif, ni geometrie "
+    "irreguliere, ni narration LLM (aucune cle d API dans la mesure)"
 )
 
 

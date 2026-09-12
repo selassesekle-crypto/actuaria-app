@@ -46,6 +46,11 @@
    quelqu'un les branche, ce test rougit pour que la prose suive. Il ne
    demande pas de les brancher.
 
+   ⚠️⚠️ CETTE PHRASE A ETE FAUSSE PENDANT TOUTE LA VIE DU FICHIER : DORM-1
+   ne surveillait que `seuil_llt`. Violation plantee le 11/09/2026 — le
+   parametre BRANCHE dans `agent.py` — : T6 restait VERT. DORM-2 ferme le
+   trou, et il mesure le RUN avant le source.
+
  CE QUE CE FICHIER SCELLE, ET CE QU'IL NE SCELLE PAS. T2 ne lit pas le
  source : il compte les cellules du document PRODUIT. C'est lui qui a
  trouve que ma correction laissait, DANS LE HTML, cinq en-tetes pour des
@@ -289,10 +294,21 @@ class T3_L_Etiquette_Du_Best_Estimate(unittest.TestCase):
         ⚠️ L'ASSIETTE EXCLUT LES COMMENTAIRES : celui du classeur CITE
         l'ancienne etiquette pour dire ce qui a ete corrige, et la citer n'est
         pas la produire."""
+        # ⚠️⚠️ CETTE SENTINELLE ATTESTAIT SANS SURVEILLER, ET ELLE ETAIT
+        # VERTE. Mesure du 11/09/2026 : elle cherchait « BEST ESTIMATE S2 »
+        # en MAJUSCULES, par un `in` SENSIBLE A LA CASSE, alors que les six
+        # sites vivants s'ecrivaient « Best Estimate S2 » ; son assiette
+        # omettait `n5_graphiques.py`, qui portait « Best Estimate S2
+        # (Art. 77) » ; et les trois occurrences MAJUSCULES restantes
+        # etaient toutes des COMMENTAIRES, donc filtrees. Elle n'avait
+        # litteralement RIEN a trouver — et sept surfaces des documents
+        # PRODUITS portaient l'etiquette.
         fautes = []
-        for fichier in ('n5_excel.py', 'n5_rapport.py', 'n5_commentaire.py'):
+        for fichier in ('n5_excel.py', 'n5_rapport.py', 'n5_commentaire.py',
+                        'n5_graphiques.py'):
             for i, l in enumerate(_src(_ICI, fichier).split(chr(10)), 1):
-                if 'BEST ESTIMATE S2' in l and not l.lstrip().startswith('#'):
+                if ('best estimate s2' in l.lower()
+                        and not l.lstrip().startswith('#')):
                     fautes.append('%s:%d %s' % (fichier, i, l.strip()[:90]))
         self.assertEqual(fautes, [],
                          'Un livrable promet « BEST ESTIMATE S2 » sur une '
@@ -447,6 +463,53 @@ class T6_Biais_Et_Dormants(unittest.TestCase):
                 'scelle SHA-256 n est peut-etre plus dormant. Le commentaire '
                 'de `agent.py` qui l affirme doit etre relu.' % n)
         print('OK DORM-1 : les declarations de dormance restent vraies')
+
+    def test_la_dormance_de_ruptures_calendaires_reste_vraie(self):
+        """⚠️⚠️ LA TROISIEME DECLARATION N'AVAIT AUCUNE SENTINELLE.
+
+        L'en-tete de ce fichier annonce que `seuil_llt` ET
+        `ruptures_calendaires` sont declares dormants et que « T6 verifie
+        que la declaration reste VRAIE ». DORM-1 ne regardait que le
+        premier. Violation plantee le 11/09/2026 — le parametre BRANCHE
+        dans `agent.py` — : DORM-1 restait VERT et imprimait que les
+        declarations restaient vraies. Aucun test du depot ne lit `bz_ptf`
+        depuis un run : la prose promettait une surveillance qui n'existait
+        pas.
+
+        ⚠️ ON MESURE LE COMPORTEMENT AVANT LE SOURCE. `ruptures_calendaires
+        _testees` est VIDE tant que personne ne declare de rupture, et il se
+        remplit des qu'on en declare une : c'est le fait, pas le texte.
+        Le controle de source vient EN PLUS, pour la meme raison que pour
+        `seuil_llt` — il nomme le fichier a corriger.
+
+        ⚠️ CE TEST NE DEMANDE PAS DE BRANCHER LE PARAMETRE. Il demande que
+        la prose suive le jour ou quelqu'un le branche.
+        """
+        r = _documents()['RAA sans exposition']['run']
+        bz = (r.get('n3') or {}).get('bz_ptf') or {}
+        self.assertTrue(bz, 'Barnett-Zehnwirth ne tourne plus en production : '
+                            'ce test ne mesure plus rien.')
+        self.assertEqual(
+            bz.get('ruptures_calendaires_testees'), [],
+            'Une rupture calendaire DECLAREE a ete testee en production : '
+            '`ruptures_calendaires` a trouve un appelant. Le commentaire de '
+            '`n3/barnett_zehnwirth_ptf.py` qui le declare DORMANT, et '
+            "l'en-tete de ce fichier, doivent etre corriges.")
+
+        arbre = ast.parse(_src(_ICI, 'agent.py'))
+        passe = [k.arg for n in ast.walk(arbre) if isinstance(n, ast.Call)
+                 for k in n.keywords if k.arg == 'ruptures_calendaires']
+        self.assertEqual(passe, [],
+                         '`agent.py` transmet desormais '
+                         '`ruptures_calendaires`.')
+
+        # ⚠️ CONTRE-EPREUVE DE L'INSTRUMENT : la cle doit EXISTER, sinon un
+        # `.get()` sur un nom disparu rendrait None et le test passerait sur
+        # une absence au lieu d'une dormance — le « faux zero » du depot.
+        self.assertIn('ruptures_calendaires_testees', bz,
+                      'la cle a disparu : ce test lit une absence, pas une '
+                      'dormance.')
+        print('OK DORM-2 : `ruptures_calendaires` reste dormant, et mesure')
 
 
 # =============================================================================

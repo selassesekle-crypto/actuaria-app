@@ -608,8 +608,11 @@ def g5_convergence_methodes(n3: Dict, n4: Dict) -> 'go.Figure':
 
     # BE S2 (barre distincte, orange vif)
     fig.add_trace(go.Bar(
-        x=['Best Estimate S2'], y=[be],
-        name='BE S2',
+        # ⚠️ « S2 (Art. 77) » PROMETTAIT UNE ACTUALISATION QUI N'A PAS EU
+        # LIEU : elle est operee en aval par A10, et les trois autres
+        # formats ecrivent « brut ». Ce graphique etait le dernier site.
+        x=['Best Estimate (brut)'], y=[be],
+        name='BE (brut)',
         marker_color=OR,
         marker_line=dict(color=BLANC, width=1),
         width=0.55,
@@ -617,7 +620,7 @@ def g5_convergence_methodes(n3: Dict, n4: Dict) -> 'go.Figure':
         textposition='outside',
         textfont=dict(color=OR, size=11),
         hovertemplate=(
-            "<b>Best Estimate S2 (Art. 77)</b><br>"
+            "<b>Best Estimate (brut — actualisation S2 en aval)</b><br>"
             "BE : <b>%{y:,.0f} €</b><extra></extra>"
         ),
     ))
@@ -1574,7 +1577,7 @@ TITRES_FIGURES = {
                          "effet calendaire"),
     'g10_h3':           "Loss ratio a priori de Bornhuetter-Ferguson",
     'g4_reserve_annee': "Réserve par année de survenance — IBNR ± σ de Mack",
-    'g5_convergence':   "Convergence des méthodes — Best Estimate S2",
+    'g5_convergence':   "Convergence des méthodes — Best Estimate (brut)",
     'g6_bootstrap':     ("Distribution Bootstrap ODP et position du Best "
                          "Estimate retenu"),
     'g12_sensibilites': "Sensibilités du Best Estimate",

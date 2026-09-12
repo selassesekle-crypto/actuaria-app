@@ -51,12 +51,37 @@ from .n3.bootstrap_odp import libelle_incertitude
 from .n3.munich_cl import lignes_munich_rapport
 # Source UNIQUE du NOM de l'approche publiée dans `reserve_p*` — la même que
 # HTML, Word et le commentaire. Les libellés étaient écrits en dur ici.
+from .n4_best_estimate import MSG_S2_NON_CALCULABLE, s2_non_calculable
 from .n4_best_estimate import (CLE_BOOT, CLE_COMPOSE, CLE_MACK,
                                MSG_FACTEUR_3, MSG_FACTEUR_3_COURT,
                                MSG_P90_NON_COMPARABLE,
                                libelle_percentiles, marque_retenue)
 
 logger = logging.getLogger('actuaria.a7')
+
+#: Ce qu'une cellule porte quand la grandeur n'est pas DEFINIE. La valeur
+#: est celle que le correctif precedent a posee dans la synthese : une
+#: SECONDE orthographe ferait deux marqueurs pour une seule absence.
+VIDE_S2 = 'non calculable — BE négatif'
+
+
+def _pc(n4, valeur):
+    """Un percentile ne se chiffre pas quand la distribution n'est pas
+    definie.
+
+    ⚠️⚠️ UNE ABSENCE N'EST PAS UN ZERO, ET CE CLASSEUR EST LE FORMAT QU'ON
+    OUVRE POUR RECOPIER UN CHIFFRE DANS UN ETAT REGLEMENTAIRE.
+
+    `garde_fou_be_negatif` pose `None` sur les percentiles quand le Best
+    Estimate est negatif ; `agent.run` les neutralise ensuite en 0 en UN
+    point, pour qu'aucun `None` n'atteigne un formatage. L'intention est
+    juste ; l'effet, ici, etait de publier « P75 (Mack recentre) | 0 » sur
+    un dossier ROUGE dont la synthese disait deja « non calculable ».
+
+    ⚠️ CE N'EST PAS UN REPLI DE MISE EN FORME : le zero et le marqueur ne
+    disent pas la meme chose a un commissaire aux comptes.
+    """
+    return VIDE_S2 if s2_non_calculable(n4 or {}) else valeur
 
 try:
     from openpyxl import Workbook
@@ -215,15 +240,32 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_generation,
                    "(Art. 77 ; actualisation S2 en aval par A10)", 6)
     be     = n4['best_estimate']
     statut = n4['statut']
+    # AUCUN AGREGAT S2 NE SE CHIFFRE SUR UN BE NEGATIF. `agent.run`
+    # neutralise les marqueurs None en ZERO avant N5 ; le classeur
+    # publiait alors << Percentile P90 : 0 >> et << SCR Provisions : 0 >>
+    # dans les cellules qu'on recopie dans un etat reglementaire.
+    _hs = s2_non_calculable(n4)
+    def _nc(valeur, fmt):
+        return ('non calculable — BE négatif', None) if _hs else (valeur, fmt)
     kpis = [
-        ("Best Estimate S2",       be,                      FMT_NB, statut),
+        # ⚠️⚠️ LE CORRECTIF DU LOT 12 A ATTERRI SUR LE TITRE DE SECTION,
+        # TROIS LIGNES PLUS HAUT, ET PAS SUR CETTE CELLULE. Mesure du
+        # 11/09/2026 : SEPT surfaces des documents PRODUITS portaient
+        # encore « Best Estimate S2 » sur une valeur brute — trois
+        # cellules Excel, deux champs de la figure g5, le titre de g5
+        # dans le HTML et dans le Word.
+        # ⚠️ POSE A LA MAIN, ET VOICI POURQUOI : le hunk de l auditeur
+        # ancrait sur la ligne 219 ; les correctifs de l autre audit ont
+        # depuis deplace cette cellule en 251, et l ancre ne mordait plus.
+        # Le TEXTE pose est le sien, au caractere pres.
+        ("Best Estimate (brut, avant actualisation)", be, FMT_NB, statut),
         # ⚠️ UN PERCENTILE SE NOMME PAR SON PERCENTILE — la règle 2 du lot
         # C3b, écrite plus bas dans CE fichier et non appliquée ici.
         # « Provision » désigne ce qui s'inscrit au bilan sous l'Art. 77 ;
         # un percentile mesure la dispersion autour du Best Estimate.
-        ("Percentile prudentiel P75",  n4['reserve_p75'],   FMT_NB, None),
-        ("Percentile de stress P90",   n4['reserve_p90'],   FMT_NB, None),
-        ("Percentile extrême P99.5",   n4['reserve_p99_5'], FMT_NB, None),
+        ("Percentile prudentiel P75",  *_nc(n4['reserve_p75'], FMT_NB), None),
+        ("Percentile de stress P90",   *_nc(n4['reserve_p90'], FMT_NB), None),
+        ("Percentile extrême P99.5",   *_nc(n4['reserve_p99_5'], FMT_NB), None),
         ("Incertitude Mack (σ)",       n4['sigma_mack'],    FMT_NB, None),
         ("CV inter-méthodes",          n4['cv_inter_methodes'] / 100, FMT_PCT, None),
     ]
@@ -233,10 +275,16 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_generation,
     # Bloc SCR
     _titre_section(ws, 11, 1, "SCR PROVISIONS (Art. 115 S2)", 6)
     scr = n4.get('scr', {})
-    _kpi(ws, 12, 1, "SCR Provisions",            scr.get('scr_provisions', 0), FMT_NB)
+    _kpi(ws, 12, 1, "SCR Provisions", *_nc(scr.get('scr_provisions', 0), FMT_NB))
     _kpi(ws, 13, 1, "Facteur σ(LoB) EIOPA",     scr.get('sigma_eiopa', 0),   FMT_PCT2)
-    _kpi(ws, 14, 1, "Ratio SCR/BE",              scr.get('ratio_scr_be', 0),  FMT_PCT)
+    _kpi(ws, 14, 1, "Ratio SCR/BE", *_nc(scr.get('ratio_scr_be', 0), FMT_PCT))
     _kpi(ws, 15, 1, "Branche (LoB)",             scr.get('lob_label', '—'),   None)
+    # ⚠️ LE MARQUEUR SANS LA PHRASE LAISSE CONCLURE A UNE DONNEE MANQUANTE.
+    # `MSG_S2_NON_CALCULABLE` se declare « source UNIQUE partagee par les 4 »
+    # generateurs ; le classeur ne l'importait pas. Il la porte desormais, a
+    # l'endroit meme des cellules qu'elle explique.
+    if _hs:
+        _kpi(ws, 16, 1, "Agrégats S2", MSG_S2_NON_CALCULABLE)
 
     # Bloc méthodes
     _titre_section(ws, 17, 1, "RÉSULTATS PAR MÉTHODE", 6)
@@ -552,9 +600,13 @@ def _ong4_methodes(wb, n3, n4):
         # ELLE ÉTAIT ÉCRITE ICI ET DÉMENTIE PAR LES TROIS LIGNES QU'ELLE
         # ACCOMPAGNAIT : « Provision » est le mot de l'Art. 77 pour ce qui
         # s'inscrit au bilan.
-        (f"P75 — percentile prudentiel ({_appr})", n4['reserve_p75']),
-        (f"P90 — percentile de stress ({_appr})",  n4['reserve_p90']),
-        (f"P99.5 — percentile extrême ({_appr})",  n4['reserve_p99_5']),
+        # ⚠️ TROISIEME SITE DU MEME FAIT, ET IL A SURVECU AU CORRECTIF
+        # PRECEDENT : ces lignes lisent les MEMES cles que la synthese, a un
+        # autre endroit du fichier. Mesure : P75 et P99.5 publiaient encore 0
+        # quand la synthese disait deja « non calculable ».
+        (f"P75 — percentile prudentiel ({_appr})", _pc(n4, n4['reserve_p75'])),
+        (f"P90 — percentile de stress ({_appr})",  _pc(n4, n4['reserve_p90'])),
+        (f"P99.5 — percentile extrême ({_appr})",  _pc(n4, n4['reserve_p99_5'])),
         ("σ des percentiles publiés",
          n4.get('sigma_percentiles', n4.get('sigma_total_compose', n4['sigma_mack']))),
     ]
@@ -576,12 +628,14 @@ def _ong4_methodes(wb, n3, n4):
     # la publication des percentiles Bootstrap en posant `reserve_p90_boot`
     # a None. Toute surface qui publie un percentile Bootstrap le consulte.
     _porte_boot = (n4 or {}).get('reserve_p90_boot') is not None
+    # ⚠️ TROISIEME SURFACE DU MEME TABLEAU. `_pc` porte la regle une seule
+    # fois pour tout le classeur ; la colonne sigma reste chiffree.
     diag_rows = [
         (marque_retenue(n4, CLE_COMPOSE, "Incertitude composée"),
-         n4.get('reserve_p90_compose', 0),  n4.get('sigma_total_compose', 0), "BE pondéré"),
+         _pc(n4, n4.get('reserve_p90_compose', 0)),  n4.get('sigma_total_compose', 0), "BE pondéré"),
         (marque_retenue(n4, CLE_MACK, "Mack recentré"),
-         n4.get('reserve_p90_mack', 0),     n4.get('sigma_mack', 0),          "BE pondéré"),
-        ("Mack natif",                      _mk.get('reserve_p90', 0),     _mk.get('sigma_total', 0),        "réserve Mack"),
+         _pc(n4, n4.get('reserve_p90_mack', 0)),     n4.get('sigma_mack', 0),          "BE pondéré"),
+        ("Mack natif",                      _pc(n4, _mk.get('reserve_p90', 0)),     _mk.get('sigma_total', 0),        "réserve Mack"),
         # ⚠️⚠️ LA PORTE DE N4 EST LA SEULE. Quand BOOT-H3 ou BOOT-H4 est non
         # validee, N4 pose `reserve_p90_boot = None` et le HTML comme le Word
         # ecrivent « — ». Cette ligne-ci lisait `n3['bootstrap']` EN DIRECT et
@@ -1036,18 +1090,27 @@ def _ong8_comparatif(wb, n4, resultats_precedents=None):
         be_nm1 = p90_nm1 = cv_nm1 = sigma_nm1 = None
 
     def _var(n, nm1):
-        if nm1 is None or nm1 == 0:
+        # ⚠️ UNE VARIATION N'A DE SENS QU'ENTRE DEUX NOMBRES. Depuis que la
+        # ligne P90 peut porter un marqueur d'absence, les DEUX cotes se
+        # verifient — sinon `n - nm1` leverait sur une chaine.
+        for x in (n, nm1):
+            if isinstance(x, bool) or not isinstance(x, (int, float)):
+                return None, None
+        if nm1 == 0:
             return None, None
         return n - nm1, (n - nm1) / abs(nm1)
 
     # Le 5e champ dit si la VARIATION de cette ligne est interprétable comme
     # une évolution du portefeuille. Voir la couleur, plus bas.
     indicateurs = [
-        ("Best Estimate S2 (€)",    be_n,    be_nm1,    FMT_NB,   True),
+        ("Best Estimate (brut) (€)", be_n,   be_nm1,    FMT_NB,   True),
         # ⚠️ QUATRIEME SITE DE LA MEME REGLE, ET LE SEUL RESTE DANS CE
         # CLASSEUR : les trois lignes de l'onglet « 1. Synthese » disent bien
         # « Percentile prudentiel P75 ». Celle-ci est produite a CHAQUE run.
-        ("Percentile P90 (€)",      p90_n,   p90_nm1,   FMT_NB,   False),
+        # ⚠️ QUATRIEME SITE, DANS L'ONGLET QU'ON OUVRE POUR COMPARER DEUX
+        # ARRETES : publier « P90 : 0 € » en face de l'arrete N-1 ferait lire
+        # une BAISSE la ou il n'y a pas de grandeur.
+        ("Percentile P90 (€)",      _pc(n4, p90_n),   p90_nm1,   FMT_NB,   False),
         ("Incertitude Mack σ (€)",  sigma_n, sigma_nm1, FMT_NB,   True),
         ("CV inter-méthodes",       cv_n/100, (cv_nm1/100 if cv_nm1 is not None else None), FMT_PCT, True),
     ]
@@ -1131,6 +1194,10 @@ def _ong9_scr(wb, n4):
 
     scr = n4.get('scr', {})
     _titre_section(ws, 1, 1, "SCR Provisions — Formule standard Art. 115 Règlement Délégué (UE) 2015/35", 4)
+    # MEME GARDE QUE L'ONGLET 1 : un BE negatif ne porte pas de SCR.
+    _hs9 = s2_non_calculable(n4)
+    def _v9(v, f):
+        return ('non calculable — BE négatif', None) if _hs9 else (v, f)
 
     # Bloc calcul
     _titre_section(ws, 3, 1, "CALCUL SCR PROVISIONS (LoB unique)", 4)
@@ -1145,8 +1212,8 @@ def _ong9_scr(wb, n4):
         # « Annexe XIV » pour une LoB de santé non-SLT, où « Annexe II » mentait.
         ("Facteur σ(LoB) — réserve",    scr.get('sigma_eiopa',0),         FMT_PCT2,  scr.get('reference_s2','Annexes II / XIV Rgt 2015/35'), "Écart type risque de réserve, art. 117"),
         ("Facteur multiplicatif",        3.0,                              "0.0",     "Art. 115 Rgt 2015/35",         MSG_FACTEUR_3_COURT),
-        ("SCR_prov = 3 × σ × BE",       scr.get('scr_provisions',0),      FMT_NB,    "Art. 115 Rgt 2015/35",         "Exigence de capital provisions"),
-        ("Ratio SCR/BE",                scr.get('ratio_scr_be',0),         FMT_PCT,   "Indicateur de pilotage",       ""),
+        ("SCR_prov = 3 × σ × BE",       *_v9(scr.get('scr_provisions',0), FMT_NB),    "Art. 115 Rgt 2015/35",         "Exigence de capital provisions"),
+        ("Ratio SCR/BE",                *_v9(scr.get('ratio_scr_be',0),   FMT_PCT),   "Indicateur de pilotage",       ""),
         ("Branche (LoB)",               scr.get('lob_label','—'),          None,      "Classification EIOPA",         ""),
         ("Méthode",                     scr.get('methode','—'),             None,      "Règlement Délégué 2015/35",    ""),
     ]
@@ -1197,7 +1264,7 @@ def _ong10_sensibilites(wb, n4):
 
     be   = n4.get('best_estimate', 0)
     sens = n4.get('sensibilites', {})
-    _titre_section(ws, 1, 1, "Analyse de sensibilité — Impact sur le Best Estimate S2", 5)
+    _titre_section(ws, 1, 1, "Analyse de sensibilité — Impact sur le Best Estimate (brut)", 5)
 
     hdrs = ["Scénario", "Réserve (€)", "Δ vs BE (€)", "Δ vs BE (%)", "Interprétation"]
     widths = [32, 16, 16, 12, 40]

@@ -102,14 +102,28 @@ class T1_La_Porte_De_Gouvernance(unittest.TestCase):
             self.skipTest('ce triangle ne ferme pas la porte')
         self.assertIsInstance(
             p90_n3, float, 'le Bootstrap n a pas tourne : rien a retirer')
+        # ⚠️⚠️ LES TROIS PERCENTILES, ET NON LE SEUL P90. Cette sentinelle
+        # ne balayait que `p90`. Mesure du 11/09/2026 : le §4 du commentaire
+        # (`_s4_methodes`) lisait `n3['bootstrap']['p99_5']` EN DIRECT et
+        # publiait « Le P99.5 Bootstrap s'etablit a 1 265 € » sur le dossier
+        # de reference `Recours`, PORTE FERMEE, pendant que le meme document
+        # ecrivait « percentiles retires par la gouvernance ». Le P90, lui,
+        # etait bien retire — c'est exactement ce qui rendait la
+        # contradiction invisible a ce controle.
+        _b = self.ferme['n3'].get('bootstrap') or {}
+        cibles = [('P75', _b.get('p75')), ('P90', p90_n3),
+                  ('P99,5', _b.get('p99_5'))]
         for nom, txt in (('HTML', self.ferme.get('html') or ''),
                          ('commentaire', self.ferme.get('commentaire') or '')):
-            for f in _formes(p90_n3):
-                self.assertNotIn(
-                    f, txt,
-                    '%s : la gouvernance a ferme la publication des '
-                    'percentiles et le document publie %s quand meme.'
-                    % (nom, f))
+            for lbl, val in cibles:
+                if val is None:
+                    continue
+                for f in _formes(val):
+                    self.assertNotIn(
+                        f, txt,
+                        '%s : la gouvernance a ferme la publication des '
+                        'percentiles et le document publie le %s (%s) quand '
+                        'meme.' % (nom, lbl, f))
         print('    OK L8-1 porte fermee : le P90 de n3 (%s) ne figure ni au '
               'HTML ni au commentaire' % round(p90_n3))
 
@@ -226,6 +240,37 @@ class T4_Phi_Quasi_Nul(unittest.TestCase):
             % (r['n2'].get('bootstrap') or {}).get('erreur'))
         print('    OK L8-8 triangle sans dispersion : retrait propre, aucune '
               'exception')
+
+    def test_une_dispersion_nulle_ne_publie_pas_un_percentile(self):
+        """⚠️⚠️ CE FICHIER CONSTRUIT DEJA LE TRIANGLE QUI DECLENCHE LE DEFAUT,
+        ET NE REGARDAIT QUE L'ABSENCE D'EXCEPTION.
+
+        Mesure du 11/09/2026 sur `_sans_bruit()`, la fixture ci-dessus :
+        sigma_Mack = 0, sigma Bootstrap = 0, sigma compose = 0, et le module
+        publiait BE = P75 = P90 = P99,5 = 2 400 931 EUR, avec un Bootstrap
+        `disponible=True, statut=VERT` et un statut global AMBRE. Le document
+        affirmait donc que la reserve ne peut pas etre depassee — la
+        pathologie que la docstring de `_resultat_degrade` nomme.
+        """
+        r = _run(self._sans_bruit(), generer_html=False, n_sim_bootstrap=60)
+        n4 = r['n4']
+        self.assertAlmostEqual(
+            float(n4.get('sigma_mack') or 0), 0.0, places=6,
+            msg='ce triangle n a plus une dispersion nulle : le controle ne '
+                'prouve plus rien')
+        self.assertFalse(
+            (r['n3'].get('bootstrap') or {}).get('disponible'),
+            'un Bootstrap a dispersion nulle se declare disponible')
+        self.assertEqual(
+            n4.get('statut'), 'ROUGE',
+            'une dispersion nulle sur les trois approches ne peut pas '
+            'coexister avec un statut favorable')
+        self.assertTrue(
+            n4.get('percentiles_non_mesurables'),
+            'le module ne DECLARE pas que les percentiles sont non mesurables')
+        self.assertIn('NON MESURABLES', str(n4.get('source_percentiles')))
+        print('    OK L8-10 dispersion nulle : Bootstrap retire, statut '
+              'ROUGE, percentiles declares non mesurables')
 
     def test_un_triangle_BRUITE_rend_encore_un_verdict(self):
         """⚠️ LA CONTRE-EPREUVE : se retirer toujours ne teste plus rien."""

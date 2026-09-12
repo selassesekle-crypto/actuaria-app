@@ -390,8 +390,19 @@ def barnett_zehnwirth_ptf(
         # ── Garde-fou incréments négatifs (log-normal inadapté) ──────────────
         # Disponibilité décidée par increments_positifs (seuil FRAC_NEG_MAX_DEFAUT).
         if not dat['disponible']:
+            # ⚠️⚠️ INDISPONIBLE N'EST PAS VERT. Cette branche rendait
+            # `'statut': 'VERT'` pour un test que le module vient de declarer
+            # STRUCTURELLEMENT inapplicable : un examen qui n'a pas eu lieu
+            # prenait la couleur d'un examen reussi, sur un champ expose dans
+            # `n3`. La MEME fonction rend deja `'NON TESTABLE'` pour son autre
+            # cas indisponible (triangle trop court), vingt lignes plus bas :
+            # c'est le vocabulaire du module, pas une invention.
+            # ⚠️ `success` reste True : la FONCTION a abouti, elle a su dire
+            # qu'elle ne pouvait pas conclure. C'est precisement pourquoi le
+            # garde-fou qui cherchait `'success': False` ne voyait pas cette
+            # branche — voir `test_a7_constantes_et_statuts`.
             return {
-                'success': True, 'disponible': False, 'statut': 'VERT',
+                'success': True, 'disponible': False, 'statut': 'NON TESTABLE',
                 'cellules_exclues': dat['cellules_exclues'], 'n_exclues': dat['n_exclues'],
                 'n_obs': dat['n_obs'],
                 'message': (f"B&Z non fiable : {dat['n_exclues']}/{dat['n_obs']} incréments "

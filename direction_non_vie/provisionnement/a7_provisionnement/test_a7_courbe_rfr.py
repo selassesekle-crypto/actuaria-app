@@ -261,7 +261,8 @@ class T3_Le_Defaut_Est_Inchange(unittest.TestCase):
 #  T4 — UNE COURBE PÉRIMÉE PLAFONNE LE STATUT
 # =============================================================================
 
-def _triangle_regulier(n=8, f=(1.60, 1.25, 1.12, 1.06, 1.03, 1.015, 1.005)):
+def _triangle_regulier(n=8, f=(1.60, 1.25, 1.12, 1.06, 1.03, 1.015, 1.005),
+                       bruit=0.02, graine=7):
     """Un triangle assez régulier pour sortir VERT — et il a fallu le CONSTRUIRE.
 
     ⚠️ AUCUN DES CINQ TRIANGLES DE RÉFÉRENCE NE SORT VERT : mesuré, les dix
@@ -273,7 +274,25 @@ def _triangle_regulier(n=8, f=(1.60, 1.25, 1.12, 1.06, 1.03, 1.015, 1.005)):
     D'où ce triangle, dont l'exposition est calée sur l'ultime réel pour que
     Chain Ladder, Bornhuetter-Ferguson et Cape Cod convergent — `cv_inter`
     tombe à 0,0 et le statut est VERT tant que la courbe l'est.
+
+    ⚠️⚠️ ET IL PORTE DÉSORMAIS UNE DISPERSION, PARCE QUE SA RÉGULARITÉ MÊME
+    LE FAISAIT REFUSER. Sans bruit, `sigma_mack` vaut 0,0 sur les trois
+    approches, et le module force alors ROUGE — à raison : un triangle dont
+    tous les résidus sont nuls est un triangle LISSÉ ou MODÉLISÉ, pas une
+    observation. Les quatre verrous de ce fichier perdaient leur prémisse, y
+    compris leur propre témoin. Mesure du 12/09/2026, graine 7 :
+
+        bruit    statut   dispersion mesurable   sigma_mack
+        0,000    ROUGE    non                    0
+        0,005    VERT     oui                    7 889
+        0,020    VERT     oui                    31 477     <- retenu
+        0,080    VERT     oui                    124 761
+
+    ⚠️ LE VERT TIENT SUR UN FACTEUR SEIZE DE BRUIT : ce n'est pas un
+    équilibre sur le fil. La GRAINE, elle, compte — la graine 13 rend AMBRE
+    —, et c'est pourquoi elle est fixée et nommée dans la signature.
     """
+    alea = np.random.default_rng(graine)
     plein = np.zeros((n, n))
     for i in range(n):
         v = 1_000_000.0 * (1 + 0.02 * i)
@@ -281,6 +300,15 @@ def _triangle_regulier(n=8, f=(1.60, 1.25, 1.12, 1.06, 1.03, 1.015, 1.005)):
         for j in range(1, n):
             v *= f[j - 1] if j - 1 < len(f) else 1.0
             plein[i, j] = v
+    #: le bruit porte sur les INCRÉMENTS, jamais sur le cumulé : bruiter le
+    #: cumulé ferait décroître un triangle cumulé, ce qui est une autre
+    #: anomalie et fausserait ce que ce fichier mesure.
+    inc = np.diff(np.hstack([np.zeros((n, 1)), plein]), axis=1)
+    for i in range(n):
+        for j in range(n):
+            if inc[i, j] != 0.0:
+                inc[i, j] *= max(0.05, 1.0 + alea.normal(0, bruit))
+    plein = np.cumsum(inc, axis=1)
     C = plein.copy()
     for i in range(n):
         for j in range(n - i, n):

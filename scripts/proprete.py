@@ -348,8 +348,93 @@ def mesurer(chemins):
     return 1 if faute else 0
 
 
+
+
+# =============================================================================
+#  BINAIRES VERSIONNES QUE RIEN NE REFERENCE
+# =============================================================================
+
+#: Au-dela de cette taille, un fichier binaire versionne pese sur chaque clone.
+#: Le seuil est GENEREUX : on ne signale pas une icone.
+SEUIL_BINAIRE_KO = 512
+
+#: Les extensions concernees. Un binaire de DONNEES (csv, parquet) n'est pas
+#: vise : il peut etre lu par un chemin construit a l'execution.
+EXT_BINAIRES = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.ico',
+                '.mp4', '.mov', '.pdf', '.psd', '.ai')
+
+
+def binaires_orphelins():
+    """Les binaires versionnes, volumineux, dont le NOM n'apparait dans aucun
+    fichier texte suivi.
+
+    ⚠️ ON CHERCHE LE NOM DE FICHIER, PAS LE CHEMIN : une reference peut etre
+    construite (`os.path.join(RACINE, 'logo.png')`) ou relative. Chercher le
+    chemin complet manquerait ces cas et sur-signalerait.
+
+    ⚠️ ET ON EXCLUT LE FICHIER LUI-MEME de la recherche, sinon tout binaire
+    se refererait a lui-meme par son entree d'index.
+    """
+    suivis = _run(['git', 'ls-files', '-z']).split('\0')
+    suivis = [c for c in suivis if c]
+    gros = []
+    for c in suivis:
+        if not c.lower().endswith(EXT_BINAIRES):
+            continue
+        chemin = os.path.join(RACINE, c)
+        try:
+            ko = os.path.getsize(chemin) // 1024
+        except OSError:
+            continue
+        if ko >= SEUIL_BINAIRE_KO:
+            gros.append((c, ko))
+    if not gros:
+        return []
+    # Le texte de tout le depot, une seule fois : le relevé coûte alors un
+    # parcours, pas un par binaire.
+    textes = []
+    for c in suivis:
+        if c.lower().endswith(EXT_BINAIRES + ('.zip', '.xlsx', '.docx')):
+            continue
+        try:
+            with open(os.path.join(RACINE, c), encoding='utf-8',
+                      errors='ignore') as f:
+                textes.append(f.read())
+        except OSError:
+            continue
+    corpus = '\n'.join(textes)
+    orphelins = []
+    for c, ko in gros:
+        nom = os.path.basename(c)
+        if nom not in corpus:
+            orphelins.append((c, ko))
+    return orphelins
+
+
+def signaler_binaires():
+    """⚠️ ACCUSE SANS EXEMPTER : ne supprime rien, ne fait echouer aucun lot.
+    Supprimer un fichier versionne est une decision, pas une correction."""
+    orphelins = binaires_orphelins()
+    if not orphelins:
+        return
+    total = sum(ko for _, ko in orphelins)
+    print()
+    print('-' * 78)
+    print(f'  BINAIRES VERSIONNES QUE RIEN NE REFERENCE — {len(orphelins)} '
+          f'fichier(s), {total} Ko')
+    for c, ko in sorted(orphelins, key=lambda x: -x[1]):
+        print(f'    {ko:>7} Ko  {c}')
+    print('  Aucun fichier texte suivi ne cite ces noms. Les garder est une')
+    print('  decision ; ce releve ne fait que la rendre visible.')
+    print('-' * 78)
+
+
 def main():
     chemins = sys.argv[1:] or fichiers_du_diff()
+    # ⚠️ LE RELEVE DES BINAIRES NE DEPEND PAS DU DIFF, ET C'EST TOUT L'OBJET :
+    # `fichiers_du_diff()` ne voit que les fichiers PYTHON modifies. Trois
+    # images de 2,4 Mo versionnees en 2025 n'y seraient jamais apparues.
+    signaler_binaires()
     if not chemins:
         print('Aucun fichier Python modifie. Rien a mesurer.')
         return 0

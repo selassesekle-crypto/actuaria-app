@@ -1,6 +1,16 @@
 # =============================================================================
 #  ActuarIA — Bloc II, module 3 : PROPOSITION LLM (rôles d'onglets + mapping)
 #  nv_triangle_mapping_llm.py
+#
+#  ⚠️⚠️ AUCUN APPELANT DE PRODUCTION À CE JOUR — MESURÉ, PAS SUPPOSÉ.
+#  Relevé du 11/09/2026 sur tout le dépôt : les seules occurrences de ce
+#  module hors tests sont des MENTIONS en commentaire. Le mécanisme est
+#  écrit et testé ; il attend d'être branché par un appelant, et une clé
+#  d'API que seul l'actuaire fournit. SIGNALÉ, NON OUVERT : le brancher
+#  est une décision, pas une correction.
+#  ⚠️ Le jour où quelqu'un le branche, `T_Ce_Module_N_A_Aucun_Appelant`
+#  (dans `test_nv_triangle_mapping_llm.py`) rougit — pour que cette
+#  phrase suive, pas pour empêcher le branchement.
 # =============================================================================
 #
 #  RESPONSABILITÉ — Claude PROPOSE, l'actuaire VALIDE. Rien n'est jamais appliqué

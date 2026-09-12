@@ -332,3 +332,28 @@ def sans_objet(motif: str) -> Dict[str, Any]:
     return {'mesurable': False, 'motif': motif,
             'phrase': f"Cette vérification n'est pas un test statistique : "
                       f"{motif}. La notion de puissance n'y a pas de sens."}
+
+def non_mesurable(motif: str) -> dict:
+    """Pour un test QUI EST statistique mais dont la puissance n'a pas pu
+    être mesurée sur CE triangle-ci.
+
+    ⚠️⚠️ DEUX SITUATIONS DIFFÉRENTES PARTAGEAIENT UNE SEULE PHRASE, ET LA
+    SECONDE DEVENAIT FAUSSE. `sans_objet` dit « cette vérification n'est pas
+    un test statistique » — vrai de CLM-H4, de BFCC-H2 et des contrôles de
+    plage. Il était aussi employé quand le GÉNÉRATEUR échoue, c'est-à-dire
+    pour CLM-H1 (scan de diagonales par permutation), CLM-H2 (test de Student
+    sur l'ordonnée à l'origine) et CLM-H3 (corrélation de rang de Spearman) —
+    trois tests statistiques, que le document déclarait alors ne pas en être.
+
+    Mesure du 11/09/2026, triangle 10×6 — la forme STANDARD des branches
+    longues selon `test_a7_triangle_tronque.py` : les trois hypothèses
+    publiaient « Cette vérification n'est pas un test statistique », et la
+    phrase atteignait le HTML (19 occurrences contre 16 sur le carré, soit
+    exactement une par hypothèse).
+    """
+    return {'mesurable': False, 'motif': motif,
+            'phrase': f"Ce test EST statistique, mais sa puissance n'a pas pu "
+                      f"être mesurée sur ce triangle : {motif}. Le verdict "
+                      f"reste valide ; ce qui manque est la mesure de ce "
+                      f"qu'il aurait pu voir."}
+

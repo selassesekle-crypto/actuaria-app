@@ -208,6 +208,20 @@ MSG_P90_NON_COMPARABLE = (
 
 # Message UNIQUE affiché par les livrables N5 quand les agrégats S2 ne sont pas
 # calculables (BE négatif). Source unique — ne pas dupliquer dans N5.
+#: ⚠️⚠️ CE QUE LE SCR PUBLIE PAR A7 EST, ET CE QU'IL N'EST PAS.
+#: Relevé du 11/09/2026 : le commentaire le déclarait (1 mention), le classeur
+#: aussi (3), le HTML et le Word PAS DU TOUT. Un chiffre intitulé « SCR
+#: Provisions — Art. 115 » que rien n'accompagne se recopie dans un état
+#: réglementaire comme s'il était le SCR du portefeuille.
+#: Source UNIQUE, comme `MSG_S2_NON_CALCULABLE` juste en dessous : deux textes
+#: pour un seul fait divergent au premier ajustement.
+PORTEE_SCR_MONO_LOB = (
+    "Ce SCR est celui d'une SEULE ligne d'activité (formule mono-branche, "
+    "Art. 115 du Règlement Délégué (UE) 2015/35). L'agrégation avec les "
+    "autres LoB — SCR_NL = √(Σ_ij ρ_ij × SCR_i × SCR_j) — est opérée EN AVAL "
+    "et ne figure pas dans ce document."
+)
+
 MSG_S2_NON_CALCULABLE = (
     "Agrégats S2 NON CALCULABLES — Best Estimate négatif (reprise nette) : SCR, "
     "Risk Margin, provisions techniques et percentiles ne sont pas définis sur un "
@@ -1027,8 +1041,17 @@ class BestEstimateS2:
         # PORTEUR DE LA CIBLE `percentiles_mack` — CLM-H3. Même convention que
         # le Bootstrap : absent → True, ne pas avoir jugé n'est pas juger
         # défavorablement.
+        # ⚠️⚠️ ET LA DISPERSION DOIT EXISTER. Une hypothese validee ne rend
+        # pas publiable un sigma NUL : la log-normale retombe alors sur
+        # `p75 = p90 = p995 = be`, et le document presente un P99,5 EGAL au
+        # Best Estimate comme le percentile reglementaire — c'est-a-dire
+        # qu'il affirme que la reserve ne peut pas etre depassee. Mesure du
+        # 11/09/2026 sur un triangle parfaitement proportionnel :
+        # sigma_mack = 0, CLM-H3 VALIDEE, cle_percentiles = 'mack',
+        # P75 = P90 = P99,5 = BE = 3 716 660 €, statut AMBRE.
         _mack_hyp_ok = bool(n2.get('clm', {})
-                              .get('percentiles_mack_publiables', True))
+                              .get('percentiles_mack_publiables', True)) \
+            and sigma > 0 and be > 0
 
         # σ_modèle : std des réserves des méthodes incluses (pondérées par poids)
         # Si une seule méthode → σ_modèle = 0 (pas de dispersion inter-méthodes)
@@ -1151,6 +1174,34 @@ class BestEstimateS2:
                 "Percentiles à interpréter avec prudence ; la réserve "
                 "centrale, elle, n'est pas concernée.")
 
+        # ⚠️⚠️ AUCUNE DES TROIS DISPERSIONS N'EXISTE : ON LE DIT.
+        # Quand sigma_Mack, la dispersion Bootstrap ET sigma composé sont
+        # tous nuls — triangle parfaitement proportionnel, cadence
+        # identique sur toutes les années, cas d'un triangle LISSÉ ou
+        # MODÉLISÉ — la log-normale retombe sur `p75 = p90 = p995 = be`.
+        # Le document présentait alors un P99,5 ÉGAL au Best Estimate comme
+        # le percentile réglementaire, avec un statut VERT : il affirmait
+        # que la réserve ne peut pas être dépassée. Mesure du 11/09/2026 :
+        # BE = P75 = P90 = P99,5 = 3 716 660 €, 41 occurrences dans le HTML,
+        # 40 dans le Word.
+        # ⚠️ TROIS ESTIMATEURS D'INCERTITUDE TOMBÉS À ZÉRO EN MÊME TEMPS
+        # NE SE CONSTATENT PAS, ILS S'INSTRUISENT : c'est le signe que le
+        # triangle reçu n'est pas une observation mais un lissage.
+        percentiles_non_mesurables = bool(
+            (sigma or 0) <= 0 and (sigma_total_compose or 0) <= 0
+            and not _boot_ok)
+        if percentiles_non_mesurables:
+            cle_pct = CLE_COMPOSE
+            p90_source = (
+                "⚠️ PERCENTILES NON MESURABLES — la dispersion est NULLE sur "
+                "les trois approches (σ de Mack, Bootstrap ODP, incertitude "
+                "composée). Les valeurs P75/P90/P99,5 ci-dessous VALENT LE "
+                "BEST ESTIMATE : elles ne mesurent aucune incertitude et ne "
+                "doivent PAS être lues comme des percentiles de réserve. Un "
+                "triangle dont tous les résidus sont nuls est un triangle "
+                "LISSÉ ou MODÉLISÉ, pas une observation : la donnée source "
+                "doit être reprise avant tout usage réglementaire.")
+
         # Exposer σ_modèle et σ_total composé dans le dict retour
         sigma_modele_val       = round(sigma_modele, 2)
         sigma_total_compose_val = round(sigma_total_compose, 2)
@@ -1183,6 +1234,11 @@ class BestEstimateS2:
         # Le filet de sécurité force le ROUGE — il ne peut JAMAIS passer
         # inaperçu. C'est ce qui remplace l'ancien garde-fou, qui repliait
         # silencieusement sur Chain Ladder + BF avec un score forcé à 50.
+        # ⚠️ UNE DISPERSION NULLE SUR LES TROIS APPROCHES NE PEUT PAS
+        # COEXISTER AVEC UN VERT.
+        if percentiles_non_mesurables:
+            statut = 'ROUGE'
+
         if selection['annees_rouge_dur']:
             statut = 'ROUGE'
         elif selection['annees_sous_filet']:
@@ -1645,6 +1701,7 @@ class BestEstimateS2:
             'reserve_p75_compose':   round(p75_compose,  0),
             'reserve_p90_compose':   round(p90_compose,  0),
             'reserve_p99_5_compose': round(p995_compose, 0),
+            'percentiles_non_mesurables': percentiles_non_mesurables,
             'source_percentiles':    p90_source,
             # La CLÉ de l'approche retenue — posée dans la même instruction que
             # `source_percentiles`, donc incapable d'en diverger. C'est elle que

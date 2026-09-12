@@ -215,19 +215,66 @@ class T5_Une_Panne_N_Est_Pas_Verte(unittest.TestCase):
               % r.get('statut'))
 
     def test_aucune_branche_d_echec_des_deux_modules_ne_rend_VERT(self):
+        """⚠️⚠️ L'ASSIETTE ETAIT UNE FENETRE DE TROIS LIGNES DE TEXTE, ET UNE
+        NEUVIEME BRANCHE Y A SURVECU. Le critere cherchait `'success': False`
+        dans les trois lignes precedant un `'statut': 'VERT'`. La branche
+        « log-normal structurellement inadapte » de B&Z porte
+        `'success': True` sur la MEME ligne que son VERT : la fonction a
+        abouti, elle a su dire qu'elle ne pouvait pas conclure. Mesure du
+        11/09/2026 : triangle a 21 increments <= 0 sur 36, `disponible=False`
+        et `statut='VERT'`.
+        Le critere devient donc `disponible is False OR success is False`, et
+        il se lit sur le COMPORTEMENT, pas sur le texte du module."""
         import direction_non_vie.provisionnement.a7_provisionnement.n3.glm_apc_poisson as A
         import direction_non_vie.provisionnement.a7_provisionnement.n3.barnett_zehnwirth_ptf as B
+
+        trop_petit = np.array([[100., 150.], [110., 0.]])
+        # Triangle CUMULE a recours massif : le log-normal y est inapplicable.
+        _n = 8
+        _rec = np.zeros((_n, _n))
+        for _i in range(_n):
+            _c = 100000.0 * (1 + 0.03 * _i)
+            for _j in range(_n - _i):
+                if _j:
+                    _c *= 0.90 if _j % 3 else 1.10
+                _rec[_i, _j] = _c
+
+        cas = (
+            ('glm_apc / triangle trop petit', lambda: A.glm_apc_poisson(trop_petit)),
+            ('bz_ptf / triangle trop petit',  lambda: B.barnett_zehnwirth_ptf(trop_petit)),
+            ('bz_ptf / log-normal inadapte',  lambda: B.barnett_zehnwirth_ptf(_rec)),
+        )
+        vus = 0
+        for nom, appel in cas:
+            r = appel()
+            if r.get('success') is not False and r.get('disponible') is not False:
+                continue            # ce cas n'a pas produit d'indisponibilite
+            vus += 1
+            self.assertNotEqual(
+                r.get('statut'), 'VERT',
+                '%s : success=%r disponible=%r et pourtant statut VERT — une '
+                'mesure qui n a pas eu lieu prend la couleur d une mesure '
+                'favorable.' % (nom, r.get('success'), r.get('disponible')))
+        self.assertEqual(
+            vus, len(cas),
+            'certains cas d indisponibilite ne se produisent plus : le '
+            'controle ne mesure plus ce qu il croit mesurer (%d sur %d)'
+            % (vus, len(cas)))
+
+        # ⚠️ ET LA LECTURE DU TEXTE RESTE, ELARGIE : elle attrape une branche
+        # ecrite demain, que le comportement ci-dessus n atteindrait pas.
         for mod in (A, B):
             lignes = _src(mod).split('\n')
             for i, l in enumerate(lignes):
                 if "'statut': 'VERT'" not in l:
                     continue
                 contexte = '\n'.join(lignes[max(0, i - 3):i + 1])
-                self.assertNotIn(
-                    "'success': False", contexte,
-                    '%s ligne %d : branche d echec rendue VERT'
-                    % (mod.__name__.split('.')[-1], i + 1))
-            print('    OK L7-10 %s : aucune branche d echec en VERT'
+                for marque in ("'success': False", "'disponible': False"):
+                    self.assertNotIn(
+                        marque, contexte,
+                        '%s ligne %d : branche portant %s rendue VERT'
+                        % (mod.__name__.split('.')[-1], i + 1, marque))
+            print('    OK L7-10 %s : aucune branche indisponible en VERT'
                   % mod.__name__.split('.')[-1])
 
     def test_une_branche_de_SUCCES_reste_verte(self):
@@ -238,10 +285,22 @@ class T5_Une_Panne_N_Est_Pas_Verte(unittest.TestCase):
         self.assertIn(
             "'success': True", src,
             'plus aucune branche de succes : le module ne peut plus aboutir')
-        self.assertIn(
-            "'statut': 'VERT'", src,
-            'plus aucun VERT nulle part : la distinction a disparu')
-        print('    OK L7-11 les branches de succes gardent leur VERT')
+        # ⚠️⚠️ LA CONTRE-EPREUVE SE MESURE, ELLE NE SE LIT PLUS. Elle exigeait
+        # le LITTERAL `'statut': 'VERT'` dans le source — un critere que le
+        # correctif de la neuvieme branche fait tomber alors meme qu il
+        # RENFORCE la distinction. Un triangle SAIN doit rendre VERT : c est
+        # la propriete, et elle ne depend d aucune orthographe.
+        sain = B.barnett_zehnwirth_ptf(np.asarray(RAA, dtype=float),
+                                       annee_debut=2015)
+        if sain.get('disponible'):
+            self.assertIn(
+                sain.get('statut'), ('VERT', 'AMBRE'),
+                'un triangle sain ne rend plus de statut de mesure : la '
+                'distinction a disparu, statut=%r' % sain.get('statut'))
+            print('    OK L7-11 triangle sain : statut %r (la distinction '
+                  'tient)' % sain.get('statut'))
+        else:
+            self.skipTest('B&Z indisponible dans cet environnement')
 
 
 # =============================================================================

@@ -241,7 +241,19 @@ class T2_Formule(unittest.TestCase):
         self.assertFalse(bf['disponible'])
         gb = benktander(pct, dern, bf, annee_base=1)
         self.assertFalse(gb['disponible'])
-        self.assertEqual(gb['reserve_totale'], 0.0)
+        # ⚠️⚠️ NONE, ET NON ZERO — ET LE MODULE LE DEMANDAIT DEJA. Le bloc
+        # `indispo` de `benktander.py` porte, deux lignes au-dessus de ses
+        # zeros : « on ne fabrique pas un zero qui se lirait comme une reserve
+        # nulle ». L'assertion scellait exactement ce que ce commentaire
+        # desavouait.
+        # ⚠️ AUCUN DOCUMENT NE PUBLIAIT CE ZERO (mesure du 11/09/2026 : le
+        # HTML et le Word ecrivent « Benktander non calculee — elle se deduit
+        # de Bornhuetter-Ferguson, qui n'est pas disponible »). Le sceau se
+        # deplace sur une trappe de contrat, pas sur un euro.
+        self.assertIsNone(
+            gb['reserve_totale'],
+            "une methode indisponible porte un MONTANT : un zero s y lit "
+            "« la reserve est nulle ».")
         self.assertIn('Bornhuetter-Ferguson', gb['message'])
         print("    OK GB-8 sans exposition : BF indisponible ⇒ GB "
               "indisponible, avec son motif")

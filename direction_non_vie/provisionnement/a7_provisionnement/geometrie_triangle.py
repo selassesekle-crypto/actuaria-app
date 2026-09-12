@@ -264,7 +264,64 @@ def analyser_geometrie(C: np.ndarray) -> Dict:
             f"extrapolée.")
 
     if m <= n:
-        return {'triangle': A, 'pas': 1, 'infos': infos, 'transforme': False}
+        # ⚠️⚠️ L'ASYMETRIE RESTE VOULUE, MAIS ELLE NE PEUT PLUS AFFIRMER UN
+        # PAS DE 1 QUE LA DONNEE CONTREDIT. Ce retour anticipe sautait
+        # `pas_de_developpement` ET les quatre refus. Cas mesure le
+        # 11/09/2026 : 8 annees de survenance, developpement TRIMESTRIEL,
+        # l'assureur ne fournissant que les 8 premiers trimestres — donc
+        # m = 8 = n. Longueurs observees [8,8,8,8,8,8,8,4] ;
+        # `pas_de_developpement` rend None — le module ne sait PAS lire le
+        # pas — et la porte rendait tout de meme `pas=1`, `transforme=False`
+        # et AUCUNE info. Consequence : 24 des 60 cellules OBSERVEES (40 %)
+        # tombaient au-dela de la frontiere i+j<n et n'etaient lues par
+        # personne — les multiplier par dix ne deplacait pas un centime, sur
+        # les DEUX chemins d'entree. Reserve vraie 5 314 689 €, Best
+        # Estimate publie 2 754 920 €, soit **-48,2 %**, statut AMBRE.
+        # ⚠️ ET LE VERDICT DEPENDAIT DE LA FORME, PAS DE LA DONNEE : le
+        # MEME jeu de longueurs pose en 7x8, 6x8 ou 5x8 (m > n) etait
+        # REFUSE — « Geometrie du triangle non interpretable ».
+        #
+        # LE CRITERE EST DONC LA DONNEE, ET NON LA FORME : on ne regarde
+        # que les cellules OBSERVEES qui tomberaient hors de la frontiere
+        # historique. S'il n'y en a AUCUNE — ce qui est le cas de tous les
+        # dossiers au pas usuel, y compris tronques — rien ne change, et
+        # c'est verifie par les quatre montants de reference.
+        _hors = [(i, j) for i in range(n) for j in range(m)
+                 if i + j >= n and np.isfinite(A[i, j]) and A[i, j] != 0.0]
+        if not _hors:
+            return {'triangle': A, 'pas': 1, 'infos': infos,
+                    'transforme': False}
+        _pas = pas_de_developpement(A)
+        if _pas is not None and _pas > 1:
+            B, part_ecartee = _agreger(A, _pas)
+            infos.append(
+                f"🔵 Géométrie : {_pas} périodes de développement par année "
+                f"de survenance, lues dans les longueurs de lignes "
+                f"({longueurs_observees(A)}). L'axe de développement est "
+                f"agrégé au pas de la survenance — {A.shape[0]}×{A.shape[1]} "
+                f"→ {B.shape[0]}×{B.shape[1]} — sinon la frontière i+j<n "
+                f"écarterait {len(_hors)} cellule(s) observée(s) en silence.")
+            infos.append(
+                f"{MARQUE_GEOMETRIE} — ⚠️ le profil d'écoulement est "
+                f"désormais au pas de la survenance : la finesse "
+                f"infra-annuelle est perdue pour l'actualisation en aval.")
+            if part_ecartee > 0.01:
+                infos.append(
+                    f"{MARQUE_GEOMETRIE} — ⚠️ l'arrêté tombe en milieu de "
+                    f"sous-période : {part_ecartee:.2f} % des paiements "
+                    f"observés tombent dans une sous-période incomplète et "
+                    f"ne sont pas retenus par l'agrégation.")
+            return {'triangle': B, 'pas': _pas, 'infos': infos,
+                    'transforme': True}
+        raise GeometrieRefusee(
+            f"Triangle {n}×{m} : {len(_hors)} cellule(s) observée(s) "
+            f"tombent au-delà de la frontière i+j<n que les méthodes du "
+            f"module supposent (longueurs de lignes "
+            f"{longueurs_observees(A)}, pas lu = {_pas}). Elles seraient "
+            f"ÉCARTÉES SANS LE DIRE : le Best Estimate serait calculé sur "
+            f"une fraction des paiements fournis. Le même jeu de longueurs "
+            f"posé sur une matrice plus large que haute est déjà refusé par "
+            f"ce module ; le refus ne dépend plus de la forme.")
 
     pas = pas_de_developpement(A)
 

@@ -114,12 +114,23 @@ def benktander(
     `alpha_par_annee`, `alpha_moyen`, `mention_alpha`, `message`, `alertes`.
     """
     n = len(last_diag)
+    # ⚠️⚠️ NONE, ET NON ZERO — ET LE COMMENTAIRE CI-DESSOUS LE DISAIT DEJA.
+    # « on ne fabrique pas un zéro qui se lirait comme une réserve nulle » est
+    # écrit deux lignes plus bas, au-dessus de trois zéros fabriqués. Un zéro
+    # se lit « la réserve est nulle » ; l'absence se lit « elle n'a pas pu
+    # être calculée ». C'est la doctrine que `methodes_be.reserve()` applique
+    # déjà aux méthodes du Best Estimate — Benktander n'en fait pas partie, et
+    # l'assiette s'arrêtait là.
+    # ⚠️ AUCUN DOCUMENT NE PUBLIAIT CES ZÉROS (mesuré le 11/09/2026 : le HTML
+    # et le Word écrivent « Benktander non calculée — elle se déduit de
+    # Bornhuetter-Ferguson, qui n'est pas disponible »). On ferme une trappe
+    # de contrat, pas une fuite.
     indispo = {
         'disponible':      False,
         'methode':         'Benktander (1976)',
-        'ibnr_par_annee':  [0.0] * n,
-        'ultimates':       [0.0] * n,
-        'reserve_totale':  0.0,
+        'ibnr_par_annee':  [None] * n,
+        'ultimates':       [None] * n,
+        'reserve_totale':  None,
         'alpha_par_annee': [],
         'alpha_moyen':     None,
         'mention_alpha':   MENTION_ALPHA,

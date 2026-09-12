@@ -970,6 +970,18 @@ class AgentA7Provisionnement:
             # None ne doit les atteindre. On neutralise ICI, en UN seul endroit,
             # tout en CONSERVANT be_negatif — les sections N5 s'en servent pour
             # afficher MSG_S2_NON_CALCULABLE au lieu de chiffres trompeurs.
+            # L'AUDIT TRAIL SCELLE L'ETAT AVANT NEUTRALISATION. C'est le
+            # seul artefact ECRIT SUR DISQUE et scelle par SHA-256 : il
+            # portait `reserve_p90: 0` et `scr_provisions: 0` sur un BE
+            # negatif, c'est-a-dire la valeur inventee pour proteger le
+            # formatage de N5, et non le marqueur d'absence pose par N4.
+            _s2_nc = s2_non_calculable(n4)
+            _avant_neutralisation = {}
+            if _s2_nc:
+                for _k0 in ('reserve_p75', 'reserve_p90', 'reserve_p99_5'):
+                    _avant_neutralisation[_k0] = n4.get(_k0)
+                _avant_neutralisation['scr_provisions'] = \
+                    n4.get('scr', {}).get('scr_provisions')
             if s2_non_calculable(n4):
                 for _k in ('reserve_p75', 'reserve_p90', 'reserve_p99_5',
                            'reserve_p75_compose', 'reserve_p90_compose',
@@ -978,6 +990,9 @@ class AgentA7Provisionnement:
                            'ratio_rm_be', 'scr_prov'):
                     if n4.get(_k) is None:
                         n4[_k] = 0
+                for _k in ('reserve_p75_mack', 'reserve_p90_mack',
+                           'reserve_p99_5_mack'):
+                    n4[_k] = None
                 if n4.get('scr', {}).get('scr_provisions') is None:
                     n4['scr']['scr_provisions'] = 0
                     n4['scr']['ratio_scr_be']   = 0
@@ -1154,6 +1169,8 @@ class AgentA7Provisionnement:
                 controle_narration=_ctrl_narr,
                 archive=archive,
             )
+            for _k, _v in _avant_neutralisation.items():
+                audit['n4_resume'][_k] = _v
             self._sauvegarder_audit(audit_id, audit)
 
             # Statut global final
@@ -1575,7 +1592,11 @@ class AgentA7Provisionnement:
 
         # ── Munich CL ─────────────────────────────────────────────────────────
         if C_engage is not None and cfg_lob.get('munich_cl_disponible', False):
-            r_munich = munich_cl(C, C_engage, annee_base=annee_base)
+            # ⚠️ LA MEME QUEUE QUE LE CHAIN LADDER PUBLIE — sans quoi le
+            # document porte DEUX « Chain Ladder » differents (mesure :
+            # -57,13 % sur un dossier a queue 1,500000).
+            r_munich = munich_cl(C, C_engage, annee_base=annee_base,
+                                 tail_factor=float(tail_info['tail_factor']))
         else:
             msg = (
                 "Munich CL non calculé — triangle engagé non fourni."

@@ -229,13 +229,63 @@ def _cumuler_et_masquer(M: np.ndarray) -> np.ndarray:
     ⚠️ POUR `pas = 1`, `j >= pas × (n − i)` EST `i + j >= n`, LITTÉRALEMENT.
     Aucun dossier au pas usuel ne bouge, et ce n'est pas une promesse : c'est
     la même inégalité réécrite.
+
+    ⚠️⚠️ ET QUAND LE PAS NE SE LIT PAS, ON NE RÉPOND PLUS « 1 ». `pas or 1`
+    transformait un refus de conclure en affirmation. Sur un RUN-OFF
+    entièrement observé — toutes les lignes de même longueur, donc écart nul,
+    donc pas illisible — le repli `i + j >= n` effaçait 6 cellules sur 16 d'un
+    4×4 et faisait publier 1 554 € de réserve sur un portefeuille d'IBNR NUL.
+    Ce cas-là, on sait le lire : pas de zone future, donc pas de masque. Les
+    longueurs IRRÉGULIÈRES, elles, gardent le repli historique — elles sont
+    refusées en aval par `analyser_geometrie`.
     """
-    C = np.cumsum(np.asarray(M, dtype=float), axis=1)
+    A = np.asarray(M, dtype=float)
+    C = np.cumsum(A, axis=1)
     n, m = C.shape
-    pas = pas_de_developpement_observe(M) or 1
+    pas = pas_de_developpement_observe(M)
+    if pas >= 1:
+        # ⚠️ INCHANGE, AU CARACTERE PRES : quand le pas se lit, il decide.
+        # Pour `pas = 1`, `j >= pas * (n - i)` EST `i + j >= n`.
+        bornes = [pas * (n - i) for i in range(n)]
+    else:
+        # ⚠️⚠️ LE ZERO EST UN REFUS DE CONCLURE — IL NE DOIT PAS DEVENIR UNE
+        # AFFIRMATION. Le code posait `pas or 1` : il repondait « pas = 1 » a
+        # « je ne sais pas », et masquait alors `i + j >= n`.
+        #
+        # IL EXISTE UN CAS, ET UN SEUL, OU L'ON SAIT REPONDRE SANS LIRE LE
+        # PAS : quand toutes les lignes ont la MEME longueur. C'est un
+        # portefeuille en RUN-OFF entierement observe ; il n'a pas de zone
+        # future, donc la frontiere est la largeur observee — pour toutes les
+        # lignes. Le repli historique y effacait des cellules REELLEMENT
+        # ENREGISTREES : mesure du 11/09/2026, 6 sur 16 d'un 4x4, 1 268 de
+        # cumul perdu ; et sur un 6x6 de 6 750 EUR payes dont l'IBNR VRAI est
+        # NUL, la table longue publiait 1 554 EUR de reserve et 513 EUR de SCR
+        # quand la matrice cumulee declaree, elle, passait ROUGE sans Best
+        # Estimate. Deux portes d'entree, deux verites — et la porte de
+        # geometrie d'A7, qui s'execute APRES, lisait une frontiere que cette
+        # fonction venait de fabriquer.
+        #
+        # ⚠️ HORS DE CE CAS, LE REPLI HISTORIQUE RESTE EN PLACE. Des longueurs
+        # irregulieres ne se lisent toujours pas, et `analyser_geometrie` les
+        # refuse deja en aval : changer leur masque ici deplacerait des
+        # dossiers qui n'ont rien demande.
+        #
+        # ⚠️ ON NE MASQUE PAS PAR LIGNE. Un triangle cumule GARDE sa derniere
+        # valeur quand rien ne bouge : masquer a la derniere cellule
+        # RENSEIGNEE de chaque ligne dirait « la charge est retombee a zero ».
+        # Mesure : l'invariant `C_attrit + C_grands = C_total` rendait 800 au
+        # lieu de 900, et une charge directe 0 au lieu de 175.
+        longueurs = []
+        for i in range(n):
+            connues = np.where(np.isfinite(A[i]) & (A[i] != 0.0))[0]
+            longueurs.append(int(connues[-1]) + 1 if connues.size else 0)
+        if len(set(longueurs)) == 1:
+            bornes = [m] * n
+        else:
+            bornes = [n - i for i in range(n)]
     for i in range(n):
         for j in range(m):
-            if j >= pas * (n - i):
+            if j >= bornes[i]:
                 C[i, j] = 0.0
     return C
 
@@ -482,6 +532,20 @@ def deriver_charges_depuis_provisions(
             f"ignorée(s). Paiements et provisions doivent couvrir le même périmètre.")
 
     C_charges = C_paiements.copy()
+    # ⚠️⚠️ UNE PROVISION QU'ON NE SAIT PAS POSER NE DISPARAIT PAS EN SILENCE.
+    # La provision se pose sur la DERNIERE cellule non nulle de la ligne des
+    # paiements. Quand la ligne est ENTIEREMENT a zero -- survenance recente,
+    # rien de paye, dossier ouvert provisionne : la forme la plus banale des
+    # branches longues -- il n'y a pas de cellule ou la poser. Mesure du
+    # 11/09/2026 sur un 4x4 : 990 de provisions fournies, **90 integres**,
+    # 900 (90,9 %) evapores, AUCUNE alerte, et l'information publiee annoncait
+    # « integrees pour 4 annee(s) ». Best Estimate 219 EUR au lieu de 2 323.
+    # ⚠️ ON NE CHOISIT PAS LE PLACEMENT, ET C'EST DELIBERE : le meme dossier
+    # rend 2 323 EUR si la provision va en colonne 0 et 1 119 EUR si elle va
+    # en derniere colonne. Sans la frontiere observee de la ligne -- que le
+    # chemin MATRICE ne porte pas -- l'inventer serait exactement ce que ce
+    # module refuse deja quand `annee_min` manque.
+    integrees, non_posees = 0, []
     for i in range(n):
         provision = float(par_annee.get(annee_min_paiements + i, 0.0))
         if provision == 0.0:
@@ -493,8 +557,27 @@ def deriver_charges_depuis_provisions(
                 break
         if derniere >= 0:
             C_charges[i, derniere] = C_paiements[i, derniere] + provision
+            integrees += 1
+        else:
+            non_posees.append((annee_min_paiements + i, provision))
+    if non_posees:
+        total = sum(v for _, v in non_posees)
+        detail = ', '.join(f'{a} : {v:,.0f}' for a, v in non_posees)
+        rapport['alertes'].append(
+            f"⚠️ {len(non_posees)} provision(s) NON INTEGRÉE(S) aux charges, "
+            f"{total:,.0f} au total ({detail}) : ces années de survenance ne "
+            f"portent AUCUN paiement, donc aucune cellule où poser la "
+            f"provision. Les charges de ces années valent leurs paiements, "
+            f"c'est-à-dire ZÉRO — le Best Estimate est SOUS-ÉVALUÉ d'autant. "
+            f"Fournir 'montant_charge' directement, ou au moins un paiement "
+            f"par année, lève l'ambiguïté.")
+    # ⚠️ L'INFORMATION COMPTE CE QUI EST ENTRE, PAS CE QUI A ETE RECU. Elle
+    # annoncait `len(par_annee)` -- le nombre d'annees PRESENTES dans le
+    # fichier de provisions -- donc elle certifiait l'integration de montants
+    # qu'elle venait de perdre.
     rapport['infos'].append(
-        f"Charges dérivées : provisions intégrées pour {len(par_annee)} année(s).")
+        f"Charges dérivées : provisions intégrées pour {integrees} année(s)"
+        + (f", {len(non_posees)} NON intégrée(s)." if non_posees else "."))
     return C_charges
 
 

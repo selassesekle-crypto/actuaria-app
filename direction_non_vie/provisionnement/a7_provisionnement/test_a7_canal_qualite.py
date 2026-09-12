@@ -120,21 +120,48 @@ class T1_Le_Canal_Atteint_Les_Deux_Formats(unittest.TestCase):
 
 class T2_Un_Controle_Rouge_Est_Publie(unittest.TestCase):
 
-    def test_le_diagnostic_rouge_du_triangle_rectangulaire_est_publie(self):
-        r = _run(_tri_rectangulaire(), mode_declare='incremental')
-        infos_rouges = [str(i) for i in (r['n1'].get('infos') or [])
-                        if 'ROUGE' in str(i) or '\U0001F534' in str(i)]
-        self.assertTrue(
-            infos_rouges,
-            'ce triangle ne produit plus de controle ROUGE : le plant est mort')
-        html = r.get('html') or ''
-        self.assertIn(
-            'ROUGE', html,
-            'le controle ROUGE de N1 n atteint toujours aucun document — '
-            'c est pourtant lui qui aurait revele le masquage.')
-        self.assertIn('colonnes vides', html)
-        print('    OK L9-4 le controle ROUGE (%d) est publie : %s'
-              % (len(infos_rouges), infos_rouges[0][:80]))
+    def test_le_rectangle_entierement_observe_est_REFUSE_par_les_deux_portes(
+            self):
+        """⚠️⚠️ CE TEST A CHANGE D'OBJET, ET C'EST UNE MESURE QUI L'A EXIGE.
+
+        Il exigeait que ce dossier ABOUTISSE en portant une ligne ROUGE
+        « 4 colonnes vides » — une ATTENUATION du masquage, et sa propre
+        phrase le disait : « c'est pourtant lui qui aurait revele le
+        masquage ».
+
+        MESURE DU 11/09/2026, MEME rectangle (6 x 10 entierement observe,
+        1 687 500 EUR payes, IBNR VRAI = 0 par construction), sur le code
+        AVANT correction :
+
+            declare CUMULE      -> success=False, ROUGE, BE=None  (refus)
+            declare INCREMENTAL -> success=True,  AMBRE, BE = 724 689 EUR
+
+        **724 689 EUR de Best Estimate sur un portefeuille dont l'IBNR vrai
+        est ZERO** — 43 % de la charge payee —, pour seul signal une ligne
+        rangee dans `n1['infos']`. Deux portes d'entree, deux verites.
+
+        Le masquage retire, l'attenuation n'a plus d'objet : les deux portes
+        REFUSENT, et un refus est strictement plus sur qu'une ligne
+        d'information. Ce test scelle desormais le refus — et il le scelle
+        PAR LES DEUX PORTES, ce que l'ancien ne faisait pas.
+        """
+        for mode in ('incremental', 'cumule'):
+            src = _tri_rectangulaire()
+            if mode == 'cumule':
+                src = np.cumsum(src, axis=1)
+            r = _run(src, mode_declare=mode)
+            with self.subTest(porte=mode):
+                self.assertFalse(
+                    r.get('success'),
+                    '%s : un rectangle ENTIEREMENT OBSERVE produit un dossier. '
+                    'Son IBNR vrai est nul ; toute reserve publiee est fausse '
+                    'par construction.' % mode)
+                self.assertEqual(r.get('statut_rag'), 'ROUGE')
+                self.assertIsNone((r.get('n4') or {}).get('best_estimate'))
+                self.assertIn(
+                    'entièrement observé', str(r.get('erreur') or ''),
+                    '%s : le motif du refus n atteint pas le dossier' % mode)
+        print('    OK L9-4 le rectangle plein est REFUSE par les deux portes')
 
     def test_un_triangle_propre_le_dit_au_lieu_de_se_taire(self):
         """⚠️ LA CONTRE-EPREUVE. Une section vide ne vaut pas une section qui

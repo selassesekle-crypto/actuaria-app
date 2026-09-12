@@ -378,7 +378,7 @@ class T2_Chaque_Graphique_Est_Epingle(unittest.TestCase):
             'Chain Ladder':         n3['chain_ladder']['reserve_totale'],
             'Bornhuetter-Ferguson': n3['bf']['reserve_totale'],
             'Cape Cod':             n3['cape_cod']['reserve_totale'],
-            'BE S2':                n4['best_estimate'],
+            'BE (brut)':            n4['best_estimate'],
         }
         for lbl, v in att.items():
             obs = _f(_tr(g['g5_convergence'], lbl).y)

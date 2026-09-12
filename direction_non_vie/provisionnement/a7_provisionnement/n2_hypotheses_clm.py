@@ -74,7 +74,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 from .n2_puissance import (
-    GRAINE_PUISSANCE, N_SIM_PUISSANCE, arrondir, formuler, sans_objet,
+    GRAINE_PUISSANCE, N_SIM_PUISSANCE, arrondir, formuler, non_mesurable, sans_objet,
     taux_de_detection)
 from .n3.bootstrap_odp import calculer_fitted_et_residus
 from .n3.chain_ladder import calculer_facteurs
@@ -1414,8 +1414,11 @@ def puissance_clm(C: np.ndarray) -> Dict[str, Dict[str, Any]]:
         pct = taux_de_detection(C, test, **violation)
         temoin = taux_de_detection(C, test)
         if pct is None:
-            out[code] = sans_objet("le triangle ne permet pas de régénérer "
-                                   "un jeu de référence")
+            # ⚠️ `non_mesurable`, ET NON `sans_objet` : CLM-H1, H2 et H3 SONT
+            # des tests statistiques. Voir la note de `non_mesurable`.
+            out[code] = non_mesurable(
+                "le générateur de Mack ne sait pas régénérer un jeu de "
+                "référence sur cette géométrie de triangle")
             continue
         out[code] = {
             'mesurable':      True,

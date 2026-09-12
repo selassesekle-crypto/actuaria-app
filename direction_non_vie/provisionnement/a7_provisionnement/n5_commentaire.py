@@ -736,7 +736,14 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
     # ── Mack ─────────────────────────────────────────────────────────────────
     sigma = mack.get('sigma_total', 0)
     cv_m  = mack.get('cv_pct', 0)
+    # ⚠️⚠️ LE PERCENTILE NARRE EST LE MEME QUE LE PERCENTILE TABULE. Les
+    # trois branches de narration ci-dessous chiffrent `p90_m` ; sur un Best
+    # Estimate negatif, `garde_fou_be_negatif` declare les percentiles NON
+    # DEFINIS et le meme document publiait « Le P90 = -708 867 € » (mesure du
+    # 11/09/2026). On pose la regle UNE fois, ici, plutot qu'a trois endroits
+    # qui deriveront.
     p90_m = mack.get('reserve_p90', 0)
+    p90_m_aff = None if s2_non_calculable(n4) else p90_m
     lignes.append(
         f"MACK 1993 : L'incertitude de réserve totale est σ = {_e(sigma)} "
         f"(CV = {_p(cv_m)}). "
@@ -751,8 +758,10 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
             # dossier le plus sain, donc celle qu'on relit le moins.
             f"Ce niveau d'incertitude est faible — le triangle est bien "
             f"développé et les facteurs sont stables. Le percentile de "
-            f"stress P90 = {_e(p90_m)} représente une majoration "
-            f"de {_p((p90_m/max(mk_r,1)-1)*100)} par rapport au BE Mack ; "
+            f"stress P90 = {_e(p90_m_aff)} représente une majoration "
+            # ⚠️ ET LA MAJORATION RELATIVE AVEC LUI : un rapport a un Best
+            # Estimate negatif n'a pas de sens de lecture.
+            f"de {_p(None if p90_m_aff is None else (p90_m/max(mk_r,1)-1)*100)} par rapport au BE Mack ; "
             f"il mesure la dispersion, il ne s'inscrit pas au bilan "
             f"(Art. 77). "
             f"La distribution log-normale calibrée sur (BE, σ) "
@@ -762,7 +771,7 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
         lignes.append(
             f"Ce niveau d'incertitude modéré (AMBRE EIOPA) reflète "
             f"une variabilité des facteurs dans la plage habituelle "
-            f"pour ce type de branche. Le P90 = {_e(p90_m)} mesure cette "
+            f"pour ce type de branche. Le P90 = {_e(p90_m_aff)} mesure cette "
             f"variabilité ; il se documente au dossier actuariel, il ne "
             f"s'inscrit pas au bilan (Art. 77)."
         )
@@ -771,7 +780,7 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
             f"Ce niveau d'incertitude élevé (ROUGE EIOPA — CV > 20%) "
             f"est préoccupant. Il peut indiquer un triangle trop court, "
             f"des données hétérogènes, ou un portefeuille en forte "
-            f"évolution. Le P90 = {_e(p90_m)} mesure l'ampleur de cette "
+            f"évolution. Le P90 = {_e(p90_m_aff)} mesure l'ampleur de cette "
             f"incertitude ; il ne constitue pas un plancher à inscrire "
             f"(Art. 77). Une analyse par cohortes est recommandée."
         )
@@ -785,7 +794,17 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
     # décide de l'affichage ; les valeurs ne sont lues que s'il est vrai.
     boot_dispo = boot.get('disponible', True)
     be_boot  = boot.get('be_bootstrap', 0) or 0
-    p995     = boot.get('p99_5') or 0
+    # ⚠️⚠️ LE PERCENTILE SE LIT DANS N4, PAS DANS N3 : C'EST UNE PORTE DE
+    # GOUVERNANCE. Cette section lisait `n3['bootstrap']['p99_5']` en
+    # direct, quand `_s6_incertitude` lit `n4['reserve_p99_5_boot']` — la
+    # valeur que la gouvernance des hypotheses (BOOT-H3/H4) a autorisee,
+    # ou `None`. Mesure le 11/09/2026, porte FERMEE : N4 rendait bien
+    # `None`, et le MEME document publiait « Le P99.5 Bootstrap s'etablit
+    # a 25 367 656 € » au §4 tout en ecrivant au §6 « percentiles retires
+    # par la gouvernance des hypotheses (BOOT-H3) ». Deux phrases
+    # contradictoires dans le document SIGNE — commentaire, HTML et Word.
+    p995 = n4.get('reserve_p99_5_boot')
+    porte_percentiles = p995 is not None
     phi      = boot.get('phi') or 0
     n_sim    = boot.get('n_simulations', 0)
 
@@ -803,12 +822,19 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
             # grandeur comparable n'est pas le niveau, c'est P99,5 − BE. La
             # confusion faisait lire 25 040 191 € là où la charge de capital
             # publiée vaut 5 798 631 €.
-            f"Le P99.5 Bootstrap s'établit à {_e(p995)}, soit une MARGE de "
-            f"{_e(p995 - be_boot)} au-dessus du Best Estimate bootstrap — "
-            f"c'est cette marge, et non le niveau, qui se compare au SCR de "
-            f"l'article 115. Elle est "
-            f"{'proche' if abs(p995/max(be_boot,1)-1) < 0.5 else 'significativement différente'} "
-            f"de celle du P99.5 Mack."
+            + (
+                f"Le P99.5 Bootstrap s'établit à {_e(p995)}, soit une MARGE de "
+                f"{_e(p995 - be_boot)} au-dessus du Best Estimate bootstrap — "
+                f"c'est cette marge, et non le niveau, qui se compare au SCR de "
+                f"l'article 115. Elle est "
+                f"{'proche' if abs(p995/max(be_boot,1)-1) < 0.5 else 'significativement différente'} "
+                f"de celle du P99.5 Mack."
+                if porte_percentiles else
+                "Les percentiles Bootstrap ne sont PAS publies : la "
+                "gouvernance des hypotheses (BOOT-H3 / BOOT-H4) les a "
+                "retires — voir la section 6. Le point estimate ci-dessus, "
+                "lui, reste publie."
+            )
         )
     else:
         lignes.append(
@@ -1029,6 +1055,11 @@ def _s5_best_estimate(n4: Dict) -> str:
 #  SECTION 6 — INCERTITUDE ET STOCHASTIQUE
 # =============================================================================
 
+def NL_JOIN(lignes):
+    """Jointure des lignes d'une section — meme rendu que le reste."""
+    return chr(10).join(lignes)
+
+
 def _s6_incertitude(n3: Dict, n4: Dict) -> str:
     mack = n3.get('mack', {})
     boot = n3.get('bootstrap', {})
@@ -1078,19 +1109,43 @@ def _s6_incertitude(n3: Dict, n4: Dict) -> str:
         "à titre de contrôle :"
     )
 
+    # ⚠️⚠️ UN BEST ESTIMATE NEGATIF REND CES QUATRE LIGNES NON
+    # CALCULABLES, ET ELLES LES PUBLIAIENT QUAND MEME. Mesure du
+    # 11/09/2026 sur un BE de −385 € : le bloc ecrivait « Mack recentre
+    # (retenue) : P90 = −385 € » et « Mack natif : P90 = −385 € », donc
+    # un percentile de reserve NEGATIF, dans le meme document qui declare
+    # les agregats S2 NON CALCULABLES. `p90_mack_nat` vient de N3 et
+    # echappe a toute neutralisation ; la ligne composee, elle, affichait
+    # le litteral 0 €.
+    if (n4.get('be_negatif') or (n4.get('best_estimate') or 0) <= 0):
+        return NL_JOIN([
+            "DIAGNOSTIC — décomposition de l'incertitude "
+            "(outil analytique interne, non destiné au bilan)",
+            "",
+            "Le Best Estimate pondéré est négatif ou nul : les percentiles "
+            "de réserve ne sont PAS calculables et ne sont donc pas publiés. "
+            "Un percentile négatif ne mesure aucune incertitude, et un zéro "
+            "de remplacement se lirait comme une dispersion nulle. La "
+            "situation appelle une revue actuarielle : voir la section 5.",
+        ])
+
     lignes = [
         "DIAGNOSTIC — décomposition de l'incertitude "
         "(outil analytique interne, non destiné au bilan)",
         "",
         _intro,
         "",
+        # ⚠️ LE COMMENTAIRE EST LE DOCUMENT SIGNE. Il porte deja
+        # `MSG_S2_NON_CALCULABLE` en §5 ; ces trois puces le contredisaient
+        # dans le meme texte. `_e(None)` rend « — », l'idiome du module.
         f"  • {marque_retenue(n4, CLE_COMPOSE, 'Incertitude composée')} : "
-        f"P90 = {_e(p90_compose)} — "
+        f"P90 = {_e(None if s2_non_calculable(n4) else p90_compose)} — "
         f"σ composé {_e(sig_compose)}, centré sur le BE pondéré.",
         f"  • {marque_retenue(n4, CLE_MACK, 'Mack recentré')} : "
-        f"P90 = {_e(p90_mack_re)} — "
+        f"P90 = {_e(None if s2_non_calculable(n4) else p90_mack_re)} — "
         f"σ Mack {_e(sig_mack)}, centré sur le BE pondéré.",
-        f"  • Mack natif : P90 = {_e(p90_mack_nat)} — "
+        f"  • Mack natif : "
+        f"P90 = {_e(None if s2_non_calculable(n4) else p90_mack_nat)} — "
         f"σ Mack {_e(sig_mack_nat)}, centré sur la réserve Mack.",
     ]
     if boot_ok:
@@ -1144,6 +1199,26 @@ def _s6_incertitude(n3: Dict, n4: Dict) -> str:
 def _s7_scr(n4: Dict) -> str:
     scr      = n4.get('scr', {})
     be       = n4.get('best_estimate', 0)
+    # LE SCR NE SE PUBLIE PAS QUAND IL N'EST PAS CALCULABLE. Sur un Best
+    # Estimate negatif, `agent.run` neutralise en ZERO les marqueurs None
+    # de `garde_fou_be_negatif` pour qu'aucun None n'atteigne N5 -- et
+    # cette section publiait alors l'identite
+    #     SCR_prov = 3 x 11,0 % x -2 290 EUR = 0 EUR
+    # dont le resultat ne suit pas de ses operandes (il vaudrait -755,70).
+    # Le SS5 du MEME document ecrit deja << Agregats S2 NON CALCULABLES >> :
+    # deux sections d'un meme rapport signe donnaient deux reponses au
+    # meme fait. On applique ici la garde que le SS5 applique deja.
+    if s2_non_calculable(n4):
+        return chr(10).join([
+            "SCR PROVISIONS — FORMULE STANDARD (Art. 115 Règlement 2015/35)",
+            "",
+            MSG_S2_NON_CALCULABLE,
+            "",
+            f"Le Best Estimate publié vaut {_e(be)}. L'exigence de capital "
+            f"SCR = 3 × σ(LoB) × BE n'est pas définie sur une base négative : "
+            f"aucun montant n'est publié ici, et le zéro qui y figurait "
+            f"n'était pas une mesure. " + MSG_ASSIETTE_SCR,
+        ])
     scr_prov = scr.get('scr_provisions', 0)
     sigma_e  = scr.get('sigma_eiopa', 0)
     lob_lbl  = scr.get('lob_label', '—')
@@ -1322,10 +1397,14 @@ def _s8_recommandations(n1: Dict, n2: Dict, n3: Dict, n4: Dict, lob: str) -> str
             f"2. Consulter l'actuaire désigné impérativement.",
             f"3. Vérifier la qualité des données source (triangle / sinistres bruts).",
             f"4. Analyser la cause de la divergence inter-méthodes.",
-            f"5. Documenter l'ampleur de l'incertitude : {_e(p995)} au "
-            f"P99,5. Ce percentile mesure la dispersion — la voie est la "
-            f"résolution de la divergence inter-méthodes, pas un matelas "
-            f"prudentiel que l'Art. 77 ne prévoit pas.",
+            # MEME GARDE QU'AU SS7 : sur un BE negatif les percentiles ne
+            # sont pas definis, et la ligne publiait << 0 EUR au P99,5 >> --
+            # un zero qui se lit << aucune incertitude >>, soit l'inverse.
+            ("5. " + MSG_S2_NON_CALCULABLE) if s2_non_calculable(n4) else
+            (f"5. Documenter l'ampleur de l'incertitude : {_e(p995)} au "
+             f"P99,5. Ce percentile mesure la dispersion — la voie est la "
+             f"résolution de la divergence inter-méthodes, pas un matelas "
+             f"prudentiel que l'Art. 77 ne prévoit pas."),
         ]
 
     lignes.append("")

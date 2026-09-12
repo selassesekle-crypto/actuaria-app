@@ -273,8 +273,25 @@ def _simuler(
     last_diag:  np.ndarray,
     n_sim:      int,
     annee_base: int,
+    alea:       np.random.RandomState,
 ) -> tuple:
     """Les `n_sim` réserves simulées, AVEC et SANS bruit de processus.
+
+    ⚠️ `alea` EST UN FLUX PRIVÉ, ET C'EST LE SUJET D'UN CORRECTIF. Ce module
+    employait les fonctions de module `np.random.*`, c'est-à-dire l'ÉTAT GLOBAL
+    du processus : `np.random.seed(seed)` en tête de `bootstrap_odp` écrasait le
+    flux de l'appelant. `n3/clark.py` a retiré exactement ce motif (« il
+    réécrivait l'état global de np.random pour tout l'appelant ») et
+    `test_a7_clark.py::test_c10_aucune_pollution_de_np_random` le verrouille —
+    aucun test équivalent n'existait ici, et la propriété y était FAUSSE.
+    Mesuré le 11/09/2026 : après un appel, `np.random.rand()` rendait
+    0,016675813490 au lieu de 0,527522295683.
+
+    ⚠️ `RandomState` ET NON `default_rng` : c'est le MÊME algorithme que les
+    fonctions de module `np.random.*`, donc le flux produit est BIT POUR BIT
+    identique. Les trois oracles gelés de `test_a7_ibrahim.T24c` — be
+    18 680 855,61 / σ 2 531 687,49 / P99,5 26 076 506,36 — ne bougent pas d'un
+    centime. `default_rng` aurait changé les nombres.
 
     Extraite de `bootstrap_odp` pour la ramener sous la taille que ce module
     s'impose : l'orchestration, la boucle chaude et la mise en forme du résultat
@@ -296,7 +313,7 @@ def _simuler(
         # Un tirage PAR CELLULE RETENUE, et non sur toute la matrice (n, m) :
         # l'ancienne version en tirait 100 pour n'en consommer que 45 sur les
         # triangles de référence — 55 % de tirages jetés à chaque simulation.
-        res_boot = res_arr[np.random.randint(0, len(res_arr), size=n_cel)]
+        res_boot = res_arr[alea.randint(0, len(res_arr), size=n_cel)]
 
         # ── b. Pseudo-triangle par les INCRÉMENTS, puis re-cumul ──────────────
         # E&V 2002 : m* = m̂ + r* × sqrt(m̂). `m_fit` vient DIRECTEMENT de
@@ -353,7 +370,7 @@ def _simuler(
                 if phi > 0 and inc_mean > 0:
                     std_proc = np.sqrt(phi * inc_mean)
                     inc_sim  = max(
-                        inc_mean + np.random.normal(0, std_proc),
+                        inc_mean + alea.normal(0, std_proc),
                         inc_mean * 0.01,
                     )
                 else:
@@ -442,7 +459,8 @@ def bootstrap_odp(
     -------
     dict conforme standard ActuarIA.
     """
-    np.random.seed(seed)
+    # ⚠️ FLUX PRIVÉ — voir la note de `_simuler`.
+    alea = np.random.RandomState(seed)
     n, m = C.shape
 
     # ── 1. Incréments ajustés et résidus de Pearson ───────────────────────────
@@ -457,7 +475,30 @@ def bootstrap_odp(
     # un dénominateur inventé, et la dispersion simulée s'effondre. Mesuré sur le
     # triangle tout décroissant après le passage à l'ajustement E&V : df = −5,
     # σ ≈ 0, CV = 0 % et un statut VERT — le contraire de ce qu'il faut dire.
-    if len(res_list) < 4 or (n_obs - n_params) <= 0:
+    # ⚠️⚠️ TROISIEME CONDITION, ET ELLE MANQUAIT. Les deux precedentes
+    # comptent les residus ; aucune ne regarde leur VALEUR. Sur un triangle
+    # parfaitement proportionnel — cadence identique sur toutes les annees,
+    # c'est-a-dire un triangle LISSE ou MODELISE, cas reel d'un fichier
+    # client retraite — tous les residus de Pearson valent zero, donc
+    # phi = 0 et sigma = 0. Le module rendait alors `disponible=True`,
+    # `statut=VERT` et un P99,5 EGAL au Best Estimate. Mesure du
+    # 11/09/2026 : BE = P75 = P90 = P99,5 = 3 716 660 €, commentaire
+    # « une MARGE de 0 € au-dessus du Best Estimate ». C'est la pathologie
+    # que la docstring de `_resultat_degrade` nomme explicitement — « un
+    # P99,5 egal au Best Estimate affirme que la reserve ne peut pas etre
+    # depassee » — et le garde ne mordait pas.
+    # ⚠️ LE CRITERE PORTE SUR LES RESIDUS, PAS SUR phi. Mesure du
+    # 11/09/2026 sur le triangle parfaitement proportionnel : phi vaut
+    # 3,92e-26 — strictement positif, donc `phi <= 0` ne mordait pas —
+    # alors que max|residu de Pearson| vaut 6,2e-13. Le residu de Pearson
+    # est SANS DIMENSION et vaut de l'ordre de 1 sur un portefeuille reel :
+    # huit ordres de grandeur en dessous, aucun dossier ne peut y tomber
+    # par hasard. phi, lui, a l'echelle des increments — son seuil
+    # dependrait de la taille du portefeuille.
+    _residus_degeneres = (len(res_list) > 0
+                          and float(np.max(np.abs(np.asarray(res_list)))) < 1e-8)
+    if (len(res_list) < 4 or (n_obs - n_params) <= 0
+            or _residus_degeneres):
         logger.warning(
             f"Bootstrap ODP : {len(res_list)} résidu(s) pour "
             f"{n_params} paramètre(s), df={n_obs - n_params}. "
@@ -485,7 +526,8 @@ def bootstrap_odp(
 
     # ── 3. Simulations Bootstrap ──────────────────────────────────────────────
     reserves_sim, reserves_par = _simuler(
-        C, m_fit, cellules, res_arr, phi, last_diag, n_sim, annee_base)
+        C, m_fit, cellules, res_arr, phi, last_diag, n_sim, annee_base,
+        alea)
 
     # ── 3e. Recentrage England-Verrall ────────────────────────────────────────
     # Le bootstrap estime la DISPERSION autour de l'estimateur analytique CL

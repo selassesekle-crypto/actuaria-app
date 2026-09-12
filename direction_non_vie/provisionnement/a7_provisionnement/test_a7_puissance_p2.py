@@ -17,11 +17,32 @@ aurait produite aurait été fausse. Le λ vient désormais DES DONNÉES.
 
 ⚠️ CE QUE P2 NE LIVRE PAS, ET POURQUOI. Le générateur ODP de BOOT-H3 a été
 écrit et sa mesure a révélé autre chose : soumis à des triangles tirés de SA
-PROPRE nulle, à son réglage de production (400 régénérations), BOOT-H3 rejette
-21 à 30 % des cas — quatre mesures, deux triangles, deux graines, 100
-simulations chacune — pour un nominal de 10 %. Publier « ce test détecterait
-X % » à côté d'un test dans cet état serait exactement le chiffre faux que la
-règle interdit. Le constat appelle un lot à lui seul.
+PROPRE nulle, à son réglage de production (400 régénérations), BOOT-H3
+SIGNALAIT 21 à 30 % des cas — quatre mesures, deux triangles, deux graines,
+100 simulations chacune — pour un nominal de 10 %. Publier « ce test
+détecterait X % » à côté d'un test dans cet état serait exactement le chiffre
+faux que la règle interdit.
+
+⚠️⚠️ LA CAUSE A ÉTÉ TROUVÉE, ET CE N'ÉTAIT PAS LA CALIBRATION. BOOT-H3 teste
+TROIS axes et confrontait le MINIMUM des trois p-valeurs au seuil NOMINAL :
+sous la nulle, 1 − (1 − 0,10)³ = 27,1 % si les axes étaient indépendants. Le
+test lui-même est juste — `TestCalibrationJuste` mesure 5,0 % à 6,4 % SUR UN
+SEUL AXE, au seuil de 5 % — c'est l'AGRÉGATION qui gonflait le taux.
+Contre-mesure du 11/09/2026, 106 triangles tirés de la nulle exacte au réglage
+de production : 17,0 % de signalements, IC 95 % [10,4 ; 25,5], p = 0,018 face
+au nominal de 10 % ; NON VALIDÉE seule 2,8 % pour un nominal de 1 %. La valeur
+se tient entre le nominal et la borne indépendante — ce qu'on attend d'axes
+CORRÉLÉS.
+
+⚠️ DEUX TAUX PUBLIÉS, DEUX ÉVÉNEMENTS DIFFÉRENTS, ET AUCUN NE DISAIT LEQUEL IL
+COMPTE : « 5,0 à 6,4 % » est un REJET SUR UN AXE au seuil de 5 % avec 100
+régénérations ; « 21 à 30 % » est un SIGNALEMENT (rejet OU vigilance) sur la
+famille des trois axes, à 400 régénérations. Les deux sont justes ; les lire
+ensemble ne l'était pas.
+
+BOOT-H3 applique désormais Holm-Bonferroni sur ses trois axes — la fonction du
+dépôt, celle de CLM. Le test devient moins sensible : ses taux de détection
+sont à RE-MESURER, et c'est l'objet du lot qui suivra.
 """
 
 import unittest

@@ -30,6 +30,7 @@ import numpy as np
 # évaluée y ressort NON TESTABLE, jamais en valeur par défaut.
 from .methodes_be import (ORDRE_AFFICHAGE, libelle, motif_exclusion,
                           reserve)
+from .config.lob_config import LOB_CONFIG   # source UNIQUE des libellés
 from .n5_graphiques import TITRES_FIGURES
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_clm import lignes_hypotheses_clm
@@ -58,6 +59,7 @@ from .n3.backtesting import SEUIL_ROUGE, SEUIL_AMBRE
 # l'Excel et le commentaire. Ces libellés étaient écrits en dur dans les deux
 # formats de ce fichier, et « (retenue) » y était cloué sur le composé.
 from .geometrie_triangle import MARQUE_GEOMETRIE
+from .n4_best_estimate import PORTEE_SCR_MONO_LOB, s2_non_calculable
 from .n4_best_estimate import (CLE_BOOT, CLE_COMPOSE, CLE_MACK,
                                libelle_percentiles, marque_retenue)
 
@@ -101,11 +103,55 @@ LOB_LABELS = {
     'generique':       'Branche Non-Vie',
 }
 
+#: Un CODE de branche : jeton en minuscules, chiffres et tirets bas. AUCUN des
+#: quinze libellés officiels n'a cette forme — ils portent tous une majuscule,
+#: un accent, un espace ou une ponctuation. C'est ce qui rend le repli
+#: cosmétique ci-dessous incapable de retoucher un libellé.
+_CODE_NU = re.compile(r'[a-z0-9_]+')
+
+
 def _lob(code: str) -> str:
+    """Le libellé de branche publié — JAMAIS retouché.
+
+    ⚠️⚠️ CETTE FONCTION REÇOIT UN LIBELLÉ, PAS UN CODE, ET SON REPLI LE
+    MASSACRAIT. `agent.py:565` pose `lob_label = cfg_lob['label']` — le libellé
+    OFFICIEL de `lob_config` — puis `agent.py:1053` et les deux appels de ce
+    module font `_lob(lob_label)`. Le repli `code.replace('_',' ').title()`
+    s'appliquait donc à un libellé déjà juste. Mesuré le 11/09/2026 sur les
+    quinze LoB, EN TÊTE DU DOCUMENT SIGNÉ :
+
+        RC Automobile — Dommages Matériels      ->  Rc Automobile — …
+        Multirisque Habitation (MRH)            ->  Multirisque Habitation (Mrh)
+        Marine, Aviation et Transport           ->  Marine, Aviation Et Transport
+        Accidents Corporels — queue COURTE (6 ans) -> … — Queue Courte (6 Ans)
+        Construction — RC Décennale / …         ->  Construction — Rc Décennale / …
+
+    soit HUIT libellés sur quinze à la casse altérée. Un NEUVIÈME était
+    SUBSTITUÉ : le libellé officiel « Transport » tombait sur la clé
+    `transport` de `LOB_LABELS` et ressortait « Transport Maritime &
+    Terrestre » — une PORTÉE de branche que la configuration ne déclare pas.
+
+    ⚠️ `lob_config` DEVIENT LA SOURCE UNIQUE. `LOB_LABELS` ne sert plus que de
+    repli pour trois codes historiques absents de la configuration — `autre`,
+    `rc_auto`, `catastrophe_nat` — afin qu'un résultat archivé reste lisible.
+    """
     if not code:
         return 'Branche Non-Vie'
-    c = str(code).lower().strip().replace(' ', '_')
-    return LOB_LABELS.get(c, code.replace('_', ' ').title())
+    brut = str(code).strip()
+    c = brut.lower().replace(' ', '_')
+    officiel = (LOB_CONFIG.get(c) or {}).get('label')
+    if officiel:
+        return officiel
+    if c in LOB_LABELS:
+        return LOB_LABELS[c]
+    # ⚠️ LE CAS QUE CE CORRECTIF EXCLURAIT S'IL S'ARRÊTAIT LÀ, ET IL A ÉTÉ
+    # MESURÉ : un code INCONNU de la configuration ressortait brut —
+    # « branche_exotique_2027 » en tête d'un document signé. L'embellissement
+    # est donc conservé, mais réservé à ce qui est un CODE et ne peut pas
+    # être un libellé.
+    if _CODE_NU.fullmatch(c):
+        return c.replace('_', ' ').title()
+    return brut
 
 # =============================================================================
 #  LOGO SVG
@@ -502,7 +548,11 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         f"SCR={_f(SCP)} | Ratio SCR/BE={_pct(SCR)}",
         "",
         "=== BACK-TESTING ===",
-        f"Statut={bt.get('statut', '—')} | Score={bt.get('score_qualite', '—')}/100",
+        # ⚠️ `.get(cle, '—')` NE TIRE PAS SUR UNE VALEUR `None` : le défaut
+        # d'un `get` ne sert que si la clé est ABSENTE. Un score non mesuré
+        # s'afficherait « None/100 ».
+        f"Statut={bt.get('statut') or '—'} | "
+        f"Score={bt.get('score_qualite') if bt.get('score_qualite') is not None else '—'}/100",
         f"N-1: {bt.get('n_rouge_n1', 0)} rouge / {bt.get('n_ambre_n1', 0)} ambre | N-2: {bt.get('n_rouge_n2', 0)} rouge / {bt.get('n_ambre_n2', 0)} ambre",
         f"Message: {str(bt.get('message', ''))[:300]}",
         "",
@@ -2316,6 +2366,15 @@ def _build_blocks(n1, n2, n3, n4, narration, source_narration, lob, cli, arr, dt
     _boot_dispo = P75_boot is not None and float(P75_boot or 0) > 0
     SCP = _scr_publiable(sc)
     SCR = _ratio_scr(SCP, BE)
+    # `_scr_publiable` rend deja None quand le SCR n'est pas calculable --
+    # et `agent.run` l'en empeche, en neutralisant en ZERO les marqueurs de
+    # `garde_fou_be_negatif` avant N5. Le garde etait donc court-circuite
+    # EN AMONT, et la page de garde affichait << SCR Provisions : 0 EUR >>.
+    # On relit le drapeau que N4 publie precisement pour cela.
+    if s2_non_calculable(n4):
+        SCP = SCR = None
+        P90 = P99 = None
+        P90_mack = None
 
     s_label = _statut_label(statut)
     s_cls   = statut.lower()
@@ -2372,7 +2431,7 @@ def _build_blocks(n1, n2, n3, n4, narration, source_narration, lob, cli, arr, dt
     _kpi4 = (
         '<div class="kpi-card" style="border-left:3px solid var(--gold);">'
         '<div class="kpi-card-label">Provisions Tech. S2</div>'
-        '<div class="kpi-card-value">' + _f(n4.get('provisions_techniques_s2', 0)) + '</div>'
+        '<div class="kpi-card-value">' + _f(None if s2_non_calculable(n4) else n4.get('provisions_techniques_s2', 0)) + '</div>'
         '<div class="kpi-card-sub">BE + RM — Art. 77 §1</div>'
         '</div>'
         # ⚠️ MEME GARDE-FOU, MEME CHUTE, DEUX LIGNES PLUS LOIN.
@@ -2539,15 +2598,31 @@ def _build_blocks(n1, n2, n3, n4, narration, source_narration, lob, cli, arr, dt
     # ne peut jamais l'être — il est centré sur la réserve de Mack, pas sur le
     # BE publié — d'où sa clé vide, qu'aucun arbitrage ne peut désigner.
     _mo = '<span class="mono">'
+    # ⚠️⚠️ AUCUN PERCENTILE NE SE CHIFFRE SUR UN BE NEGATIF, ET LA
+    # QUATRIEME LIGNE LE SAVAIT DEJA. `_bp90` ecrit « — » quand N4 refuse de
+    # publier le percentile Bootstrap ; les trois autres lisaient
+    # `reserve_p90_compose` / `reserve_p90_mack` / `n3['mack']['reserve_p90']`,
+    # que `agent.run` ne neutralise PAS — et publiaient donc, mesure du
+    # 11/09/2026 : « Mack recentré : P90 = -708 867 € » sur un dossier dont le
+    # §5 declare les percentiles NON DEFINIS. Un P90 egal au Best Estimate est
+    # d'ailleurs une absurdite visible : la log-normale n'etant pas definie, le
+    # calcul retombe sur son centre et publie ce centre comme un percentile.
+    # ⚠️ LA COLONNE SIGMA RESTE CHIFFREE : un ecart-type EST defini sur un BE
+    # negatif. C'est le percentile qui ne l'est pas.
+    _p90_nd = s2_non_calculable(n4)
+
+    def _cp(v):
+        return _mo + _f(None if _p90_nd else v) + '</span>'
+
     _lignes_i = [
         (CLE_COMPOSE, 'Incertitude composée',
-         _mo + _f(P90_COMPOSE) + '</span>', _mo + _f(SIG_COMPOSE) + '</span>',
+         _cp(P90_COMPOSE), _mo + _f(SIG_COMPOSE) + '</span>',
          'BE pondéré'),
         (CLE_MACK, 'Mack recentré',
-         _mo + _f(P90_mack) + '</span>', _mo + _f(SIG_MACK) + '</span>',
+         _cp(P90_mack), _mo + _f(SIG_MACK) + '</span>',
          'BE pondéré'),
         ('', 'Mack natif',
-         _mo + _f(P90_natif) + '</span>', _mo + _f(SIG_MACK_NATIF) + '</span>',
+         _cp(P90_natif), _mo + _f(SIG_MACK_NATIF) + '</span>',
          'réserve Mack'),
         (CLE_BOOT, 'Bootstrap ODP', _bp90, _bsig, 'réserve Bootstrap'),
     ]
@@ -2759,7 +2834,7 @@ def _build_blocks(n1, n2, n3, n4, narration, source_narration, lob, cli, arr, dt
         # Risk Margin S2
         + ('<tr style="border-top:2px solid var(--navy);"><td class="label" style="color:var(--navy);font-weight:600;">Risk Margin S2</td>'
         '<td class="center"><span class="mono" style="color:var(--navy);font-weight:700;">'
-        + _f(n4.get('risk_margin', 0)) + '</span></td>'
+        + _f(None if s2_non_calculable(n4) else n4.get('risk_margin', 0)) + '</span></td>'
         # ⚠️ << Courbe EIOPA >> ÉTAIT ÉCRIT EN DUR. Avec un taux assumé par
         # l'actuaire, le rapport affichait « Courbe EIOPA Arrêté courant » —
         # il attribuait à EIOPA un taux que l'actuaire avait saisi lui-même.
@@ -2769,7 +2844,7 @@ def _build_blocks(n1, n2, n3, n4, narration, source_narration, lob, cli, arr, dt
         + _s(n4.get('date_courbe_rfr', '—')) + ')</td></tr>'
         '<tr class="highlight-gold"><td class="label">Provisions Techniques S2</td>'
         '<td class="center"><span class="mono" style="font-weight:700;">'
-        + _f(n4.get('provisions_techniques_s2', 0)) + '</span></td>'
+        + _f(None if s2_non_calculable(n4) else n4.get('provisions_techniques_s2', 0)) + '</span></td>'
         '<td>PT S2 = BE + RM — Art. 77 §1</td></tr>')
         + '</tbody></table>'
     )
@@ -2777,7 +2852,8 @@ def _build_blocks(n1, n2, n3, n4, narration, source_narration, lob, cli, arr, dt
     # ── SECTION 5 : BACK-TESTING ──────────────────────────────────────────────
     bt_statut = _s(bt.get('statut', 'AMBRE'))
     bt_col_cls = 'bt-card-' + bt_statut.lower() if bt_statut in ('ROUGE', 'AMBRE', 'VERT') else 'bt-card-navy'
-    bt_score  = _s(bt.get('score_qualite', '—'))
+    bt_score  = _s(bt.get('score_qualite')
+                   if bt.get('score_qualite') is not None else '—')
     # Recalculer depuis le tableau réel pour cohérence
     _bt_tab = bt.get('tableau', [])
     _SR, _SA = SEUIL_ROUGE, SEUIL_AMBRE
@@ -3746,6 +3822,11 @@ def export_html(
             '<div class="section-header"><span class="section-num">04</span><span class="section-titre">SCR Provisions — Art. 115 Règlement délégué 2015/35</span></div>\n'
             '<div class="section-body">\n'
             + b['tableau_scr']
+            # ⚠️ CE QUE LE CHIFFRE EST, A COTE DU CHIFFRE. La phrase vient de
+            # `n4_best_estimate` : elle n'est pas reecrite ici, sinon deux
+            # textes diraient un seul fait et divergeraient.
+            + '<p style="font-size:8pt;color:var(--slate);font-style:italic;'
+              'margin-top:8px;">' + PORTEE_SCR_MONO_LOB + '</p>'
             + '\n</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 5
@@ -4112,9 +4193,12 @@ def export_word(n1, n2, n3, n4,
 
         _h("Diagnostic — décomposition de l'incertitude (outil analytique interne, non destiné au bilan)"); _sep()
         _tbl(['Approche','P90','σ','Centre'],
-             [[marque_retenue(n4,CLE_COMPOSE,'Incertitude composée'),_f(n4.get('reserve_p90_compose',0) or 0),_f(n4.get('sigma_total_compose',SIG)),'BE pondéré'],
-              [marque_retenue(n4,CLE_MACK,'Mack recentré'),_f(n4.get('reserve_p90_mack',P90)),_f(n4.get('sigma_mack',SIG)),'BE pondéré'],
-              ['Mack natif',_f(mk.get('reserve_p90',0)),_f(mk.get('sigma_total',SIG)),'réserve Mack'],
+             # ⚠️ MEME REGLE QUE LE HTML, ET C'EST LA MEME PHRASE QUI LE
+             # DEMANDE : le Word porte le §5 « percentiles non definis » et
+             # publiait « Mack natif : P90 = -708 867 € » trois pages plus loin.
+             [[marque_retenue(n4,CLE_COMPOSE,'Incertitude composée'),_f(None if s2_non_calculable(n4) else (n4.get('reserve_p90_compose',0) or 0)),_f(n4.get('sigma_total_compose',SIG)),'BE pondéré'],
+              [marque_retenue(n4,CLE_MACK,'Mack recentré'),_f(None if s2_non_calculable(n4) else n4.get('reserve_p90_mack',P90)),_f(n4.get('sigma_mack',SIG)),'BE pondéré'],
+              ['Mack natif',_f(None if s2_non_calculable(n4) else mk.get('reserve_p90',0)),_f(mk.get('sigma_total',SIG)),'réserve Mack'],
               # ⚠️⚠️ LA PORTE DE GOUVERNANCE VAUT AUSSI POUR LE WORD. Ce
               # tableau lisait `n3['bootstrap']['p90']` EN DIRECT, comme le
               # bloc du commentaire : quand BOOT-H3 est NON VALIDEE et que
@@ -4231,10 +4315,15 @@ def export_word(n1, n2, n3, n4,
               ['Facteur σ — risque de réserve',SIG_EIOPA,REF_S2],
               ['SCR Provisions',_f(SCP),'3 × σ × BE — Art. 115'],
               ['Ratio SCR/BE',_pct(SCR),'< 35 %']],ws=[4.5,3.5,8.0])
+        # ⚠️ MEME PHRASE QUE LE HTML, MEME SOURCE. Le Word est le document
+        # qu'on transmet ; il portait le chiffre sans sa portee.
+        _run(doc.add_paragraph(), PORTEE_SCR_MONO_LOB, sz=8, col=NR)
         doc.add_page_break()
 
         _h('5. Back-testing — Boni / Mali de liquidation'); _sep()
-        bt_s = str(bt.get('statut','—')); bt_sc = str(bt.get('score_qualite','—'))
+        bt_s = str(bt.get('statut') or '—')
+        bt_sc = str(bt.get('score_qualite')
+                    if bt.get('score_qualite') is not None else '—')
         p=doc.add_paragraph()
         s_bt = VR if bt_s=='VERT' else AR if bt_s=='AMBRE' else RgR
         _run(p,'Statut : ',sz=9,col=NR); _run(p,bt_s,bold=True,sz=9,col=s_bt)

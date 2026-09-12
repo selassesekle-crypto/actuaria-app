@@ -287,5 +287,87 @@ class T6_Perimetre(unittest.TestCase):
         print("    OK T6c API publique et les 5 rôles stables")
 
 
+
+# =============================================================================
+#  CE QUE LA PROSE AFFIRME, MESURÉ
+# =============================================================================
+
+class T_Ce_Module_N_A_Aucun_Appelant(unittest.TestCase):
+    """⚠️⚠️ UNE DORMANCE DÉCLARÉE SANS SENTINELLE EST UNE PROMESSE VIDE.
+
+    L'en-tête de `nv_triangle_mapping_llm` déclare depuis ce lot qu'aucun
+    appelant de production ne l'active. C'est vrai au 11/09/2026, et mesuré.
+    Ce test rougit le jour où ce n'est plus vrai — pour que la phrase suive,
+    pas pour empêcher le branchement."""
+
+    def test_aucun_appelant_de_production(self):
+        """⚠️⚠️ ON CHERCHE UN APPEL, PAS UNE MENTION — et ma première version
+        confondait les deux.
+
+        Elle signalait `core/frontiere_llm.py`, qui porte
+        `Site('direction_non_vie/services/nv_triangle_mapping_llm.py', ...)`
+        dans son REGISTRE des sites qui appellent l'API. C'est la relation
+        INVERSE : ce module appelle la frontière, personne ne l'appelle lui.
+        Un relevé par nom de fichier ne distingue pas les deux sens ; on vise
+        donc un IMPORT ou un accès d'attribut."""
+        import pathlib as _p
+        import re as _re
+        import direction_non_vie
+        racine = _p.Path(direction_non_vie.__file__).resolve().parent.parent
+        motif = _re.compile(
+            r'^\s*(?:from\s+\S*nv_triangle_mapping_llm\s+import'
+            r'|import\s+\S*nv_triangle_mapping_llm'
+            r'|.*\bnv_triangle_mapping_llm\.(?!py\b)[A-Za-z_])')
+        appelants = []
+        for f in racine.rglob('*.py'):
+            if f.name.startswith('test_') or f.name == 'nv_triangle_mapping_llm.py':
+                continue
+            if 'audit_2026' in str(f):          # relevés d'audit, pas du code
+                continue
+            try:
+                txt = f.read_text(encoding='utf-8')
+            except (OSError, UnicodeDecodeError):
+                continue
+            for n, ligne in enumerate(txt.splitlines(), 1):
+                s = ligne.strip()
+                if s.startswith('#') or not motif.match(ligne):
+                    continue
+                appelants.append('%s:%d  %s' % (f.name, n, s[:60]))
+        self.assertEqual(
+            appelants, [],
+            'Le module de proposition de mapping a trouvé un appelant de '
+            "production : l'en-tête qui le déclare sans appelant doit être "
+            'corrigé.\n  ' + '\n  '.join(appelants))
+        print('    OK MAPLLM-1 aucun appelant de production, mesuré')
+
+    def test_le_releve_TROUVE_un_appelant_quand_on_en_plante_un(self):
+        """⚠️ CONTRE-ÉPREUVE DE L'INSTRUMENT : un relevé qui ne trouve jamais
+        rien passerait au vert sur n'importe quoi."""
+        import re as _re
+        motif = _re.compile(
+            r'^\s*(?:from\s+\S*nv_triangle_mapping_llm\s+import'
+            r'|import\s+\S*nv_triangle_mapping_llm'
+            r'|.*\bnv_triangle_mapping_llm\.(?!py\b)[A-Za-z_])')
+        for plante in (
+                'from direction_non_vie.services.nv_triangle_mapping_llm import proposer',
+                'import direction_non_vie.services.nv_triangle_mapping_llm',
+                '    r = nv_triangle_mapping_llm.proposer_mapping(df)'):
+            self.assertTrue(motif.match(plante),
+                            'le relevé ne reconnaît pas un appel : %r' % plante)
+        # ...et il ne frappe pas une MENTION dans un registre.
+        self.assertIsNone(
+            motif.match("    Site('direction_non_vie/services/"
+                        "nv_triangle_mapping_llm.py', MODELE_RECENT, 'x'),"),
+            'le relevé confond une mention de registre avec un appel')
+        print('    OK MAPLLM-3 le relevé distingue un appel d une mention')
+
+    def test_l_en_tete_declare_ce_fait(self):
+        import pathlib as _p
+        from direction_non_vie.services import nv_triangle_mapping_llm as M
+        txt = _p.Path(M.__file__).read_text(encoding='utf-8')
+        self.assertIn('AUCUN APPELANT DE PRODUCTION', txt.upper(),
+                      "l'en-tête ne déclare pas ce que la mesure établit")
+        print('    OK MAPLLM-2 l en-tête déclare le fait mesuré')
+
 if __name__ == '__main__':
     unittest.main()

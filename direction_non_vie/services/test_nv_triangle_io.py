@@ -1,7 +1,16 @@
 # =============================================================================
 #  Tests — nv_triangle_io.py (Bloc II, module 1 : lecture universelle)
 #
-#  Module ISOLÉ à ce stade : branché nulle part (ni agent.py, ni façade).
+#  ⚠️ CE MODULE EST BRANCHÉ, ET IL L'ÉTAIT DÉJÀ QUAND CETTE LIGNE DISAIT
+#  LE CONTRAIRE. `nv_triangle.py` l'importe (l. 65) et l'appelle (l. 133) ;
+#  `agent.py` appelle la façade (l. 579). La phrase d'origine décrivait un
+#  isolement révolu, en tête du SEUL fichier qui teste ce module : un
+#  relecteur en concluait que rien de ce qu'il lit n'atteint la production.
+#  ⚠️⚠️ ELLE N'EST PAS RECOPIÉE ICI, ET C'EST OBLIGATOIRE : la sentinelle
+#  ci-dessous balaie CE fichier. Écrire l'assertion qu'on proscrit fait
+#  échouer le filet sur sa propre explication — mesuré, il l'a fait.
+#  Le fait est désormais MESURÉ par `T_Ce_Module_Est_Branche`, plus bas :
+#  la prose ne peut plus dériver sans qu'un test rougisse.
 #  Ces tests l'exercent donc de bout en bout sans aucune dépendance A7.
 # =============================================================================
 
@@ -10,6 +19,7 @@ import io
 import json
 import shutil
 import tempfile
+import pathlib as _pathlib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -280,6 +290,73 @@ class T4_Perimetre(unittest.TestCase):
         self.assertIs(lire_source(df)['brut'], df)
         print("    OK T4a périmètre : 2 fonctions publiques, sans UI ni logique aval")
 
+
+
+# =============================================================================
+#  CE QUE LA PROSE AFFIRME, MESURÉ — pour qu'elle ne dérive plus
+# =============================================================================
+
+class T_Ce_Module_Est_Branche(unittest.TestCase):
+    """⚠️⚠️ UNE PHRASE D'EN-TÊTE SE MESURE COMME UN CHIFFRE.
+
+    L'en-tête de ce fichier a affirmé pendant toute sa vie que
+    `nv_triangle_io` n'était câblé à aucun appelant — ni à l'agent, ni à la
+    façade. `nv_triangle.py` l'importait et l'appelait. Personne n'avait de
+    raison de relire ce commentaire : ce test en donne une le jour où le fait
+    change.
+
+    ⚠️⚠️ LE CONTRÔLE PORTE SUR L'EN-TÊTE SEUL, ET C'EST DÉLIBÉRÉ. Balayer
+    tout le fichier ferait échouer le filet sur sa propre explication — ma
+    première version citait la phrase proscrite dans sa docstring et dans son
+    `print`, et tombait sur elle-même. C'est la leçon du mot « erroné » qui
+    frappait « non erronées »."""
+
+    @staticmethod
+    def _racine():
+        import direction_non_vie
+        return _pathlib.Path(direction_non_vie.__file__).resolve().parent.parent
+
+    def test_lire_source_a_au_moins_un_appelant_de_production(self):
+        racine = self._racine()
+        appelants = []
+        for f in (racine / 'direction_non_vie').rglob('*.py'):
+            if f.name.startswith('test_') or f.name == 'nv_triangle_io.py':
+                continue
+            try:
+                txt = f.read_text(encoding='utf-8')
+            except (OSError, UnicodeDecodeError):
+                continue
+            for n, ligne in enumerate(txt.splitlines(), 1):
+                s = ligne.strip()
+                if s.startswith('#'):
+                    continue
+                if 'lire_source(' in s and 'def ' not in s:
+                    appelants.append('%s:%d' % (f.name, n))
+        self.assertTrue(
+            appelants,
+            "`lire_source` n'a plus aucun appelant de production : l'en-tête "
+            'de ce fichier doit être relu — il affirme désormais le contraire '
+            'de ce que le dépôt fait.')
+        print('    OK IO-BRANCHE %d appelant(s) de production : %s'
+              % (len(appelants), ', '.join(appelants[:3])))
+
+    def test_l_en_tete_ne_dit_plus_que_le_module_est_isole(self):
+        """⚠️ ON VÉRIFIE QUE LA PROSE A CÉDÉ, pas qu'elle contient un mot.
+
+        ⚠️ L'ASSIETTE EST L'EN-TÊTE — les lignes qui précèdent le premier
+        `import`. C'est là que vivait l'affirmation, et c'est là qu'un
+        relecteur la lit. La balayer sur tout le fichier ferait échouer le
+        filet sur les commentaires qui EXPLIQUENT la correction."""
+        txt = _pathlib.Path(__file__).read_text(encoding='utf-8')
+        lignes = txt.splitlines()
+        fin = next((i for i, x in enumerate(lignes)
+                    if x.startswith(('import ', 'from '))), 40)
+        entete = '\n'.join(lignes[:fin])
+        self.assertNotIn(
+            'nulle part', entete,
+            "l'en-tête affirme encore un isolement démenti par la mesure : "
+            "`nv_triangle.py` importe et appelle `lire_source`")
+        print('    OK IO-PROSE l en-tête n affirme plus aucun isolement')
 
 if __name__ == '__main__':
     unittest.main()

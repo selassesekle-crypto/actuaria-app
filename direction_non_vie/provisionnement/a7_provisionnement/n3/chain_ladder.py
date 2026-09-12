@@ -290,7 +290,15 @@ def calculer_tail_factor(
         tail = Π_{j=m}^{∞} (1 + exp(a + b×j))
 
     Troncature à convergence : f_extrap < 1 + 1e-4 ou 50 itérations max.
-    Tail clippé à [1.0, 1.20].
+    Tail clippé à [1.0, `tail_max`], avec
+    `tail_max = min(lob_tail_max_alerte × 1.5, 1.50)`.
+
+    ⚠️ CETTE LIGNE ANNONÇAIT « [1.0, 1.20] », UNE BORNE QUE LE CODE
+    N'APPLIQUE JAMAIS. `lob_tail_max_alerte` valant au moins 1,0 sur les
+    quinze LoB, `min(x × 1.5, 1.50)` vaut TOUJOURS 1,50 : la borne réelle
+    est 1,50 partout, et `test_a7_ecretage.py` l'épingle explicitement
+    (`attendu = min(1.05 * 1.5, 1.50)`). Une queue de 1,50 au lieu de 1,20
+    majore l'ultime de 25 %.
 
     Parameters
     ----------

@@ -539,6 +539,10 @@ def munich_cl(
     C_E:          Optional[np.ndarray],
     annee_base:   int   = 1,
     tolerance_ep: float = 0.05,
+    #: ⚠️ La queue du Chain Ladder de REFERENCE. 1,0 = comportement
+    #: historique ; l'agent transmet la queue reellement appliquee pour
+    #: que les deux « Chain Ladder » du document soient le MEME chiffre.
+    tail_factor:  float = 1.0,
 ) -> Dict:
 
     """
@@ -668,11 +672,33 @@ def munich_cl(
     # helper partagé — une seule définition de « réserve » dans A7.
     _last = np.array([float(C_P[i, min(n - i - 1, m - 1)]) for i in range(n)])
     _lastE = np.array([float(C_E[i, min(n - i - 1, m - 1)]) for i in range(n)])
-    p_mp = comptabiliser(P_proj[:, m - 1], _last,  annee_base=annee_base)
-    p_me = comptabiliser(E_proj[:, m - 1], _lastE, annee_base=annee_base)
-    # Chain Ladder de référence : projection classique par vecteur de facteurs.
-    p_cp = projeter_ultimates(C_P, f_P,      tail_factor=1.0, annee_base=annee_base)
-    p_ce = projeter_ultimates(C_E, f_E,      tail_factor=1.0, annee_base=annee_base)
+    # ⚠️ LA QUEUE S'APPLIQUE AUX DEUX COTES. Munich projette jusqu'a la
+    # colonne m-1, exactement comme Chain Ladder : la queue extrapole au-dela
+    # de cette colonne et concerne donc les deux. Ne la donner qu'au Chain
+    # Ladder de reference ferait de `ecart_pct_paye` une mesure de la queue
+    # et non de la correction Munich (mesure : -20,31 % -> -65,83 %).
+    p_mp = comptabiliser(P_proj[:, m - 1] * tail_factor, _last,
+                         annee_base=annee_base)
+    p_me = comptabiliser(E_proj[:, m - 1] * tail_factor, _lastE,
+                         annee_base=annee_base)
+    # ⚠️⚠️ CE << CHAIN LADDER DE REFERENCE >> N'ETAIT PAS CELUI QUE LE
+    # DOSSIER PUBLIE, ET LES DEUX PARAISSAIENT DANS LE MEME DOCUMENT SIGNE.
+    # `tail_factor=1.0` etait code en dur, alors que le Chain Ladder du
+    # rapport porte la queue extrapolee. Mesure du 11/09/2026, run reel
+    # (n=9, dernier LDF 1,08, lob rc_generale, triangle engage bruite) :
+    #     chain_ladder.reserve_totale   7 770 941,41 EUR  (queue 1,500000)
+    #     munich_cl.be_cl_paye          3 331 547,94 EUR  (queue forcee a 1,0)
+    #     ecart -57,13 %, soit -4 439 393 EUR
+    # et les DEUX montants figuraient dans le HTML et dans le Word. Le bloc
+    # publiait en outre « -20,3 % vs CL paye » : un pourcentage calcule
+    # contre un Chain Ladder que le document ne publie pas — l'ecart contre
+    # le Chain Ladder REELLEMENT publie valait -65,8 %, 45 points plus loin.
+    # ⚠️ LA QUEUE EST DONC UN PARAMETRE, A 1,0 PAR DEFAUT : le comportement
+    # historique est strictement inchange tant que l'appelant ne la passe pas.
+    p_cp = projeter_ultimates(C_P, f_P, tail_factor=tail_factor,
+                              annee_base=annee_base)
+    p_ce = projeter_ultimates(C_E, f_E, tail_factor=tail_factor,
+                              annee_base=annee_base)
 
     ibnr_mp = p_mp['ibnr_brut']
     ibnr_me = p_me['ibnr_brut']

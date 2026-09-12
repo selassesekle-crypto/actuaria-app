@@ -293,9 +293,25 @@ def calculer_backtesting(
     }
 
     # ── Scores séparés ────────────────────────────────────────────────────────
-    score_n1 = round(float(np.mean(scores_n1)), 1) if scores_n1 else 100.0
-    score_n2 = round(float(np.mean(scores_n2)), 1) if scores_n2 else 100.0
-    score_global = round((score_n1 + score_n2) / 2, 1) if (scores_n1 or scores_n2) else 100.0
+    # ⚠️⚠️ UN SCORE QUI N'A RIEN MESURÉ VAUT `None`, PAS 100. Les listes de
+    # scores sont VIDES quand aucune année n'est mature : le littéral 100
+    # occupait alors la place d'une mesure qui n'a pas eu lieu, et il se lisait
+    # comme une mesure. Mesuré le 11/09/2026 sur un 12×2 dont AUCUNE année
+    # n'est mature : statut VERT, score 100,0, ratio 100,0 %, et la phrase
+    # « Qualité du provisionnement historique BONNE » PUBLIÉE DANS LE HTML.
+    #   C'est la famille que `test_litteral_neutre` (LN-1…LN-6) et
+    # `test_absence_pas_verdict` (MW-1…MW-7) scellent déjà côté tarification :
+    # un littéral neutre ne remplace pas une absence, et une absence ne produit
+    # pas de verdict. La doctrine existait ; elle s'arrêtait à la porte du
+    # provisionnement.
+    score_n1 = round(float(np.mean(scores_n1)), 1) if scores_n1 else None
+    score_n2 = round(float(np.mean(scores_n2)), 1) if scores_n2 else None
+    if scores_n1 and scores_n2:
+        score_global = round((score_n1 + score_n2) / 2, 1)
+    elif scores_n1 or scores_n2:
+        score_global = score_n1 if scores_n1 else score_n2
+    else:
+        score_global = None
 
     # ── Statut global ─────────────────────────────────────────────────────────
     n_rouge = max(n_rouge_n1, n_rouge_n2)
@@ -303,26 +319,47 @@ def calculer_backtesting(
     # n_vert = années vertes sur LES DEUX horizons (le plus strict)
     n_vert  = min(n_vert_n1, n_vert_n2)
 
-    if n_rouge >= 1:   statut_global = 'ROUGE'
+    n_matures = sum(1 for r in tableau if r['mature'])
+    # ⚠️ L'ORDRE COMPTE : « aucune année mature » se teste AVANT « aucune
+    # alerte ». Sans mesure, `n_rouge` et `n_ambre` valent zéro pour la seule
+    # raison qu'il n'y avait rien à compter.
+    if n_matures == 0: statut_global = 'NON_ÉVALUÉ'
+    elif n_rouge >= 1: statut_global = 'ROUGE'
     elif n_ambre >= 1: statut_global = 'AMBRE'
     else:              statut_global = 'VERT'
 
-    n_matures = sum(1 for r in tableau if r['mature'])
     ratio_stabilite = round(
         sum(1 for r in tableau if r['mature'] and r['statut'] == 'VERT') / n_matures * 100, 1
-    ) if n_matures else 100.0
+    ) if n_matures else None
 
     # ── Message narratif ──────────────────────────────────────────────────────
+    # ⚠️ UN SCORE ABSENT S'ÉCRIT « — », JAMAIS « None ». Le premier jet de ce
+    # correctif publiait « Score None/100 » dans le message signé : remplacer
+    # un littéral trompeur par un littéral illisible n'aurait rien réglé.
+    def _sc(x):
+        return '—' if x is None else x
+
     msg = (
         f"Analyse sur {n_matures} années matures (≥{seuil_maturite*100:.0f}% développées) "
         f"sur {n} au total.\n"
         f"Horizon N-1 : {n_rouge_n1} alerte(s) rouge · {n_ambre_n1} ambre · "
-        f"{n_vert_n1} OK — Score {score_n1}/100\n"
+        f"{n_vert_n1} OK — Score {_sc(score_n1)}/100\n"
         f"Horizon N-2 : {n_rouge_n2} alerte(s) rouge · {n_ambre_n2} ambre · "
-        f"{n_vert_n2} OK — Score {score_n2}/100"
+        f"{n_vert_n2} OK — Score {_sc(score_n2)}/100"
     )
 
-    if statut_global == 'VERT':
+    if statut_global == 'NON_ÉVALUÉ':
+        # ⚠️ ON DIT CE QUI MANQUE ET POURQUOI, sans conclure sur la qualité du
+        # provisionnement : aucune année n'a été comparée.
+        msg += (
+            "\n\nBACK-TESTING NON ÉVALUABLE — aucune année de survenance "
+            f"n'atteint le seuil de maturité de {seuil_maturite*100:.0f} % de "
+            "développement. Aucun boni/mali de liquidation n'a donc été "
+            "comparé : ce dossier ne porte AUCUN élément sur la qualité du "
+            "provisionnement historique, ni favorable ni défavorable. "
+            "Le score et le taux de stabilité sont sans objet."
+        )
+    elif statut_global == 'VERT':
         msg += (
             "\n\nQualité du provisionnement historique BONNE — "
             "aucun écart significatif sur les années matures."
