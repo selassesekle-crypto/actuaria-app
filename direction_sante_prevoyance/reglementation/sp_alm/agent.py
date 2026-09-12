@@ -337,7 +337,19 @@ class AgentSPAlm:
                 DURATION_RENTES_IP_MAX
             ))
         else:
+            duration_rentes_theorique = float("inf")
             duration_rentes_ip = DURATION_RENTES_IP_MAX
+
+        # ⚠️ L ECRETAGE EST CONSERVE ET EXPOSE (corrige le 12/09/2026).
+        # L hypothese H3 verifiait que la duration appartenait a [8, 18] APRES
+        # l avoir forcee dans [8, 18] : elle ne pouvait pas echouer, et elle
+        # sortait VALIDEE pour un taux technique de 0,1 % comme de 20 %.
+        # Elle mesurait son propre mecanisme. H3 porte desormais sur la valeur
+        # THEORIQUE, et dit quand la borne a mordu.
+        ecretage_actif = not (
+            DURATION_RENTES_IP_MIN <= duration_rentes_theorique
+            <= DURATION_RENTES_IP_MAX
+        )
 
         # Duration PSAP prévoyance : court-moyen terme (6 mois à 2 ans)
         # Source : cadence règlement prévoyance collective — CTIP 2023
@@ -398,6 +410,11 @@ class AgentSPAlm:
             "psap_sante":             round(psap_sante + be_sante, 2),
             "tp_total":               round(tp_total, 2),
             "duration_rentes_ip":     round(duration_rentes_ip, 2),
+            # Valeur AVANT ecretage, et drapeau : H3 doit pouvoir echouer.
+            "duration_rentes_theorique": (
+                round(duration_rentes_theorique, 2)
+                if duration_rentes_theorique != float("inf") else None),
+            "ecretage_duration_actif":   ecretage_actif,
             "duration_psap_prev":     round(duration_psap_prev, 2),
             "duration_psap_sante":    round(duration_psap_sante, 2),
             "duration_consolidee":    round(dur_consol, 2),
@@ -633,10 +650,21 @@ class AgentSPAlm:
 
         # H3 — Duration rentes IP ∈ [DURATION_RENTES_IP_MIN, DURATION_RENTES_IP_MAX]
         d_rentes = passif["duration_rentes_ip"]
-        ok3  = DURATION_RENTES_IP_MIN <= d_rentes <= DURATION_RENTES_IP_MAX
+        d_theo   = passif.get("duration_rentes_theorique", d_rentes)
+        ecrete   = bool(passif.get("ecretage_duration_actif", False))
+        # H3 porte sur la duration THEORIQUE : la tester apres ecretage
+        # revenait a mesurer l ecretage lui-meme.
+        ok3  = not ecrete
         h3_s = "VALIDÉE" if ok3 else "À JUSTIFIER"
-        h3_m = (f"D_rentes_IP = {d_rentes:.2f}a ∈ "
-                f"[{DURATION_RENTES_IP_MIN},{DURATION_RENTES_IP_MAX}]a")
+        if ecrete:
+            h3_m = (f"D_theorique = {d_theo:.2f}a HORS "
+                    f"[{DURATION_RENTES_IP_MIN},{DURATION_RENTES_IP_MAX}]a — "
+                    f"ecretee a {d_rentes:.2f}a ; le portefeuille de rentes "
+                    f"ne correspond pas au taux technique retenu")
+        else:
+            h3_m = (f"D_rentes_IP = {d_rentes:.2f}a ∈ "
+                    f"[{DURATION_RENTES_IP_MIN},{DURATION_RENTES_IP_MAX}]a "
+                    f"sans ecretage")
 
         # H4 — Condition d'immunisation de Redington (1952)
         # Redington F.M. (1952), Journal of the Institute of Actuaries 78(3).

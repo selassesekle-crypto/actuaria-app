@@ -591,8 +591,12 @@ class AgentP3ProvissionnementPrevoyance:
         methode_cl  = self._choisir_variante_cl(h1, h2)
         methode_rec, raison_rec = self._recommander_methode(h1, h2, h3, n)
 
+        # Une hypothese NON TESTEE ne vaut pas une hypothese validee : le
+        # scorecard ne peut plus sortir VERT sur une absence de mesure.
+        non_testables = [x for x in (h1, h2) if x.get("testable") is False]
         if not h1['ok'] and not h2['ok']:   statut = "ROUGE"
         elif not h1['ok'] or not h2['ok']:  statut = "AMBRE"
+        elif non_testables:                 statut = "AMBRE"
         else:                               statut = "VERT"
 
         return {
@@ -617,7 +621,7 @@ class AgentP3ProvissionnementPrevoyance:
 
         if not SCIPY_OK:
             return {
-                "ok": True, "score": 70,
+                "ok": True, "score": 70, "testable": False,
                 "corr_moy": 0.0, "corr_max": 0.0,
                 "n_colonnes_testees": 0, "n_colonnes_sig": 0,
                 "seuil_utilise": seuil,
@@ -651,7 +655,7 @@ class AgentP3ProvissionnementPrevoyance:
 
         if not corrs:
             return {
-                "ok": True, "score": 80,
+                "ok": True, "score": 80, "testable": False,
                 "corr_moy": 0.0, "corr_max": 0.0,
                 "n_colonnes_testees": 0, "n_colonnes_sig": 0,
                 "seuil_utilise": seuil,
@@ -743,7 +747,7 @@ class AgentP3ProvissionnementPrevoyance:
 
         if not cv_cols:
             return {
-                "ok": True, "score": 80,
+                "ok": True, "score": 80, "testable": False,
                 "cv_moy": 0.0, "cv_max": 0.0, "derive_moy": 0.0,
                 "ok_cv": True, "ok_derive": True,
                 "seuil_cv": seuil_cv, "seuil_derive": seuil_derive,
@@ -892,7 +896,7 @@ class AgentP3ProvissionnementPrevoyance:
             f"Fournir primes_par_an pour BF conforme S2."
         )
         return {
-            "ok": True, "score": 60,
+            "ok": True, "score": 60, "testable": False,
             "lr_apriori":    round(lr_ref, 4),
             "lr_std":        0.0, "cv_lr": 0.0,
             "source":        "ctip_2023_reference",
@@ -928,7 +932,7 @@ class AgentP3ProvissionnementPrevoyance:
 
         if len(var_cols) < 3:
             return {
-                "ok": True, "score": 75,
+                "ok": True, "score": 75, "testable": False,
                 "phi": 0.0, "cv_var": 0.0,
                 "message": "H4 non testable — moins de 3 semestres disponibles.",
             }
@@ -1772,20 +1776,32 @@ class AgentP3ProvissionnementPrevoyance:
         self, h: Dict, be_itt: Dict, mack: Dict, bt: Dict, lr: float
     ) -> list:
         """Hypothèses H1-H7 pour le rapport — standard ActuarIA."""
-        def _st(ok): return "VALIDÉE" if ok else "NON VALIDÉE"
+        def _st(h):
+            """Statut publié : l'absence de mesure est un état à part entière.
+
+            ⚠️ CORRIGÉ LE 12/09/2026. Cette fonction ne connaissait que deux
+            états et recevait un booléen. Les branches « non testable » de H1,
+            H2 et H4 rendent `ok: True` — pour ne pas basculer le choix de
+            méthode — et publiaient donc « VALIDÉE, score 80 » sur une
+            hypothèse que RIEN n'avait évaluée. Le rapport affirmait qu'une
+            hypothèse de Mack était vérifiée alors qu'elle ne l'avait pas été.
+            """
+            if h.get("testable") is False:
+                return "NON MESURÉE"
+            return "VALIDÉE" if h.get("ok") else "NON VALIDÉE"
 
         h1 = h["h1_independance"]; h2 = h["h2_stabilite"]
         h3 = h["h3_apriori_bf"];   h4 = h["h4_homosc_bootstrap"]
 
         hyp = [
             {"id": "H1", "hypothese": "Indépendance années de survenance ITT (Spearman)",
-             "valeur": h1["message"], "statut": _st(h1["ok"]), "score": h1["score"], "critique": True},
+             "valeur": h1["message"], "statut": _st(h1), "score": h1["score"], "critique": True},
             {"id": "H2", "hypothese": "Stabilité facteurs CL (CV≤20%, dérive≤25%)",
-             "valeur": h2["message"], "statut": _st(h2["ok"]), "score": h2["score"], "critique": True},
+             "valeur": h2["message"], "statut": _st(h2), "score": h2["score"], "critique": True},
             {"id": "H3", "hypothese": f"A priori BF ∈ [{LR_CTIP_ITT_MIN:.0%}–{LR_CTIP_ITT_MAX:.0%}] (CTIP 2023)",
-             "valeur": h3["message"], "statut": _st(h3["ok"]), "score": h3["score"], "critique": False},
+             "valeur": h3["message"], "statut": _st(h3), "score": h3["score"], "critique": False},
             {"id": "H4", "hypothese": "Homoscédasticité Bootstrap ODP (England & Verrall 2002)",
-             "valeur": h4["message"], "statut": _st(h4["ok"]), "score": h4["score"], "critique": False},
+             "valeur": h4["message"], "statut": _st(h4), "score": h4["score"], "critique": False},
             {"id": "H5", "hypothese": "Loss Ratio Prévoyance ≤ 90%",
              "valeur": f"LR={lr*100:.1f}% {'≤' if lr<=0.90 else '>'} 90%",
              "statut": "VALIDÉE" if lr<=0.90 else ("À JUSTIFIER" if lr<=1.0 else "NON VALIDÉE"),

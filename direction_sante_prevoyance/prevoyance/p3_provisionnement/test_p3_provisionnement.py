@@ -330,7 +330,15 @@ def _impl_test_t4_hypotheses_h1_h4():
         assert "id"        in h
         assert "hypothese" in h and len(h["hypothese"]) > 5
         assert "valeur"    in h and isinstance(h["valeur"], str)
-        assert "statut"    in h and h["statut"] in ("VALIDÉE", "REJETÉE", "À JUSTIFIER")
+        # ⚠️ « NON MESURÉE » ajouté le 12/09/2026, en même temps que le contrat.
+        # Les branches « non testable » de H1, H2 et H4 publiaient « VALIDÉE »
+        # avec un score de 80 : le rapport affirmait qu'une hypothèse de Mack
+        # était vérifiée alors que RIEN ne l'avait évaluée. Un troisième état
+        # était nécessaire — l'absence de mesure n'est ni une validation ni un
+        # rejet, et ce test doit l'accepter sans quoi il rouvrirait le défaut.
+        assert "statut" in h and h["statut"] in (
+            "VALIDÉE", "REJETÉE", "À JUSTIFIER", "NON MESURÉE"
+        ), f"Statut inattendu pour {h['id']} : {h['statut']!r}"
         assert "score"     in h and 0 <= h["score"] <= 120  # H5 peut dépasser 100 légèrement
         assert "critique"  in h and isinstance(h["critique"], bool)
 

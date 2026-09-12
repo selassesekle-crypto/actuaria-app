@@ -80,6 +80,18 @@ except ImportError:
 from .m5_excel_sp  import export_excel_sp
 from .m5_rapport_sp import export_word_sp, export_pdf_sp
 
+# ── Avis actuariel ──────────────────────────────────────────────────────────
+# Un avis ne se rend pas sur une donnee absente. Voir services/sp_avis.py
+# pour la mesure qui a impose ce troisieme etat.
+try:
+    from ..services.sp_avis import (
+        NON_EMIS, rag_et_avis, statut_borne, statut_hypothese,
+    )
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_avis import (
+        NON_EMIS, rag_et_avis, statut_borne, statut_hypothese,
+    )
+
 # ── Palette ───────────────────────────────────────────────────────────────────
 NAVY   = "#0F2E52"; NAVY_L = "#1B3A5C"; NAVY_LL = "#243F6A"; OR = "#C9A84C"
 BLANC  = "#F0F4F8"; GRIS   = "#8A9AB0"; VERT   = "#2ECC71"; ROUGE = "#E74C3C"
@@ -173,9 +185,8 @@ class AgentSPRapportActuariel:
 
             # ── Hypothèses RAG ────────────────────────────────────────────────
             hyp = self._hypotheses(m1, m3, m4)
-            rag = self._rag(hyp, m4)
-            avis = ("FAVORABLE" if rag == "VERT" else
-                    "AVEC RÉSERVES" if rag == "AMBRE" else "DÉFAVORABLE")
+            rag, avis, motif_avis = self._rag(
+                hyp, m4, m1["modules_disponibles"])
 
             # ── Commentaire ───────────────────────────────────────────────────
             com = self._commentaire(rag, avis, entite, date_arrete,
@@ -572,30 +583,69 @@ class AgentSPRapportActuariel:
     # HYPOTHÈSES RAG
     # =========================================================================
     def _hypotheses(self, m1: Dict, m3: Dict, m4: Dict) -> list:
-        h_m2 = [
-            {"id":"H1","hypothese":"LR santé ∈ [55%,90%] — marché mutuelles (FNMF 2023)",
-             "valeur":f"LR observe = {m3['lr_sante_observe']:.1%}",
-             "statut":"VALIDÉE" if 0.55<=m3["lr_sante_observe"]<=0.90 or m3["lr_sante_observe"]==0 else "À JUSTIFIER",
-             "source":"FNMF 2023","critique":True},
-            {"id":"H2","hypothese":"Ratio SCR SP ≥ 100% — Art.129 Directive S2",
-             "valeur":f"Ratio SCR = {m4['ratio_scr']:.1f}%",
-             "statut":"VALIDÉE" if m4["conforme_scr"] or m4["scr_consolide"]==0 else "NON VALIDÉE",
-             "source":"Art.129 S2","critique":True},
-            {"id":"H3","hypothese":"Cohérence LR tarification ↔ provisionnement",
-             "valeur":f"LR tarif={m1['lr_sante']:.1%} vs prov={m3['lr_sante_observe']:.1%}",
-             "statut":"VALIDÉE" if m3["lr_coherent"] else "À JUSTIFIER",
-             "source":"Contrôle interne SP","critique":False},
-        ]
-        return h_m2
+        """Statut des hypothèses, avec l'absence de mesure comme état distinct.
 
-    def _rag(self, hyp: list, m4: Dict) -> str:
+        ⚠️ CORRIGÉ LE 12/09/2026. Les règles précédentes faisaient tomber
+        l'absence du côté favorable : `… or lr_sante_observe == 0` et
+        `… or scr_consolide == 0` rendaient VALIDÉE une hypothèse qu'aucune
+        donnée n'avait permis d'évaluer. Mesuré : `run()` sans aucune donnée
+        rendait trois hypothèses VALIDÉES sur des zéros, un RAG VERT et un
+        avis FAVORABLE, avec un Word de 37 005 octets à l'appui.
+        """
+        # `mesure` dit si la grandeur a ete EVALUEE, et non si elle est non
+        # nulle : une vraie mesure a zero reste une mesure.
+        modules    = m1["modules_disponibles"]
+        lr_mesure  = "S2" in modules or "S3" in modules
+        scr_mesure = m4["scr_consolide"] > 0
+        coh_mesure = m1["lr_sante"] > 0 and m3["lr_sante_observe"] > 0
+
+        s1, motif1 = statut_hypothese(
+            m3["lr_sante_observe"], 0.55, 0.90, lr_mesure)
+        s2, motif2 = statut_borne(
+            m4["conforme_scr"], scr_mesure,
+            "Ratio SCR = %.1f%% >= 100%%" % m4["ratio_scr"],
+            "Ratio SCR = %.1f%% < 100%%" % m4["ratio_scr"])
+        s3, motif3 = statut_borne(
+            m3["lr_coherent"], coh_mesure,
+            "LR tarif et provisionnement concordants",
+            "LR tarif=%.1f%% vs prov=%.1f%%" % (
+                m1["lr_sante"] * 100, m3["lr_sante_observe"] * 100))
+
+        return [
+            {"id":"H1","hypothese":"LR santé ∈ [55%,90%] — marché mutuelles (FNMF 2023)",
+             "valeur":motif1,"statut":s1,"source":"FNMF 2023","critique":True},
+            {"id":"H2","hypothese":"Ratio SCR SP ≥ 100% — Art.129 Directive S2",
+             "valeur":motif2,"statut":s2,"source":"Art.129 S2","critique":True},
+            {"id":"H3","hypothese":"Cohérence LR tarification ↔ provisionnement",
+             "valeur":motif3,"statut":s3,"source":"Contrôle interne SP","critique":False},
+        ]
+
+    def _rag(self, hyp: list, m4: Dict, modules: list):
+        """Rend (rag, avis, motif). Le périmètre est examiné AVANT les hypothèses.
+
+        ⚠️ CORRIGÉ LE 12/09/2026. La règle précédente ne rendait ROUGE sur un
+        MCR non couvert que `si mcr_consolide > 0` : un MCR absent, donc nul,
+        contournait la règle. Et aucune règle ne regardait si le périmètre
+        existait — un rapport sans aucun module sortait VERT.
+        """
+        rag, avis, motif = rag_et_avis(hyp, modules)
+
+        # Le perimetre prime sur tout : sans module, rien n est evaluable.
+        if avis == NON_EMIS:
+            return rag, avis, motif
+
+        # ⚠️ Ce controle est INCONDITIONNEL, et il doit le rester. Une premiere
+        # version de ce correctif le subordonnait a `rag == "VERT"` : un MCR non
+        # couvert cessait alors d etre ROUGE des qu une hypothese etait par
+        # ailleurs a justifier. Mesure : la chaine complete est passee de ROUGE
+        # a AMBRE. Un plancher de capital non couvert ne se laisse pas
+        # attenuer par le statut d une autre hypothese.
         if not m4["conforme_mcr"] and m4["mcr_consolide"] > 0:
-            return "ROUGE"
-        non_val = [h for h in hyp if h["statut"]=="NON VALIDÉE" and h["critique"]]
-        if non_val:
-            return "ROUGE"
-        a_just = [h for h in hyp if h["statut"]=="À JUSTIFIER"]
-        return "AMBRE" if a_just else "VERT"
+            return "ROUGE", "DÉFAVORABLE", (
+                "MCR consolidé non couvert : %s" % motif
+                if motif else "MCR consolidé non couvert.")
+
+        return rag, avis, motif
 
     # =========================================================================
     # COMMENTAIRE
