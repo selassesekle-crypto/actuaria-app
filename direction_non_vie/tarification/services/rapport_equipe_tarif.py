@@ -30,6 +30,9 @@ from core.conformite_reglementaire import (
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
     synthese_modele_dl,
     NON_TRANSMIS, phrase_qualite_non_transmise,
+    # ⚠️⚠️ « A AFFICHER DANS TOUT LIVRABLE », dit sa docstring — et elle
+    # n'atteignait que l'Excel A6, 1 surface sur 6 (mesure du 12/09/2026).
+    avertissement_controle_effet,
 )
 from core.elasticite import synthese_elasticite
 from core.qualite_donnees import (MARQUEUR_QUALITE_NON_EXECUTEE,
@@ -288,6 +291,11 @@ _LABELS_SYNTHESES = (
     # html et le word l'ignorent en silence (piège `CF-9`).
     ('arbitrage_contestable',
      'Réserve — le modèle retenu vient d\'un tri automatique'),
+    # ⚠️ Le libellé s'écrit AVEC la clé — sixième fois que cette phrase est
+    # nécessaire dans ce fichier, et elle l'est : sans libellé, le html et
+    # le word ignorent la clé en silence.
+    ('controle_effet',
+     "Contrôle anti-fuite par l'effet — garde-fou n°4"),
 )
 
 
@@ -370,6 +378,16 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
         # retenu l'a été par un tri automatique entre bases de Gini qui ne
         # sont pas sur le même pied.
         'arbitrage_contestable': r6.get('arbitrage_contestable'),
+        # ⚠️⚠️ LE GARDE-FOU N°4 — le SEUL qui ne dépende d'aucun nom de
+        # colonne. Dire qu'il n'a pas tourné, ou qu'il n'a couvert qu'une
+        # partie des cibles, appartient au rapport qui CIRCULE : les
+        # contrôles par le nom sont structurellement insuffisants, et
+        # l'audit l'a chiffré ('garantie_montant_regle' : Gini 0,0709 →
+        # 0,9222).
+        # ⚠️ On RELAIE la source unique, on ne recompose pas : deux rendus
+        # seraient deux vérités possibles pour le même fait.
+        'controle_effet': avertissement_controle_effet(
+            r6.get('controle_effet')),
     }
     return {k: v for k, v in brut.items() if v}
 

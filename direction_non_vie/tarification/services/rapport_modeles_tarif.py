@@ -23,6 +23,9 @@ from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
     synthese_modele_dl,
+    # ⚠️⚠️ SA DOCSTRING DIT « A AFFICHER DANS TOUT LIVRABLE », et elle
+    # n'atteignait que l'Excel A6 — 1 surface sur 6, mesurée le 12/09/2026.
+    avertissement_controle_effet,
 )
 from core.qualite_donnees import synthese_qualite_donnees
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
@@ -745,6 +748,43 @@ def _bloc_dl_html(texte: str) -> str:
         return ''
     return (f'<div class="raisons-plafond">\n'
             f'  <div class="raisons-titre">{TITRE_DL_PRODUCTION}</div>\n'
+            f'    <ul>\n      <li>{texte}</li>\n    </ul>\n'
+            f'</div>\n')
+
+
+#: Le titre du bloc du garde-fou n°4. ⚠️ Le TEXTE vient de
+#: `avertissement_controle_effet` — SOURCE UNIQUE, deja partagee avec
+#: l'Excel A6 : deux rendus seraient deux verites possibles pour le meme
+#: fait.
+TITRE_CONTROLE_EFFET = "Controle anti-fuite par l'effet"
+
+
+def controle_effet_publie(result_a6) -> str:
+    """L'avertissement du garde-fou n°4, tel que la source unique le rend.
+
+    ⚠️⚠️ IL N'ATTEIGNAIT QU'UNE SURFACE SUR SIX — mesure du 12/09/2026, par
+    temoin plante. Or la docstring de `avertissement_controle_effet` dit
+    *« SOURCE UNIQUE du texte, a afficher dans TOUT livrable »*, et raconte
+    que la propriete `controle_effet_execute` etait restee **une trace
+    interne que rien n'atteignait** jusqu'au 25/08/2026.
+
+      *Le garde-fou n°4 est le SEUL qui ne depende d'aucun nom de colonne.
+      Dire qu'il n'a pas tourne, ou qu'il n'a couvert qu'une partie des
+      cibles, appartient au document que l'actuaire signe.*
+
+    ⚠️ RIEN N'EST RECALCULE ICI : on relaie la source unique. `None` quand
+    il n'y a rien a signaler -- le bloc disparait alors, il ne rassure pas.
+    """
+    return avertissement_controle_effet(
+        (result_a6 or {}).get('controle_effet')) or ''
+
+
+def _bloc_controle_effet_html(texte: str) -> str:
+    """Le garde-fou n°4 en HTML. Vide quand il n'y a rien a signaler."""
+    if not texte:
+        return ''
+    return (f'<div class="raisons-plafond">\n'
+            f'  <div class="raisons-titre">⚠️ {TITRE_CONTROLE_EFFET}</div>\n'
             f'    <ul>\n      <li>{texte}</li>\n    </ul>\n'
             f'</div>\n')
 
@@ -2641,7 +2681,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_tarif_html(_tarif_publie)}{_bloc_conditions_html(conditions_mesure)}{_bloc_comparaison_html(comparaison_prix)}{_bloc_decision_html(_dec_publie, divergence_actuaire(_dec))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
+{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_tarif_html(_tarif_publie)}{_bloc_conditions_html(conditions_mesure)}{_bloc_comparaison_html(comparaison_prix)}{_bloc_decision_html(_dec_publie, divergence_actuaire(_dec))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_bloc_controle_effet_html(controle_effet_publie(result_a6))}{_ouvrir_chapitre(1)}    <table>
       {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
@@ -3262,6 +3302,20 @@ def export_word(
                 _passage = _run(p, f'   · {_lib_w} — {_txt_w}', sz=9, col=NR)
                 if _i < len(_res_w) - 1:
                     _passage.add_break()
+
+        # ⚠️⚠️ LE GARDE-FOU N°4, DANS LES DEUX FORMATS AUSSI. Il n'atteignait
+        # que l'Excel A6 — 1 surface sur 6, mesuré le 12/09/2026 — alors que
+        # sa source unique porte, écrit dans sa docstring, « à afficher dans
+        # TOUT livrable ». N'en poser qu'un des deux formats laisserait la
+        # moitié du livrable signé muette : le piège de l'avertissement DL.
+        # ⚠️ Même source que le HTML (`controle_effet_publie`) : deux rendus,
+        # ce seraient deux vérités possibles pour le même fait.
+        _ce_w = controle_effet_publie(result_a6)
+        if _ce_w:
+            p = doc.add_paragraph()
+            _run(p, '⚠ ' + TITRE_CONTROLE_EFFET, bold=True, sz=10,
+                 col=AR).add_break()
+            _run(p, f'   · {_ce_w}', sz=9, col=NR)
 
         doc.add_page_break()
 

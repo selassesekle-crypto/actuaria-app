@@ -83,8 +83,14 @@ def _r6(**extra):
 
 class T1_LExcelDEquipeRendTOUTES_les_cles(unittest.TestCase):
 
-    def test_cs_1_les_seize_cles_atteignent_les_TROIS_formats_d_equipe(self):
+    def test_cs_1_TOUTES_les_cles_atteignent_les_TROIS_formats_d_equipe(self):
         """CS-1 : plus AUCUNE clé absente d'un format.
+
+        ⚠️ LE NOM NE PORTE PLUS DE COMPTE — 12/09/2026. Il annonçait « les
+        seize clés » quand la table en portait DIX-NEUF : un nom qui compte
+        se périme à chaque ajout, en silence, et personne ne relit un nom de
+        méthode. L'assiette, elle, est DÉRIVÉE de `_LABELS_SYNTHESES` depuis
+        le début — c'est le nom qui mentait, pas le contrôle.
 
         ⚠️ Aucune liste de trous n'est declaree ici, et c'est le point : le
         filet de fin de section les couvre TOUTES. Une exemption serait le
@@ -207,6 +213,63 @@ class T3_LesSixSurfaces(unittest.TestCase):
                     manquantes,
                     f"« {cle} » n'atteint pas {manquantes} sur les six "
                     f"surfaces signees")
+
+    def test_cs_7_le_GARDE_FOU_N4_atteint_les_SIX_surfaces(self):
+        """CS-7 : le controle anti-fuite par l'effet, de 1/6 a 6/6.
+
+        ⚠️⚠️ POURQUOI UNE DENT A PART. `CS-6` itere `RESERVES_A6`, et le
+        garde-fou n°4 n'est PAS une reserve : `result_a6['controle_effet']`
+        est un DICT (`{'execute': bool, 'motifs': {cible: pourquoi}}`) que
+        seule `avertissement_controle_effet` sait rendre. Le glisser dans
+        le catalogue aurait publie le dict brut.
+
+        ⚠️⚠️ ET CE QUI ETAIT EN JEU. Sa source unique porte, ecrit dans sa
+        docstring, *« a afficher dans TOUT livrable »* -- et elle raconte
+        que la propriete `controle_effet_execute` etait restee **une trace
+        interne que rien n'atteignait** jusqu'au 25/08/2026. Mesure du
+        12/09/2026 : elle atteignait l'Excel A6, et RIEN d'autre.
+
+          *Le garde-fou n°4 est le SEUL qui ne depende d'aucun nom de
+          colonne. Dire qu'il n'a pas tourne appartient au document que
+          l'actuaire signe.*
+
+        ⚠️ LES DEUX SENS. Non execute -> le texte atteint les six ; execute
+        sans motif -> RIEN n'est publie, car un bloc toujours affiche ne
+        signale plus rien.
+        """
+        temoin = 'ZZCIBLEEFFETZZ'
+        r6 = _r6(controle_effet={'execute': False,
+                                 'motifs': {temoin: 'non examinee'}})
+        res = {'a6': r6}
+        surfaces = {
+            'equipe.html': RE.export_html_equipe(res),
+            'equipe.word': _docx(RE.export_word_equipe(res)),
+            'equipe.excel': _xlsx(RE.export_excel_equipe(res)),
+            'modeles.html': RM.export_html({}, {}, r6),
+            'modeles.word': _docx(RM.export_word({}, {}, r6)),
+            'a6.excel': _xlsx(TX.export_excel_a6(r6)),
+        }
+        manquantes = [nom for nom, txt in surfaces.items()
+                      if temoin not in txt]
+        self.assertFalse(
+            manquantes,
+            f"le garde-fou n°4 n'atteint pas {manquantes} : un actuaire y "
+            f"signe un tarif sans savoir que le SEUL controle independant "
+            f"des noms de colonnes n'a examine aucune colonne")
+
+        #: ⚠️ SECOND SENS : execute et complet -> le bloc DISPARAIT.
+        r6b = _r6(controle_effet={'execute': True, 'motifs': {}})
+        for nom, txt in (('modeles.html', RM.export_html({}, {}, r6b)),
+                         ('modeles.word',
+                          _docx(RM.export_word({}, {}, r6b)))):
+            with self.subTest(surface=nom):
+                self.assertNotIn(
+                    'NON EXÉCUTÉ', txt,
+                    f"{nom} annonce le garde-fou n°4 comme non execute "
+                    f"alors qu'il a couvert toutes les cibles : un bloc qui "
+                    f"parle toujours ne signale plus rien")
+        print(f"    CS-7 le garde-fou n4 atteint {len(surfaces)}/6 surfaces, "
+              f"et se tait quand il n'a rien a dire")
 
 
 if __name__ == '__main__':
