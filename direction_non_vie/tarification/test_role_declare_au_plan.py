@@ -269,10 +269,10 @@ class TestRoleDeclareAuPlan(unittest.TestCase):
     def tearDownClass(cls):
         cls._silence.setLevel(cls._niveau)
 
-    def test_RP1_LE_RELEVE_distingue_un_defaut_VIVANT_d_un_defaut_INERTE(
+    def test_RDP1_LE_RELEVE_distingue_un_defaut_VIVANT_d_un_defaut_INERTE(
             self):
         """⚠️⚠️ CE CONTROLE PASSE AVANT LES AUTRES. Un relevé qui ne verrait
-        aucun defaut de signature rendrait `RP-2` vert sur un depot qui les
+        aucun defaut de signature rendrait `RDP-2` vert sur un depot qui les
         porte tous : *il attesterait sans surveiller*. Il recoit donc les
         deux sens sur une source synthetique."""
         arbre = ast.parse(
@@ -313,10 +313,10 @@ class TestRoleDeclareAuPlan(unittest.TestCase):
             ('autre_fonction', 'col_frequence'), passes,
             "un mot-cle passe a une fonction exonere une autre fonction : "
             "l'exoneration voyage d'une fonction a l'autre")
-        print(f"    RP-1 releve : {len(defauts)} defaut(s) vu(s), "
+        print(f"    RDP-1 releve : {len(defauts)} defaut(s) vu(s), "
               f"{len(passes)} mot(s)-cle(s) passe(s), les deux sens tenus")
 
-    def test_RP2_AUCUN_defaut_de_signature_VIVANT_ne_nomme_un_role_du_plan(
+    def test_RDP2_AUCUN_defaut_de_signature_VIVANT_ne_nomme_un_role_du_plan(
             self):
         """⚠️⚠️ LE SCEAU DE CLASSE. Un defaut qu'AUCUN appelant de production
         n'ecrase gouverne la production. L'assiette est le depot suivi
@@ -339,11 +339,11 @@ class TestRoleDeclareAuPlan(unittest.TestCase):
             f"plan declare, sans qu'aucun appelant ne les ecrase ni que la "
             f"fonction les rederive du plan : le litteral gouverne la "
             f"production. {fautifs[:4]}")
-        print(f"    RP-2 SCEAU : 0 role gouverne par un litteral sur "
+        print(f"    RDP-2 SCEAU : 0 role gouverne par un litteral sur "
               f"{len(defauts)} defaut(s) releve(s), {len(derives)} "
               f"derivation(s) du plan")
 
-    def test_RP3_A1_MESURE_l_exposition_au_lieu_de_la_CERTIFIER(self):
+    def test_RDP3_A1_MESURE_l_exposition_au_lieu_de_la_CERTIFIER(self):
         """⚠️⚠️ LE COEUR, ET IL NE SE VOIT QUE SUR DONNEE ABIMEE. Sur donnees
         saines les deux chemins rendent 100,0 : la coincidence masque tout.
         On abime donc 200 lignes sur 700 -- exposition 3,5, impossible pour
@@ -361,10 +361,10 @@ class TestRoleDeclareAuPlan(unittest.TestCase):
                     f"3,5 -- impossible -- et le taux publie reste "
                     f"{pct}. Une exposition qu'on n'a pas su lire est "
                     f"certifiee conforme.")
-        print("    RP-3 SCEAU : le taux publie est MESURE sous les deux "
+        print("    RDP-3 SCEAU : le taux publie est MESURE sous les deux "
               "noms de colonne")
 
-    def test_RP4_A1_rend_le_MEME_verdict_quel_que_soit_le_NOM_de_la_colonne(
+    def test_RDP4_A1_rend_le_MEME_verdict_quel_que_soit_le_NOM_de_la_colonne(
             self):
         """⚠️ Memes donnees, meme plan, seul le NOM change : toute difference
         est alors imputable au nom, a rien d'autre."""
@@ -378,10 +378,10 @@ class TestRoleDeclareAuPlan(unittest.TestCase):
             (a.get('aberrants') or {}).get('exposition_nulle_ou_negative'),
             (b.get('aberrants') or {}).get('exposition_nulle_ou_negative'),
             "l'aberration `exposition <= 0` n'est cherchee que sous un nom")
-        print(f"    RP-4 A1 identique sous les deux noms : "
+        print(f"    RDP-4 A1 identique sous les deux noms : "
               f"{a.get('expo_ok_pct')}")
 
-    def test_RP6_une_exposition_ABSENTE_est_DECLAREE_et_jamais_certifiee(
+    def test_RDP6_une_exposition_ABSENTE_est_DECLAREE_et_jamais_certifiee(
             self):
         """⚠️⚠️ LA MOITIE MUETTE, ET C'EST UN PLANT QUI A MONTRE QU'ELLE
         N'ETAIT PAS COUVERTE. Les autres controles renomment la colonne des
@@ -413,10 +413,10 @@ class TestRoleDeclareAuPlan(unittest.TestCase):
             q.get('expo_non_mesuree_motif'),
             "l'absence est rendue SANS MOTIF : elle redevient muette, et un "
             "lecteur ne peut pas savoir pourquoi le taux manque")
-        print(f"    RP-6 SCEAU : exposition absente -> taux ABSENT et motif "
+        print(f"    RDP-6 SCEAU : exposition absente -> taux ABSENT et motif "
               f"publie ({str(q.get('expo_non_mesuree_motif'))[:38]}...)")
 
-    def test_RP5_A2_valide_l_exposition_DECLAREE_et_non_une_colonne_devinee(
+    def test_RDP5_A2_valide_l_exposition_DECLAREE_et_non_une_colonne_devinee(
             self):
         """⚠️⚠️ `_valider_sortie` cherchait `'exposition'` en dur et comparait
         a `1`, alors que son JUMEAU `_traiter_exposition`, dans le meme
@@ -448,7 +448,7 @@ class TestRoleDeclareAuPlan(unittest.TestCase):
         self.assertIs(
             vus['Exposure'], True,
             f"des donnees SAINES sont declarees invalides : {vus}")
-        print(f"    RP-5 SCEAU : A2 valide l'exposition declaree, "
+        print(f"    RDP-5 SCEAU : A2 valide l'exposition declaree, "
               f"{vus['Exposure']} sous les deux noms")
 
 
