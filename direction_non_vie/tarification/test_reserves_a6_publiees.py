@@ -79,6 +79,12 @@ _CLES = tuple(cle for cle, _ in RM.RESERVES_A6)
 _PLANCHER = frozenset({
     'reserve_arbitrage', 'reserve_vraisemblance', 'reserve_bases_gini',
     'reserve_surapprentissage', 'anti_selection_a3', 'reserve_gini_a3',
+    #: ⚠️ Entree le 12/09/2026 (lot L9). Elle n'atteignait que l'Excel A6 --
+    #: 1 surface sur 6 --, alors que sa raison ecrite est << pour que
+    #: l'actuaire garde la main >>. C'est ce controle qui a DICTE le lot :
+    #: la cle ajoutee au catalogue, `RA-1` a rougi sur les trois formats
+    #: d'equipe jusqu'a ce que le relais y soit pose.
+    'arbitrage_contestable',
 })
 
 

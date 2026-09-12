@@ -284,6 +284,10 @@ _LABELS_SYNTHESES = (
     # comme un feu vert par qui l'a connu plafonnant.
     ('reserve_surapprentissage',
      'Réserve — sur-apprentissage non satisfait, mais non plafonnant'),
+    # ⚠️ Le libellé s'écrit DANS LE MÊME GESTE que la clé : sans lui, le
+    # html et le word l'ignorent en silence (piège `CF-9`).
+    ('arbitrage_contestable',
+     'Réserve — le modèle retenu vient d\'un tri automatique'),
 )
 
 
@@ -358,6 +362,14 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
         #   *Une absence de mesure se déclare ; elle ne se convertit pas
         #   en verdict.*
         'reserve_gini':  r6.get('reserve_gini_a3'),
+        # ⚠️⚠️ ELLE N'ATTEIGNAIT QUE L'EXCEL A6 — 1 surface sur 6, mesurée
+        # par exécution le 12/09/2026. Or sa raison écrite, dans
+        # `reserve_arbitrage_contestable`, est *« pour que l'actuaire garde
+        # la main »* — et ce rapport-ci est celui qui CIRCULE.
+        # ⚠️ Elle ne bloque rien : elle dit à voix haute que le modèle
+        # retenu l'a été par un tri automatique entre bases de Gini qui ne
+        # sont pas sur le même pied.
+        'arbitrage_contestable': r6.get('arbitrage_contestable'),
     }
     return {k: v for k, v in brut.items() if v}
 

@@ -614,6 +614,16 @@ RESERVES_A6 = (
     # ⚠️ H1 ne plafonne plus le statut ; le dire est la condition du retrait.
     ('reserve_surapprentissage',
      'Sur-apprentissage non satisfait, mais non plafonnant'),
+    # ⚠️⚠️ ELLE N'ATTEIGNAIT QUE L'EXCEL A6 — 1 surface sur 6, mesurée par
+    # exécution le 12/09/2026. Et sa raison écrite, dans
+    # `reserve_arbitrage_contestable`, est *« pour que l'actuaire garde la
+    # main »* : or l'actuaire signe CE rapport, pas le classeur technique.
+    # **Le fait n'atteignait pas la personne pour qui il a été écrit.**
+    # ⚠️ Elle ne bloque rien et ne plafonne aucun statut : elle rend le
+    # choix automatique CONTESTABLE À VOIX HAUTE. Un fail-safe qui met la
+    # chaîne hors service n'est pas un fail-safe.
+    ('arbitrage_contestable',
+     'Le modèle retenu vient d\'un tri automatique entre bases de Gini'),
     # ⚠️⚠️ CES DEUX-LÀ SE LISENT COMME UNE PAIRE, ET LEUR DIFFÉRENCE EST TOUT
     # LE SUJET : la première annonce un VERDICT — le modèle discrimine à
     # l'envers, le statut est ROUGE —, la seconde une ABSENCE : le Gini n'a
