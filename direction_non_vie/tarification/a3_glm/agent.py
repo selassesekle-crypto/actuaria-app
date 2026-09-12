@@ -279,6 +279,48 @@ TRAIN_SIZE = 0.80
 # `test_pipeline_agents` est le bon : *on ne bricole pas un modèle sur rien,
 # on le DIT.* Ce qui change ici est le CONTENU de l'aveu, pas sa nature.
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  UNE PREDICTION QUI ECHOUE N'EST PAS UNE PREDICTION CONSTANTE
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ QUATRE `except Exception:` DE CE FICHIER REMPLACAIENT LA PREDICTION PAR
+# UNE MOYENNE, EN SILENCE. Mesure du 11/09/2026 sur 2 000 contrats, en faisant
+# lever `predict` :
+#
+#     predict OK      frequence_annuelle : 2 000 valeurs distinctes
+#                     prime pure totale  : 293 874,25 EUR
+#     predict ECHOUE  frequence_annuelle : 1 SEULE valeur
+#                     prime pure totale  : 117 600,00 EUR   (-60,0 %)
+#
+# *Le tarif devient PLAT -- un prix unique pour tout le portefeuille, aucune
+# segmentation -- et la seule trace est un `logger.warning`.* Le Gini, la RMSE
+# et le ratio de sur-apprentissage sont alors mesures sur une CONSTANTE, puis
+# publies comme des mesures du modele.
+#
+# ⚠️ ET LA VALEUR DE REPLI PORTAIT DEUX DEFAUTS DE PLUS :
+#   . `self.metriques['poisson'].get('col_freq', 'nb_sinistres')` -- la cle
+#     `col_freq` n'est ECRITE NULLE PART dans le depot (relevé : UNE seule
+#     occurrence, cette lecture). Le litteral s'applique donc toujours ;
+#   . la valeur rendue est `df['nb_sinistres'].mean()`, une frequence BRUTE,
+#     rangee sous une cle nommee `frequence_annuelle` -- avec une exposition
+#     moyenne de 0,591, elle sous-estime encore par construction ;
+#   . et la branche `else 0.1` FABRIQUE une frequence litterale.
+#
+# ⚠️⚠️ CE MODULE SAIT DEJA FAIRE AUTREMENT, DEUX FOIS. `_calculer_gini` rend
+# `None` plutot qu'un zero (`a3/C6`), et `_calibration_impossible` LEVE quand
+# aucun modele n'est ajustable. La regle suivie ici est la leur :
+#   . sur les METRIQUES (jeu de test), une prediction impossible rend des
+#     metriques `None` -- une absence se declare ;
+#   . sur le PRIX (`_calculer_predictions`), on LEVE -- une prime fabriquee
+#     est le seul cas que ce depot refuse partout ailleurs.
+class PredictionImpossible(ValueError):
+    """Le modele est ajuste mais ne peut pas predire sur ces donnees.
+
+    ⚠️ Distincte de `CalibrationImpossible` : la, aucun modele n'existait ;
+    ici il existe et il refuse ces lignes. *Deux causes, deux exceptions :
+    l'appelant qui rattrape ne traite pas les deux pareil.*
+    """
+
+
 class CalibrationImpossible(ValueError):
     """Aucun modèle ajustable, pas même l'intercept seul.
 
@@ -1147,10 +1189,21 @@ class AgentA3GLM:
                 pd.DataFrame({'intercept': np.ones(len(df_test))})
             )
 
+        # ⚠️ `None` PLUTOT QU'UNE CONSTANTE : voir la note `PredictionImpossible`.
+        # Les metriques qui en decoulent (Gini, RMSE, sur-apprentissage) sont
+        # alors publiees NON MESUREES, jamais calculees sur une constante.
+        _echec_pred = None
         try:
             pred_test = modele_final.predict(X_test, offset=offset_test)
-        except Exception:
-            pred_test = np.full(len(df_test), df_train[col_freq].mean())
+        except Exception as _e_pred:                          # noqa: BLE001
+            _echec_pred = f"{type(_e_pred).__name__}: {_e_pred}"
+            logger.error(
+                "[A3] GLM Poisson : PREDICTION IMPOSSIBLE sur le jeu de test "
+                "(%s). Gini, RMSE et sur-apprentissage sont publies NON "
+                "MESURES. Le repli precedent posait la moyenne du train, "
+                "c'est-a-dire un tarif PLAT presente comme une mesure.",
+                _echec_pred)
+            pred_test = None
 
         # Gini (coefficient de discrimination)
         # ⚠️⚠️ CONSTAT `a3/C15` — LE REPLI CASSAIT LUI-MEME. Quand
@@ -1160,16 +1213,18 @@ class AgentA3GLM:
         # de l'erreur qu'il etait cense absorber.* C'est la forme de
         # `pipeline/C2`, sur un autre agent.
         # `np.asarray` accepte les deux natures, et n'en suppose aucune.
-        gini = self._calculer_gini(df_test[col_freq].values,
-                                   np.asarray(pred_test))
-        gini_train, overfit_ratio, overfit_ic, overfit_n = self._stabilite_train(
-            modele_final, gini, df_test[col_freq].values,
-            np.asarray(pred_test))
+        gini = (None if pred_test is None else
+                self._calculer_gini(df_test[col_freq].values,
+                                    np.asarray(pred_test)))
+        gini_train, overfit_ratio, overfit_ic, overfit_n = (
+            (None, None, None, None) if pred_test is None else
+            self._stabilite_train(
+                modele_final, gini, df_test[col_freq].values,
+                np.asarray(pred_test)))
 
-        # RMSE sur le test
-        rmse = np.sqrt(mean_squared_error(
-            df_test[col_freq], pred_test
-        ))
+        # RMSE sur le test — `None` quand aucune prediction n'existe.
+        rmse = (None if pred_test is None else
+                np.sqrt(mean_squared_error(df_test[col_freq], pred_test)))
 
         metriques = {
             'aic':              round(float(modele_final.aic), 2),
@@ -1199,7 +1254,11 @@ class AgentA3GLM:
             # ⚠️ BASE MESURÉE : `predict(X_test, offset=offset_test)` incorpore
             # l'exposition — le tri se fait sur un COMPTAGE (constat `a4/C10`).
             'base_gini':        BASE_GINI_COMPTAGE,
-            'rmse_test':        round(rmse, 4),
+            'rmse_test':        (round(rmse, 4) if rmse is not None else None),
+            # ⚠️ L'ECHEC DE PREDICTION VOYAGE AVEC LES METRIQUES QU'IL VIDE.
+            # Sans lui, un lecteur ne peut pas distinguer << non mesure faute
+            # de sinistre >> de << non mesure parce que le modele a refuse >>.
+            'prediction_impossible': _echec_pred,
             'nb_vars_retenues': len(vars_actives),
             'nb_vars_exclues':  len(vars_exclues),
             'vars_retenues':    vars_actives,
@@ -1214,7 +1273,8 @@ class AgentA3GLM:
             # exactement là que la sélection retenait `alarme`, du bruit pur.
             'nb_sinistres_train': int(df_train[col_freq].sum()),
             'frequence_obs':    round(float(df_train[col_freq].mean()), 4),
-            'frequence_pred':   round(float(pred_test.mean()), 4),
+            'frequence_pred':   (None if pred_test is None
+                                 else round(float(pred_test.mean()), 4)),
         }
         # ⚠️⚠️ CE QUE LA SÉLECTION NE DISAIT PAS D'ELLE-MÊME. Elle publiait
         # « 1 variable retenue » sans jamais publier sur COMBIEN de candidates
@@ -1573,31 +1633,46 @@ class AgentA3GLM:
                 pd.DataFrame({'i': np.ones(len(df_sin_test))})
             )
 
+        # ⚠️⚠️ MÊME RÈGLE QUE LA BRANCHE FRÉQUENCE, ET POUR LA MÊME RAISON —
+        # 13/09/2026. Le correctif reçu fermait le site POISSON des métriques
+        # et les DEUX sites du prix ; il laissait celui-ci, et son jumeau
+        # Tweedie, remplacer la prédiction par une moyenne. *Corriger une
+        # seule des branches aurait laissé le défaut vivant sur la sévérité —
+        # c'est mot pour mot ce que le commentaire de `a3/C15`, vingt lignes
+        # plus bas, reproche déjà à une correction d'hier.*
+        # ⚠️ `None` plutôt qu'une constante : les métriques qui en découlent
+        # sont alors publiées NON MESURÉES, jamais calculées sur un plat.
+        _echec_pred = None
         try:
             pred_test = modele_final.predict(X_test)
-        except Exception:
-            pred_test = np.full(
-                len(df_sin_test),
-                float(y_sev_train.mean())
-            )
+        except Exception as _e_pred:                          # noqa: BLE001
+            _echec_pred = f"{type(_e_pred).__name__}: {_e_pred}"
+            logger.error(
+                "[A3] GLM de coût : PRÉDICTION IMPOSSIBLE sur le jeu de test "
+                "(%s). Gini, RMSE et sur-apprentissage sont publiés NON "
+                "MESURÉS. Le repli précédent posait la moyenne observée, "
+                "c'est-à-dire un coût identique pour tous les contrats.",
+                _echec_pred)
+            pred_test = None
 
         # Sans sinistre en test, le RMSE et le Gini du coût moyen n'existent
         # pas : un 0.0 affirmerait un ajustement parfait que rien n'a mesuré.
         rmse = np.sqrt(mean_squared_error(
             y_sev_test, pred_test
-        )) if nb_sin_test > 0 else None
+        )) if (nb_sin_test > 0 and pred_test is not None) else None
 
         # ⚠️⚠️ LE JUMEAU DE LA BRANCHE FREQUENCE — constat `a3/C15`. Le meme
         # `.values` sur un `np.full`, le meme `AttributeError` dans le chemin
         # de secours. *Corriger une seule des deux aurait laisse le defaut
         # vivant sur la severite, et l'asymetrie serait devenue invisible.*
+        _mesurable = nb_sin_test > 0 and pred_test is not None
         gini = self._calculer_gini(
             y_sev_test.values, np.asarray(pred_test)
-        ) if nb_sin_test > 0 else None
+        ) if _mesurable else None
         gini_train, overfit_ratio, overfit_ic, overfit_n = self._stabilite_train(
             modele_final, gini,
-            y_sev_test.values if nb_sin_test > 0 else None,
-            np.asarray(pred_test) if nb_sin_test > 0 else None)
+            y_sev_test.values if _mesurable else None,
+            np.asarray(pred_test) if _mesurable else None)
 
         metriques = {
             'aic':              round(float(modele_final.aic), 2),
@@ -1636,6 +1711,11 @@ class AgentA3GLM:
             # seuls — le tri se fait sur un COÛT MOYEN.
             'base_gini':        BASE_GINI_COUT_MOYEN,
             'rmse_test':        (round(rmse, 2) if rmse is not None else None),
+            # ⚠️ L'ÉCHEC DE PRÉDICTION VOYAGE AVEC LES MÉTRIQUES QU'IL VIDE.
+            # Sans lui, un lecteur ne distingue pas « non mesuré faute de
+            # sinistre en test » de « non mesuré parce que le modèle a
+            # refusé » — deux causes, deux décisions.
+            'prediction_impossible': _echec_pred,
             'nb_vars_retenues': len(vars_actives),
             'nb_vars_exclues':  len(vars_exclues),
             'vars_retenues':    vars_actives,
@@ -1650,7 +1730,8 @@ class AgentA3GLM:
             'nb_sinistres_train': nb_sin_train,
             'cout_moyen_obs':   round(float(y_sev_train.mean()), 2),
             'cout_moyen_pred':  round(float(pred_test.mean()), 2)
-                                if len(pred_test) > 0 else None,
+                                if (pred_test is not None
+                                    and len(pred_test) > 0) else None,
         }
         # ⚠️ MÊME DÉCLARATION QUE POISSON — ne la poser que sur un des trois
         # moteurs créerait exactement l'asymétrie entre voisins que ce
@@ -1918,10 +1999,24 @@ class AgentA3GLM:
                 pd.DataFrame({'i': np.ones(len(df_test))})
             )
 
+        # ⚠️⚠️ LE TROISIÈME JUMEAU — 13/09/2026. Poisson et Gamma ne posent
+        # plus de constante quand `predict` refuse ; laisser celui-ci le
+        # faire rendrait l'asymétrie invisible, exactement ce que le
+        # commentaire de `a3/C15` reproche déjà à une correction d'hier.
+        # ⚠️ Ce moteur prédit la PRIME PURE directement : une constante y
+        # serait un tarif plat, publié comme une mesure du modèle.
+        _echec_pred = None
         try:
             pred_test = modele_final.predict(X_test)
-        except Exception:
-            pred_test = np.full(len(df_test), df_train[col_target_tweedie].mean())
+        except Exception as _e_pred:                          # noqa: BLE001
+            _echec_pred = f"{type(_e_pred).__name__}: {_e_pred}"
+            logger.error(
+                "[A3] GLM Tweedie : PRÉDICTION IMPOSSIBLE sur le jeu de test "
+                "(%s). Gini, RMSE et sur-apprentissage sont publiés NON "
+                "MESURÉS. Le repli précédent posait la moyenne du train, "
+                "c'est-à-dire une prime pure identique pour tous.",
+                _echec_pred)
+            pred_test = None
 
         # ⚠️⚠️ LE TWEEDIE POSE ENFIN SON GINI — constat `a3/C6`.
         # Il n'en posait AUCUN, et A6 lisait `met.get('gini', 0)` : le modèle
@@ -1937,6 +2032,8 @@ class AgentA3GLM:
         # `cible` diffère est écarté avec le motif `cible_differente`. *Mesuré
         # avant de le réaffirmer.*
         try:
+            if pred_test is None:
+                raise ValueError('prediction impossible')
             gini_tw = self._calculer_gini(
                 df_test[col_target_tweedie].values,
                 np.asarray(pred_test, dtype=float),
@@ -1951,6 +2048,7 @@ class AgentA3GLM:
             gini_tw = None
 
         gini_train_tw, overfit_ratio_tw, overfit_ic_tw, overfit_n_tw = (
+            (None, None, None, None) if pred_test is None else
             self._stabilite_train(
                 modele_final, gini_tw,
                 df_test[col_target_tweedie].values,
@@ -1994,7 +2092,11 @@ class AgentA3GLM:
             # numpy, `len()` rend deja un `int`.
             'nb_sinistres_train': int(df_train[col_freq].sum()),
             'prime_pure_moy_obs':  round(float(df_train[col_target_tweedie].mean()), 2),
-            'prime_pure_moy_pred': round(float(pred_test.mean()), 2),
+            'prime_pure_moy_pred': (None if pred_test is None
+                                    else round(float(pred_test.mean()), 2)),
+            # ⚠️ L'échec voyage avec les métriques qu'il vide — même règle
+            # que sur les deux autres moteurs.
+            'prediction_impossible': _echec_pred,
         }
         metriques['puissance_selection'] = phrase_puissance_selection(
             len(vars_actives),
@@ -2129,11 +2231,22 @@ class AgentA3GLM:
                     predictions['frequence_annuelle'] = _pf / np.maximum(expo, 1e-6)
                     predictions['frequence_brute']    = _pf
                 except Exception as e:
-                    logger.warning(f"Erreur prédiction Poisson : {e}")
-                    predictions['frequence_annuelle'] = np.full(
-                        len(df), df[self.metriques['poisson'].get('col_freq','nb_sinistres')].mean()
-                        if hasattr(self.modeles['poisson'], 'model') else 0.1
-                    )
+                    # ⚠️⚠️ ON LEVE, ON NE FABRIQUE PAS UNE FREQUENCE. Cette
+                    # valeur entre directement dans `prime_pure` vingt lignes
+                    # plus bas : la fabriquer, c'est fabriquer un PRIX.
+                    # Mesure du 11/09/2026 : le repli rendait -60,0 % de
+                    # charge et un tarif PLAT, sous `success=True`.
+                    # ⚠️ Les deux defauts de la valeur de repli sont documentes
+                    # dans la note `PredictionImpossible` : une cle `col_freq`
+                    # qui n'existe nulle part, et un litteral `0.1`.
+                    raise PredictionImpossible(
+                        f"GLM Poisson : le modele est ajuste mais ne peut pas "
+                        f"predire sur ce portefeuille ({type(e).__name__}: "
+                        f"{e}). Aucune frequence n'est fabriquee : elle "
+                        f"entrerait telle quelle dans la prime pure. "
+                        f"Variables attendues : "
+                        f"{self.metriques['poisson']['vars_retenues']}."
+                    ) from e
 
         # Prédictions Gamma (coût moyen)
         if 'gamma' in self.modeles:
@@ -2177,11 +2290,17 @@ class AgentA3GLM:
                     predictions['cout_moyen'] = np.asarray(
                         self.modeles['gamma'].predict(X), dtype=float)
                 except Exception as e:
-                    logger.warning(f"Erreur prédiction Gamma : {e}")
-                    predictions['cout_moyen'] = np.full(
-                        len(df),
-                        self.metriques['gamma']['cout_moyen_obs']
-                    )
+                    # ⚠️ MEME REGLE QUE LA FREQUENCE, ET POUR LA MEME RAISON :
+                    # `cout_moyen` est l'autre facteur de `prime_pure`.
+                    # Remplacer le modele de cout par la moyenne OBSERVEE
+                    # rendrait un cout identique pour tous les contrats --
+                    # la moitie du tarif cesserait de segmenter, en silence.
+                    raise PredictionImpossible(
+                        f"GLM de cout : le modele est ajuste mais ne peut pas "
+                        f"predire sur ce portefeuille ({type(e).__name__}: "
+                        f"{e}). Aucun cout moyen n'est fabrique : il "
+                        f"entrerait tel quel dans la prime pure."
+                    ) from e
 
         # ── PRIME PURE = fréquence annuelle × coût PAR SINISTRE + graves ──────
         # Le terme de graves n'est pas un ajustement cosmétique : c'est la charge
@@ -3444,9 +3563,27 @@ class AgentA3GLM:
                     and hasattr(df_train, 'sample') and len(df_train) >= 200):
                 n_boot = 5
                 rel_boot = {v: [] for v in vars_ret}
-                np.random.seed(42)
+                # ⚠️⚠️ ON NE TOUCHE PLUS AU GENERATEUR GLOBAL DU PROCESSUS.
+                # `np.random.seed(42)` posait la graine du module `numpy.random`
+                # ENTIER : tout tirage non graine execute apres cet appel --
+                # dans un autre agent, dans une bibliotheque tierce, chez
+                # l'appelant -- devenait deterministe. Mesure du 11/09/2026 :
+                # deux tirages du meme `np.random.seed(999)` encadrant cet
+                # appel rendent des valeurs DIFFERENTES.
+                # ⚠️⚠️ ET LA POSE ETAIT CONDITIONNELLE : elle depend de
+                # `len(df_train) >= 200`. *L'etat aleatoire laisse derriere A3
+                # dependait donc de la TAILLE DU PORTEFEUILLE* -- mesure : a
+                # 150 lignes la graine n'est pas posee, a 600 elle l'est.
+                # ⚠️ CE FICHIER PORTE DEJA LA DOCTRINE, en tete de module, pour
+                # `warnings.filterwarnings('ignore')` : « une bibliotheque ne
+                # change pas l'etat global du processus ». Elle valait pour
+                # l'import ; elle vaut aussi pour l'appel.
+                # ⚠️ LE BOOTSTRAP RESTE REPRODUCTIBLE A L'IDENTIQUE : meme
+                # graine 42, meme suite de tirages -- mais dans un generateur
+                # LOCAL, qui ne quitte pas cette methode.
+                _alea_h4 = np.random.RandomState(42)
                 for _ in range(n_boot):
-                    idx   = np.random.choice(len(df_train), int(0.80 * len(df_train)), replace=True)
+                    idx   = _alea_h4.choice(len(df_train), int(0.80 * len(df_train)), replace=True)
                     dft   = df_train.iloc[idx]
                     Xb    = sm.add_constant(dft[vars_ret].fillna(0))
                     ob    = (np.log(np.maximum(dft[col_expo3], 1e-6))
