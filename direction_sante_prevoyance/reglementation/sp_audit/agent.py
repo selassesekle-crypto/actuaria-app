@@ -57,6 +57,20 @@ import numpy as np
 
 from core import traitement_ia
 
+# ── Scellement des resultats ──────────────────────────────────────────────────
+# L empreinte porte sur les VALEURS publiees, et non sur les
+# horodatages. Voir services/sp_scellement.py pour la mesure qui a
+# impose cette refonte.
+try:
+    from ...services.sp_scellement import empreinte_resultats
+    from ...services.sp_contrats import lire_nombre
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_scellement import (
+        empreinte_resultats,
+    )
+    from direction_sante_prevoyance.services.sp_contrats import lire_nombre
+
+
 warnings.filterwarnings("ignore")
 logging.basicConfig(
     level=logging.INFO,
@@ -260,7 +274,8 @@ class AgentSPAuditTrail:
             hypotheses = self._versioning_hypotheses_sp(resultats_agents)
 
             # ── MODULE 4 : Hash de session SHA-256 ───────────────────────────
-            hash_session = self._calculer_hash_session(logs, hypotheses, date_arrete)
+            hash_session, perimetre_scelle = self._calculer_hash_session(
+                resultats_agents, hypotheses, date_arrete)
 
             # ── MODULE 5 : Rapport d'audit ────────────────────────────────────
             rapport_audit = self._generer_rapport_audit(
@@ -301,6 +316,10 @@ class AgentSPAuditTrail:
                 "registre_rgpd":    registre_rgpd,
                 "hypotheses":       hypotheses,
                 "hash_session":     hash_session,
+                # Le sceau publie SON PERIMETRE : un lecteur peut verifier
+                # ce qui est couvert au lieu de le supposer.
+                "perimetre_scelle": perimetre_scelle,
+                "nb_champs_scelles": len(perimetre_scelle),
                 "rapport_audit":    rapport_audit,
 
                 # ── Standard ActuarIA ─────────────────────────────────────────
@@ -431,10 +450,31 @@ class AgentSPAuditTrail:
                 for a in logs.get("agents_executes", [])
             ],
 
+            # ⚠️ CORRIGÉ LE 12/09/2026. Ces trois lignes portaient un « ✅ »
+            # littéral, indépendant de tout traitement réel : une conformité
+            # attestée par une constante n'est pas une conformité, et elle
+            # engage l'entité qui la publie. Seule la première est un FAIT que
+            # le code peut établir — il vient de produire le registre. Les deux
+            # autres sont des qualifications juridiques : le code les DÉCLARE
+            # comme telles au lieu de les attester.
             "conformite": {
-                "rgpd_art30":     "✅ Registre tenu",
-                "rgpd_art9":      "✅ Base légale contrat d'assurance collective",
-                "cnil_assureurs": "✅ Recommandations CNIL assureurs 2023",
+                "rgpd_art30": (
+                    "✅ Registre des activités de traitement produit par cette "
+                    "exécution (Art. 30 RGPD)"
+                ),
+                "rgpd_art9": (
+                    "DÉCLARATIF — base légale invoquée : contrat d'assurance "
+                    "collective (Art. 9.2.b RGPD). Qualification à confirmer "
+                    "par le DPO ; le code ne l'établit pas."
+                ),
+                "cnil_assureurs": (
+                    "DÉCLARATIF — alignement revendiqué sur les recommandations "
+                    "CNIL assureurs. Non vérifié par le code."
+                ),
+                "portee": (
+                    "Seule la première ligne est un constat technique. Les "
+                    "suivantes sont des déclarations de l'entité."
+                ),
             },
 
             # ⚠️ LE FAIT QUI MANQUAIT, identique à celui du registre Non-Vie
@@ -462,23 +502,34 @@ class AgentSPAuditTrail:
         hyps_effectives = []
 
         # Depuis S1 — taux de chargement
-        # S1 expose "sorties_s2" qui contient les primes commerciales
-        # Le chargement n'est pas exposé directement — proxy 18% (standard FNMF)
+        #
+        # ⚠️ CORRIGÉ LE 12/09/2026. La version précédente affirmait que « le
+        # chargement n'est pas exposé directement » et le reconstruisait ainsi :
+        #     pa    = sorties_s2["primes_acquises"]          → total portefeuille
+        #     pp_tt = r["prime_pure_totale"]                 → clé INEXISTANTE
+        #             … repli sur r["prime_commerciale"]     → prime UNITAIRE
+        #     chargement = (pa - pp_tt) / pa
+        # Elle comparait donc un total de portefeuille (218 406 €) à une prime
+        # unitaire (436,81 €) et publiait un chargement de **100,0 %** là où le
+        # code en applique **18,0 %**. Le registre censé tracer les hypothèses
+        # ne traçait pas l'hypothèse utilisée.
+        #
+        # S1 publie `chargement_pct`. Il suffit de le lire.
         if "s1" in resultats_agents and resultats_agents["s1"].get("success"):
             r = resultats_agents["s1"]
-            # Calculer le chargement implicite si primes disponibles
-            sorties = r.get("sorties_s2", {})
-            pa    = float(sorties.get("primes_acquises", 0))
-            pp_tt = float(r.get("prime_pure_totale", r.get("prime_commerciale", 0)))
-            if pa > 0 and pp_tt > 0 and pa > pp_tt:
-                chargement = (pa - pp_tt) / pa * 100
+            taux, trouve = lire_nombre(r, "chargement_pct", defaut=None)
+            if trouve and taux is not None:
+                chargement = taux * 100 if taux <= 1.0 else taux
+                origine = "publié par S1"
             else:
-                chargement = 18.0  # proxy FNMF 2023 — standard mutuelles
+                chargement = 18.0
+                origine = "NON PUBLIÉ PAR S1 — repli FNMF 2023, à vérifier"
             hyps_effectives.append({
                 "id":         "HE-S1-CHARGEMENT",
                 "agent":      "S1 Léonie",
                 "hypothese":  "Taux de chargement commercial",
-                "valeur":     f"{chargement:.1f}% (FNMF 2023 si non calculable)",
+                "valeur":     f"{chargement:.1f}% ({origine})",
+                "mesure":     trouve,
                 "audit_id":   r.get("audit_id", ""),
             })
 
@@ -522,30 +573,33 @@ class AgentSPAuditTrail:
     # =========================================================================
     # MODULE 4 — HASH DE SESSION SHA-256
     # =========================================================================
-    def _calculer_hash_session(self, logs: Dict, hypotheses: Dict,
-                                 date_arrete: str) -> str:
+    def _calculer_hash_session(self, resultats_agents: Dict, hypotheses: Dict,
+                                 date_arrete: str):
         """
-        Hash SHA-256 de la session SP.
+        Empreinte SHA-256 des RÉSULTATS de la session SP.
 
-        Calculé sur :
-        - Liste ordonnée des agents exécutés + leurs audit_id
-        - Versions des tables actuarielles utilisées
-        - Date d'arrêté
+        ⚠️ Cette fonction a été refaite le 12/09/2026. La version précédente
+        hachait la liste des agents exécutés et leurs `audit_id` — lesquels
+        portent un horodatage — sans jamais toucher aux valeurs publiées.
+        Mesuré : l'empreinte restait IDENTIQUE après avoir multiplié le Best
+        Estimate par 1 000, le SCR par 1 000, mis la PM Rentes et le MCR à
+        zéro, et fait basculer les sept agents de VERT à ROUGE ; et elle
+        CHANGEAIT quand on relançait les mêmes chiffres le lendemain.
 
-        Garantit l'intégrité et la reproductibilité des résultats.
+        Elle scelle désormais toutes les grandeurs publiées, à l'exception de
+        ce qui est déclaré non déterministe dans `sp_scellement`, et elle rend
+        son périmètre pour qu'un lecteur sache ce qui est couvert.
+
+        Returns
+        -------
+        (str, list) : empreinte sur 16 caractères, et périmètre scellé.
         """
-        donnees_hash = {
-            "agents": sorted([
-                {"cle": a["cle"], "audit_id": a["audit_id"]}
-                for a in logs.get("agents_executes", [])
-            ], key=lambda x: x["cle"]),
-            "version_bcac":  hypotheses.get("version_bcac", ""),
-            "version_drees": hypotheses.get("version_drees", ""),
-            "version_rfr":   hypotheses.get("version_eiopa_rfr", ""),
-            "date_arrete":   date_arrete,
+        versions = {
+            "bcac":  hypotheses.get("version_bcac", ""),
+            "drees": hypotheses.get("version_drees", ""),
+            "rfr":   hypotheses.get("version_eiopa_rfr", ""),
         }
-        contenu = json.dumps(donnees_hash, sort_keys=True, ensure_ascii=False)
-        return hashlib.sha256(contenu.encode("utf-8")).hexdigest()[:16].upper()
+        return empreinte_resultats(resultats_agents, date_arrete, versions)
 
     # =========================================================================
     # MODULE 5 — RAPPORT D'AUDIT
@@ -832,7 +886,8 @@ class AgentSPAuditTrail:
             "success":False, "agent":self.NOM, "version":self.VERSION,
             "audit_id":audit_id, "statut_rag":"ROUGE",
             "logs":{}, "registre_rgpd":{}, "hypotheses":{},
-            "hash_session":"", "rapport_audit":{},
+            "hash_session":"", "perimetre_scelle":[], "nb_champs_scelles":0,
+            "rapport_audit":{},
             "hypotheses_rag":[], "commentaire":"", "graphiques":{},
             "duree_sec":0, "erreur":msg,
         }

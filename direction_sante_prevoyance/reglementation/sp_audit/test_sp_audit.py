@@ -99,8 +99,30 @@ def _impl_test_audit_registre_rgpd(r_audit):
     Données de santé et données d'arrêts ITT doivent être marquées sensibles.
     """
     rgpd = r_audit["registre_rgpd"]
-    assert rgpd["conformite"]["rgpd_art30"] == "✅ Registre tenu", (
-        "Registre RGPD Art.30 non conforme"
+    conformite = rgpd["conformite"]
+
+    # ⚠️ ATTENDU MIS À JOUR LE 12/09/2026, en même temps que le contrat.
+    # Ce test exigeait la chaîne littérale « ✅ Registre tenu », aux côtés de
+    # deux autres « ✅ » qui attestaient une base légale RGPD et un alignement
+    # CNIL — deux QUALIFICATIONS JURIDIQUES qu'aucun code ne peut établir.
+    # Une conformité attestée par une constante n'est pas une conformité, et
+    # elle engage l'entité qui la publie.
+    # L'agent distingue désormais ce qu'il CONSTATE de ce qu'il DÉCLARE ;
+    # le test vérifie cette distinction, et non plus un libellé exact.
+    assert conformite["rgpd_art30"].startswith("✅"), (
+        "Art.30 : le registre a bien été produit par cette exécution, "
+        "l'agent doit le constater"
+    )
+    assert "Art. 30" in conformite["rgpd_art30"], (
+        "Le constat Art.30 doit nommer l'article qu'il vise"
+    )
+    for cle in ("rgpd_art9", "cnil_assureurs"):
+        assert conformite[cle].startswith("DÉCLARATIF"), (
+            f"{cle} est une qualification juridique : elle doit être marquée "
+            f"DÉCLARATIF, jamais attestée par un ✅ en dur"
+        )
+    assert "portee" in conformite, (
+        "Le registre doit dire explicitement où s'arrête ce que le code établit"
     )
     categories = rgpd["categories_donnees"]
     assert len(categories) == 4, f"Attendu 4 catégories, obtenu {len(categories)}"
