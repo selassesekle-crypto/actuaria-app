@@ -31,7 +31,8 @@ provisionnement reste entière : interdire le sexe au tarif n'interdit pas de
 s'en servir pour évaluer un engagement.
 """
 
-__all__ = ["qx_tarification", "part_hommes"]
+__all__ = ["DOCTRINE_SEXE", "doctrine", "mention_doctrine",
+           "part_hommes", "qx_provisionnement", "qx_tarification"]
 
 
 def part_hommes(profils, defaut=None):
@@ -87,3 +88,93 @@ def qx_tarification(age, qx_fonction, part_h=None, unisexe=True):
             "mais sexe non renseigné)")
     taux = part_h * q_h + (1.0 - part_h) * q_f
     return taux, "TH 00-02 différencié par sexe (%.0f%% d'hommes)" % (part_h * 100)
+
+
+# ── LES DEUX AXES DE L ARBITRAGE A4 ────────────────────────────────────────
+# ⛔ DOCTRINE TRANCHEE PAR LE COMMANDITAIRE LE 12/09/2026.
+#
+# Tarifer et provisionner sont DEUX CHOSES DIFFERENTES, et l arbitrage porte
+# sur deux axes qu il aurait ete faux de mettre sur le meme interrupteur :
+#
+#   TARIFICATION   -> UNISEXE. L arret Test-Achats (CJUE, 2011) a invalide la
+#                     derogation permettant d utiliser le sexe comme facteur
+#                     de tarification en assurance, pour les contrats conclus
+#                     a compter de decembre 2012. C est le reglage le plus sur
+#                     au regard du droit europeen.
+#
+#   PROVISIONNEMENT -> DIFFERENCIE. Interdire le sexe au TARIF n interdit pas
+#                     de s en servir pour EVALUER un engagement. Une provision
+#                     doit representer l engagement reel ; s interdire une
+#                     information disponible la rendrait moins juste, sans
+#                     rien apporter a l egalite de traitement des assures.
+#
+# ⚠️ ET LE REGLAGE SE DECLARE DANS LE DOCUMENT. C est un point qu un
+# controleur demande a voir ecrit : `doctrine_sexe` porte les deux axes et
+# leur motif jusqu au rapport, au lieu d etre une constante enfouie.
+
+#: Les deux axes, et leur valeur par defaut arbitree.
+DOCTRINE_SEXE = {
+    "tarification": {
+        "unisexe": True,
+        "motif": ("arret Test-Achats (CJUE, 1er mars 2011, C-236/09) : le sexe "
+                  "ne peut pas etre un facteur de tarification pour les "
+                  "contrats conclus a compter du 21 decembre 2012"),
+    },
+    "provisionnement": {
+        "unisexe": False,
+        "motif": ("une provision evalue un engagement reel ; l interdiction "
+                  "porte sur la TARIFICATION, pas sur l EVALUATION"),
+    },
+}
+
+
+def doctrine(axe):
+    """Rend `(unisexe, motif)` pour un axe — et refuse un axe inconnu.
+
+    ⛔ Pas de valeur par defaut sur un axe inconnu : une doctrine supposee est
+    exactement ce que cet arbitrage supprime. Un axe qu'on n'a pas prevu doit
+    faire lever, pas retomber silencieusement sur l'unisexe.
+    """
+    if axe not in DOCTRINE_SEXE:
+        raise KeyError(
+            "Axe de doctrine inconnu : %r. Axes arbitres : %s. "
+            "Un axe non arbitre ne doit pas heriter d'une valeur par defaut."
+            % (axe, ", ".join(sorted(DOCTRINE_SEXE))))
+    reglage = DOCTRINE_SEXE[axe]
+    return reglage["unisexe"], reglage["motif"]
+
+
+def mention_doctrine(axe):
+    """La phrase a porter DANS le document, pour l'axe demande."""
+    unisexe, motif = doctrine(axe)
+    return ("Doctrine %s : mortalite %s. Motif : %s."
+            % (axe, "UNISEXE" if unisexe else "DIFFERENCIEE PAR SEXE", motif))
+
+
+def qx_provisionnement(age, qx_fonction, sexe=None):
+    """Taux de deces de PROVISIONNEMENT — l'autre axe.
+
+    Contrairement a `qx_tarification`, cet axe utilise le sexe quand il est
+    connu : la doctrine arbitree est « differencie ». Quand il ne l'est pas,
+    la fonction ne l'invente pas — elle rend le taux unisexe ET le dit.
+
+    Returns
+    -------
+    (float, str) : le taux, et la base qui l'a produit.
+    """
+    unisexe_par_doctrine, _ = doctrine("provisionnement")
+
+    sexe_lu = str(sexe or "").strip().upper()[:1]
+    if not unisexe_par_doctrine and sexe_lu in ("M", "F"):
+        return (float(qx_fonction(age, sexe_lu)),
+                "TH/TF 00-02 sexe %s (provisionnement differencie)" % sexe_lu)
+
+    taux_h = float(qx_fonction(age, "M"))
+    taux_f = float(qx_fonction(age, "F"))
+    moyenne = (taux_h + taux_f) / 2.0
+    if unisexe_par_doctrine:
+        base = "TH/TF 00-02 UNISEXE (doctrine de provisionnement)"
+    else:
+        base = ("TH/TF 00-02 UNISEXE — sexe NON RENSEIGNE, alors que la "
+                "doctrine de provisionnement est differenciee")
+    return moyenne, base

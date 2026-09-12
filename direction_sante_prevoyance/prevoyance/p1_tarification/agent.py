@@ -83,11 +83,25 @@ try:
     from direction_sante_prevoyance.services.sp_csp import facteur_residuel
     # Mortalite de tarification : unisexe par defaut, base publiee.
     from direction_sante_prevoyance.services.sp_mortalite import (
-        part_hommes, qx_tarification,
+        doctrine, mention_doctrine, part_hommes, qx_tarification,
     )
     _TABLES_CENTRALISEES = True
-except ImportError:
+except ImportError as _erreur_tables:
     _TABLES_CENTRALISEES = False
+    raise ImportError(
+        "Les tables actuarielles centralisees "
+        "(direction_sante_prevoyance.services.sp_tables_actuarielles) "
+        "n ont pas pu etre importees, et CET AGENT N A PLUS DE TABLE "
+        "DE REPLI. "
+        "C EST DELIBERE (arbitrage A1, 12/09/2026) : les replis locaux "
+        "portaient des valeurs DIFFERENTES de la table centrale, "
+        "jusqu a 93,5 % d ecart a 65 ans sur la mortalite, et l ecart "
+        "CROISSAIT avec l age. Ils ne decrivaient pas le meme objet "
+        "-- population generale, active ou assuree selon la copie -- "
+        "et servaient donc un tarif calcule sur une table qu on "
+        "croyait etre une autre. Mieux vaut une panne franche qu un "
+        "tarif silencieusement faux."
+    ) from _erreur_tables
 
 # ── Financement patronal ───────────────────────────────────────────────────
 # Une mention de conformite se CALCULE, et seulement la ou le texte
@@ -108,29 +122,6 @@ try:
 except ImportError:  # execution directe du module, hors paquet
     from direction_sante_prevoyance.services.sp_console import tracer
 
-# ── Tables actuarielles locales (fallback) ────────────────────────────────
-# Source primaire : sp_tables_actuarielles.py (services centralisés)
-# Source : BCAC 2019 — Bureau Commun des Assurances Collectives
-#   Publication : « Statistiques arrêts de travail 2019 »
-#   Taux d'incidence ITT annuels par âge et CSP (simplifiés)
-TAUX_ITT_BCAC = {
-    25:0.020, 30:0.025, 35:0.032, 40:0.042,
-    45:0.055, 50:0.072, 55:0.095, 60:0.120,
-}
-# Source : TD 88-90 — Tables INSEE de maintien en incapacité
-#   Probabilités annuelles de passage ITT → IP (invalidité permanente)
-#   Calibrées sur la population active française (simplifiées)
-TAUX_IP_TD88 = {
-    25:0.0008, 30:0.0012, 35:0.0018, 40:0.0028,
-    45:0.0045, 50:0.0072, 55:0.0115, 60:0.0180,
-}
-# Source : TH 00-02 — Tables de mortalité réglementaires françaises
-#   BCAC / INSEE — taux annuels de décès toutes causes, hommes
-#   Base : population assurée France 2000-2002
-QX_TH0002 = {
-    25:0.000730, 30:0.000860, 35:0.001180, 40:0.001800,
-    45:0.002980, 50:0.005040, 55:0.008640, 60:0.014500, 65:0.023800,
-}
 # Facteurs CSP sur sinistralité ITT — source BCAC 2019
 # Ouvriers : +35% vs employés | Cadres : -25% | Cadres sup : -40%
 # Reflète conditions de travail et exposition au risque arrêt
@@ -242,18 +233,19 @@ class AgentP1TarificationPrevoyance:
                 # TD 88-90 n'est pas différenciée par CSP : le facteur fin y
                 # reste entier, et c'est volontaire.
                 taux_ip  = _get_taux_ip(age_m) * fact_csp
+                # ⛔ ARBITRAGE A4, TRANCHE LE 12/09/2026 : la TARIFICATION
+                # est unisexe, le PROVISIONNEMENT reste differencie. Deux axes
+                # distincts -- les mettre sur le meme interrupteur aurait ete
+                # une erreur de conception. Le reglage n est plus un litteral
+                # enfoui : il vient de `DOCTRINE_SEXE` et sa mention atteint
+                # le document, parce qu un controleur demande a le voir ecrit.
+                _unisexe_tarif, _motif_doctrine = doctrine("tarification")
                 qx, base_mortalite = qx_tarification(
-                    age_m, _get_qx, part_h=_part_h)
+                    age_m, _get_qx, part_h=_part_h, unisexe=_unisexe_tarif)
             else:
-                # Repli : la table locale n'a qu'UNE colonne, toutes CSP
-                # confondues. Le facteur plein y est légitime — ne pas y
-                # toucher était le risque principal de ce correctif.
-                taux_itt = _interp(TAUX_ITT_BCAC, age_m) * fact_csp
-                taux_ip  = _interp(TAUX_IP_TD88,  age_m) * fact_csp
-                qx       = _interp(QX_TH0002,     age_m)
-                base_mortalite = (
-                    'table locale QX_TH0002 (repli) — base masculine, '
-                    'non unisexe')
+                raise AssertionError(
+                    "branche morte : sans tables centralisees, "
+                    "l import a deja leve. Voir A1.")
 
             # ── 3. PRIME ITT ──────────────────────────────────────────────────
             sal_men      = salaire_m / 12
@@ -390,6 +382,13 @@ class AgentP1TarificationPrevoyance:
                     'deces': round(qx, 6),
                 },
 
+                # ── Doctrine de mortalite, ARBITREE et DECLAREE (A4) ─────────
+                # Deux axes distincts : la tarification est unisexe (Test-
+                # Achats), le provisionnement reste differencie. Publie au
+                # premier niveau parce qu un controleur demande a le VOIR.
+                'doctrine_sexe':    mention_doctrine("tarification"),
+                'base_mortalite':   base_mortalite,
+
                 # ── Paramètres actuariels ────────────────────────────────────
                 'franchise_jours':  franchise_jours,
                 'taux_rente_ipp':   taux_rente_ipp,
@@ -405,6 +404,12 @@ class AgentP1TarificationPrevoyance:
                     # lecteur doit savoir si le tarif est unisexe.
                     'base_mortalite': base_mortalite,
                     'part_hommes':    _part_h,
+                    # La doctrine ARBITREE, et son motif, dans le document.
+                    'doctrine_sexe':  mention_doctrine("tarification"),
+                    'doctrine_sexe_tarification_unisexe':
+                        doctrine("tarification")[0],
+                    'doctrine_sexe_provisionnement_unisexe':
+                        doctrine("provisionnement")[0],
                     # Composition reelle : le tarif porte sur la CSP
                     # dominante, et le lecteur doit savoir laquelle et
                     # quelle part du portefeuille elle represente.

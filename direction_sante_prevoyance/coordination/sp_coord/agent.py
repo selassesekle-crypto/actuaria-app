@@ -48,12 +48,14 @@ import numpy as np
 # Ordre des operations du RD (UE) 2015/35, art. 248, 249 et 252.
 try:
     from ..services.sp_fonds_propres import (
-        fonds_propres_declares, mcr_entite,
+        fonds_propres_declares, ratio_atteint,
+        ratio_couverture, statut_sans_ratio, texte_ratio, mcr_entite,
     )
     from ..services.sp_contrats import valeur_qrt
 except ImportError:  # execution directe du module, hors paquet
     from direction_sante_prevoyance.services.sp_fonds_propres import (
-        fonds_propres_declares, mcr_entite,
+        fonds_propres_declares, ratio_atteint,
+        ratio_couverture, statut_sans_ratio, texte_ratio, mcr_entite,
     )
     from direction_sante_prevoyance.services.sp_contrats import valeur_qrt
 
@@ -195,8 +197,19 @@ class AgentSPCoord:
 
             # ── 5. RATIOS DE SOLVABILITÉ ──────────────────────────────────────
             fpp = src["fpp"]
-            ratio_scr = fpp / max(scr_consolide, 1) * 100
-            ratio_mcr = fpp / max(mcr_consolide, 1) * 100
+            # ⛔ ARBITRAGE A3, TRANCHE PAR LE COMMANDITAIRE LE 12/09/2026.
+            # Un ratio de couverture assis sur des fonds propres ESTIMES n est
+            # plus publie du tout. Les fonds propres eligibles se LISENT dans
+            # un bilan prudentiel ; aucun coefficient ne les produit a partir
+            # des primes ou du Best Estimate. Trois agents en fabriquaient
+            # trois montants differents pour la meme entite -- le lot 9 les a
+            # rendus VISIBLES, cet arbitrage les rend INOFFENSIFS.
+            # `ratio` vaut None, jamais 0 : un zero se confondrait avec une
+            # insuffisance de capital reelle.
+            ratio_scr, ratio_scr_publiable, mention_ratio = ratio_couverture(
+                fpp, scr_consolide, src.get("fpp_estime", False), "SCR")
+            ratio_mcr, ratio_mcr_publiable, _ = ratio_couverture(
+                fpp, mcr_consolide, src.get("fpp_estime", False), "MCR")
 
             # ── 6. POLY-SINISTRALITÉ ──────────────────────────────────────────
             poly = self._calculer_poly_sinistralite(result_builder)
@@ -210,6 +223,9 @@ class AgentSPCoord:
                 ratio_scr, ratio_mcr, poly, diversification
             )
             rag = self._rag(hyp, ratio_scr, ratio_mcr)
+            # Un ROUGE faute de donnee n est pas un ROUGE faute de
+            # capital. Le motif decide de ce que le lecteur va faire.
+            rag, motif_rag = statut_sans_ratio(rag, ratio_scr_publiable)
 
             # ── 9. COMMENTAIRE CONSOLIDÉ ──────────────────────────────────────
             com = self._commentaire(
@@ -263,8 +279,10 @@ class AgentSPCoord:
                 "fonds_propres_estimes": src["fpp_estime"],
                 "fonds_propres_mention": src["fpp_mention"],
                 "fonds_propres":    round(fpp, 2),
-                "ratio_scr_pct":    round(ratio_scr, 1),
-                "ratio_mcr_pct":    round(ratio_mcr, 1),
+                "ratio_scr_pct":    ratio_scr,
+                "mention_ratio":      mention_ratio,
+                "motif_rag":          motif_rag,
+                "ratio_mcr_pct":    ratio_mcr,
 
                 # ── Poly-sinistralité ────────────────────────────────────────
                 "poly_sinistralite_pct": poly,
@@ -433,14 +451,14 @@ class AgentSPCoord:
             h1_s = "À JUSTIFIER"; h1_m = f"TP/BE = {rtp:.3f} > 1.5 — RA élevé à justifier"
 
         # H2 — Ratio SCR consolidé ≥ 100%
-        if ratio_scr >= 130:
-            h2_s = "VALIDÉE"; h2_m = f"Ratio SCR consolidé = {ratio_scr:.1f}% ≥ 130% ✅"
-        elif ratio_scr >= 100:
+        if ratio_atteint(ratio_scr, 130):
+            h2_s = "VALIDÉE"; h2_m = f"Ratio SCR consolidé = {texte_ratio(ratio_scr)} ≥ 130% ✅"
+        elif ratio_atteint(ratio_scr, 100):
             h2_s = "À JUSTIFIER"
-            h2_m = f"Ratio SCR = {ratio_scr:.1f}% ∈ [100%,130%] — proche seuil S2"
+            h2_m = f"Ratio SCR = {texte_ratio(ratio_scr)} ∈ [100%,130%] — proche seuil S2"
         else:
             h2_s = "NON VALIDÉE"
-            h2_m = f"Ratio SCR = {ratio_scr:.1f}% < 100% — insuffisance de capital"
+            h2_m = f"Ratio SCR = {texte_ratio(ratio_scr)} < 100% — insuffisance de capital"
 
         # H3 — Poly-sinistralité sous contrôle
         if poly is None:
@@ -470,9 +488,9 @@ class AgentSPCoord:
     def _rag(self, hyp: list, ratio_scr: float, ratio_mcr: float) -> str:
         non_val = [h for h in hyp if h["statut"] == "NON VALIDÉE" and h["critique"]]
         a_just  = [h for h in hyp if h["statut"] == "À JUSTIFIER"]
-        if ratio_mcr < 100 or non_val or ratio_scr < 100:
+        if not ratio_atteint(ratio_mcr, 100) or non_val or not ratio_atteint(ratio_scr, 100):
             return "ROUGE"
-        if a_just or ratio_scr < 130:
+        if a_just or not ratio_atteint(ratio_scr, 130):
             return "AMBRE"
         return "VERT"
 
@@ -520,8 +538,8 @@ class AgentSPCoord:
             f"  SCR Consolidé            : {scr:>14,.0f}€",
             f"  MCR Consolidé            : {mcr:>14,.0f}€",
             f"  Fonds Propres            : {src['fpp']:>14,.0f}€",
-            f"  Ratio SCR                : {ratio_scr:>13.1f}%",
-            f"  Ratio MCR                : {ratio_mcr:>13.1f}%",
+            f"  Ratio SCR                : {texte_ratio(ratio_scr)}",
+            f"  Ratio MCR                : {texte_ratio(ratio_mcr)}",
         ]
 
         if poly is not None:
@@ -578,7 +596,7 @@ class AgentSPCoord:
         gph["scr_consolide"] = fig2
 
         # Graphique 3 — Ratio SCR gauge
-        c_scr = VERT if ratio_scr >= 130 else (AMBRE if ratio_scr >= 100 else ROUGE)
+        c_scr = VERT if ratio_atteint(ratio_scr, 130) else (AMBRE if ratio_atteint(ratio_scr, 100) else ROUGE)
         fig3 = go.Figure(go.Indicator(
             mode="gauge+number",
             value=ratio_scr,
@@ -613,7 +631,7 @@ class AgentSPCoord:
             "statut_rag": rag,
             "be_consolide": round(be, 2),
             "scr_consolide": round(scr, 2),
-            "ratio_scr": round(ratio_scr, 1),
+            "ratio_scr": ratio_scr,
         }
         try:
             with open(log_path, "a", encoding="utf-8") as f:
@@ -626,7 +644,7 @@ class AgentSPCoord:
         ic = "🟢" if rag == "VERT" else ("🟡" if rag == "AMBRE" else "🔴")
         self.logger.info(
             f"[{aid}] {ic} {rag} | BE_consolidé={be:,.0f}€ | "
-            f"SCR_consolidé={scr:,.0f}€ | Ratio={ratio_scr:.1f}% | "
+            f"SCR_consolidé={scr:,.0f}€ | Ratio={texte_ratio(ratio_scr)} | "
             f"Div={div:,.0f}€" +
             (f" | Poly={poly:.1f}%" if poly is not None else "")
         )

@@ -208,3 +208,131 @@ def get_prob_maintien_itt(duree_mois: float) -> float:
             p0, p1 = MAINTIEN_ITT_MOIS[m0], MAINTIEN_ITT_MOIS[m1]
             return p0 + (p1 - p0) * (duree_mois - m0) / (m1 - m0)
     return 0.01
+
+
+# ── REGISTRE DES TABLES ────────────────────────────────────────────────────
+# ⛔ ARBITRAGE A1 — ET CE QUE LA MESURE A CHANGE A MA RECOMMANDATION.
+#
+# J avais recommande « une seule source, supprimer les copies ». En mesurant
+# les trois tables dites « TH 00-02 » aux ages qu elles ont en commun :
+#
+#     age   services   sp_tables_bio   p1        ecart max
+#      25   0,00092      0,00085      0,00073     26,0 %
+#      45   0,00295      0,00232      0,00298     28,4 %
+#      65   0,01700      0,01230      0,02380     93,5 %
+#
+# L ecart CROIT avec l age et `sp_tables_biometriques` est SYSTEMATIQUEMENT
+# la plus basse -- exactement ce qu on attend d une table de POPULATION
+# ACTIVE, ce qu elle dit etre dans son propre commentaire. Ce ne sont donc
+# pas trois VERSIONS d une meme table : ce sont trois OBJETS DIFFERENTS.
+#
+# ⛔ LES FUSIONNER SERAIT FABRIQUER DE L ACTUARIAT. Et choisir la « bonne »
+# exige les publications certifiees, que je n ai pas. Ce que je peux faire,
+# et qui ferme le defaut reel :
+#
+#   ① chaque table DECLARE la population qu elle decrit et l etat de sa
+#      verification -- une table sans millesime ne se fait plus passer pour
+#      une reference ;
+#   ② les replis locaux de P1 et P2, qui donnaient des valeurs DIFFERENTES
+#      en silence, sont supprimes : mieux vaut une panne franche qu un tarif
+#      calcule sur une table qu on croyait etre une autre ;
+#   ③ un sceau interdit qu une nouvelle copie apparaisse.
+#
+# Ce qui reste a faire, et qui n est pas de mon ressort : commander les
+# tables BCAC 2019 et TH 00-02 CERTIFIEES, avec leur millesime. Une ligne a
+# un actuaire-conseil, et A1 se ferme pour de bon.
+
+#: Ce que chaque table DECRIT, et ce qu on sait de sa provenance.
+#: `verifie` reste False tant que la publication certifiee n a pas ete
+#: rapprochee : c est une DETTE DECLAREE, pas un detail.
+REGISTRE_TABLES = {
+    "BCAC_2019_TAUX_ITT": {
+        "libelle": "Taux d'incidence ITT, BCAC 2019",
+        "population": "population assuree, contrats collectifs de prevoyance",
+        "differenciation": "cadre / non-cadre",
+        "source_declaree": "BCAC 2019 (CTIP)",
+        "millesime": None,
+        "verifie": False,
+        "dette": ("millesime et page de publication non renseignes ; a "
+                  "rapprocher de la publication BCAC 2019 certifiee"),
+    },
+    "TD_8890_TAUX_IP": {
+        "libelle": "Taux de passage en invalidite, TD 88-90",
+        "population": "population generale France 1988-1990",
+        "differenciation": "aucune",
+        "source_declaree": "TD 88-90",
+        "millesime": None,
+        "verifie": False,
+        "dette": "millesime et page de publication non renseignes",
+    },
+    "TH0002_QX": {
+        "libelle": "Quotients de mortalite, TH/TF 00-02",
+        "population": "population generale France 2000-2002",
+        "differenciation": "hommes / femmes",
+        "source_declaree": "TH 00-02 et TF 00-02 (INSEE)",
+        "millesime": None,
+        "verifie": False,
+        "dette": ("⚠️ TROIS tables du perimetre portaient ce nom en decrivant "
+                  "des populations DIFFERENTES (generale, active, assuree), "
+                  "avec jusqu'a 93,5 %% d'ecart a 65 ans. Celle-ci decrit la "
+                  "population GENERALE. A rapprocher de la publication INSEE."),
+    },
+    "Q_IA_BCAC": {
+        "libelle": "Probabilites de retour a l etat actif depuis l ITT",
+        "population": "population assuree, contrats collectifs",
+        "differenciation": "aucune",
+        "source_declaree": "BCAC 2019",
+        "millesime": None,
+        "verifie": False,
+        "dette": ("table UNIQUE au perimetre -- portee par p2_tables_morbidite "
+                  "et par aucun autre module. Millesime non renseigne."),
+    },
+    "Q_IP_COND_BCAC": {
+        "libelle": "Probabilites de passage ITT -> IP, conditionnelles",
+        "population": "population assuree en arret de travail",
+        "differenciation": "aucune",
+        "source_declaree": "BCAC 2019",
+        "millesime": None,
+        "verifie": False,
+        "dette": ("table UNIQUE au perimetre. ⚠️ CONDITIONNELLE a l etat ITT : "
+                  "ne pas la confondre avec un taux d incidence brut."),
+    },
+    "MAINTIEN_ITT_MOIS": {
+        "libelle": "Probabilites de maintien en ITT, par mois",
+        "population": "population assuree, contrats collectifs",
+        "differenciation": "aucune",
+        "source_declaree": "BCAC 2019",
+        "millesime": None,
+        "verifie": False,
+        "dette": "millesime et page de publication non renseignes",
+    },
+}
+
+
+def fiche_table(nom):
+    """Rend la fiche d'une table — et refuse un nom qu'elle ne connaît pas.
+
+    ⛔ Pas de fiche par défaut : une table servie sans fiche est exactement
+    ce que cet arbitrage supprime. Un nom inconnu doit faire lever.
+    """
+    if nom not in REGISTRE_TABLES:
+        raise KeyError(
+            "Table inconnue du registre : %r. Tables declarees : %s. "
+            "Une table servie sans fiche ne peut pas dire quelle population "
+            "elle decrit." % (nom, ", ".join(sorted(REGISTRE_TABLES))))
+    return dict(REGISTRE_TABLES[nom])
+
+
+def mention_table(nom):
+    """La phrase a porter DANS le document, à côté du taux servi."""
+    f = fiche_table(nom)
+    etat = ("millesime %s, verifie" % f["millesime"] if f["verifie"]
+            else "MILLESIME NON VERIFIE")
+    return ("%s — %s ; population : %s ; differenciation : %s ; %s."
+            % (f["libelle"], f["source_declaree"], f["population"],
+               f["differenciation"], etat))
+
+
+def tables_non_verifiees():
+    """Les tables dont la provenance reste une dette déclarée."""
+    return sorted(n for n, f in REGISTRE_TABLES.items() if not f["verifie"])

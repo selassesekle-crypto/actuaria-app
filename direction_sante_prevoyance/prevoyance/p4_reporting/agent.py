@@ -49,10 +49,14 @@ except ImportError:
 # Des fonds propres ne se calculent pas : une estimation doit se
 # DECLARER, et sa mention doit atteindre le document.
 try:
-    from ...services.sp_fonds_propres import fonds_propres_declares
+    from ...services.sp_fonds_propres import (
+        fonds_propres_declares, ratio_atteint,
+        ratio_couverture, statut_sans_ratio, texte_ratio,
+    )
 except ImportError:  # execution directe du module, hors paquet
     from direction_sante_prevoyance.services.sp_fonds_propres import (
-        fonds_propres_declares,
+        fonds_propres_declares, ratio_atteint,
+        ratio_couverture, statut_sans_ratio, texte_ratio,
     )
 
 # ── Coefficients MCR ───────────────────────────────────────────────────────
@@ -193,8 +197,20 @@ class AgentP4ReportingPrevoyance:
 
             # ── 5. RATIOS ─────────────────────────────────────────────────────
             fpp = src['fonds_propres']
-            ratio_scr = fpp / max(scr['scr_total'], 1) * 100
-            ratio_mcr = fpp / max(mcr['mcr'], 1) * 100
+            # ⛔ ARBITRAGE A3, TRANCHE PAR LE COMMANDITAIRE LE 12/09/2026.
+            # Un ratio de couverture assis sur des fonds propres ESTIMES n est
+            # plus publie du tout. Les fonds propres eligibles se LISENT dans
+            # un bilan prudentiel ; aucun coefficient ne les produit a partir
+            # des primes ou du Best Estimate. Trois agents en fabriquaient
+            # trois montants differents pour la meme entite -- le lot 9 les a
+            # rendus VISIBLES, cet arbitrage les rend INOFFENSIFS.
+            # `ratio` vaut None, jamais 0 : un zero se confondrait avec une
+            # insuffisance de capital reelle.
+            ratio_scr, ratio_scr_publiable, mention_ratio = ratio_couverture(
+                fpp, scr['scr_total'],
+                src.get('fonds_propres_estimes', False), "SCR")
+            ratio_mcr, ratio_mcr_publiable, _ = ratio_couverture(
+                fpp, mcr['mcr'], src.get('fonds_propres_estimes', False), "MCR")
 
             # ── 6. QRT S.14.01 ────────────────────────────────────────────────
             qrt = self._generer_qrt(
@@ -205,6 +221,9 @@ class AgentP4ReportingPrevoyance:
             # ── 7. HYPOTHÈSES + RAG ───────────────────────────────────────────
             hyp = self._hypotheses(be_prev, scr, ratio_scr, ratio_mcr, src)
             rag = self._rag(hyp, ratio_scr, ratio_mcr)
+            # Un ROUGE faute de donnee n est pas un ROUGE faute de
+            # capital. Le motif decide de ce que le lecteur va faire.
+            rag, motif_rag = statut_sans_ratio(rag, ratio_scr_publiable)
 
             # ── 8. COMMENTAIRE ────────────────────────────────────────────────
             com = self._commentaire(
@@ -254,8 +273,10 @@ class AgentP4ReportingPrevoyance:
                 'mcr_lineaire':      round(mcr['mcr_lineaire'], 2),
                 'mcr_reference':     mcr.get('mcr_reference', ''),
                 'mcr_regime':        mcr.get('regime', ''),
-                'ratio_scr_pct':     round(ratio_scr, 1),
-                'ratio_mcr_pct':     round(ratio_mcr, 1),
+                'ratio_scr_pct':     ratio_scr,
+                'mention_ratio':      mention_ratio,
+                'motif_rag':          motif_rag,
+                'ratio_mcr_pct':     ratio_mcr,
                 'fonds_propres':     round(fpp, 2),
 
                 # La mention d estimation atteint le document.
@@ -272,7 +293,7 @@ class AgentP4ReportingPrevoyance:
                     'psap_total':       src['psap_total'],
                     'scr_invalidite':   round(scr['scr_total'], 2),
                     'mcr':              round(mcr['mcr'], 2),
-                    'ratio_scr_pct':    round(ratio_scr, 1),
+                    'ratio_scr_pct':    ratio_scr,
                     'primes_acquises':  src['primes_acquises'],
                     'fonds_propres':    round(fpp, 2),
                     'taux_ip':          src['taux_ip'],
@@ -499,9 +520,9 @@ class AgentP4ReportingPrevoyance:
                 {'code':'R0090','libelle':'Fonds Propres',
                  'C0050': round(fpp, 0)},
                 {'code':'R0100','libelle':'Ratio SCR (%)',
-                 'C0060': round(r_scr, 1)},
+                 'C0060': r_scr},
                 {'code':'R0110','libelle':'Ratio MCR (%)',
-                 'C0060': round(r_mcr, 1)},
+                 'C0060': r_mcr},
                 {'code':'R0120','libelle':'Primes acquises',
                  'C0010': round(src['primes_acquises'], 0)},
                 {'code':'R0130','libelle':'Loss Ratio',
@@ -535,15 +556,15 @@ class AgentP4ReportingPrevoyance:
             h2_m = f"SCR Morbidité = {part_morb*100:.1f}% — déséquilibre modules"
 
         # H3 — Ratio SCR ≥ 100%
-        if ratio_scr >= 130:
+        if ratio_atteint(ratio_scr, 130):
             h3_s = 'VALIDÉE'
-            h3_m = f"Ratio SCR = {ratio_scr:.1f}% ≥ 130% ✅"
-        elif ratio_scr >= 100:
+            h3_m = f"Ratio SCR = {texte_ratio(ratio_scr)} ≥ 130% ✅"
+        elif ratio_atteint(ratio_scr, 100):
             h3_s = 'À JUSTIFIER'
-            h3_m = f"Ratio SCR = {ratio_scr:.1f}% ∈ [100%,130%] — surveiller"
+            h3_m = f"Ratio SCR = {texte_ratio(ratio_scr)} ∈ [100%,130%] — surveiller"
         else:
             h3_s = 'NON VALIDÉE'
-            h3_m = f"Ratio SCR = {ratio_scr:.1f}% < 100% — insuffisance capital"
+            h3_m = f"Ratio SCR = {texte_ratio(ratio_scr)} < 100% — insuffisance capital"
 
         # H4 — Ratio SCR/BE : charge en capital par euro de provision
         # Mesure le poids du SCR relativement au BE — ratio actuariel standard
@@ -576,11 +597,11 @@ class AgentP4ReportingPrevoyance:
         ]
 
     def _rag(self, hyp, ratio_scr, ratio_mcr):
-        if ratio_mcr < 100: return 'ROUGE'
+        if not ratio_atteint(ratio_mcr, 100): return 'ROUGE'
         non_val = [h for h in hyp if h['statut']=='NON VALIDÉE']
-        if non_val or ratio_scr < 100: return 'ROUGE'
+        if non_val or not ratio_atteint(ratio_scr, 100): return 'ROUGE'
         a_just = [h for h in hyp if h['statut']=='À JUSTIFIER']
-        if a_just or ratio_scr < 130:  return 'AMBRE'
+        if a_just or not ratio_atteint(ratio_scr, 130):  return 'AMBRE'
         return 'VERT'
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -597,7 +618,7 @@ class AgentP4ReportingPrevoyance:
             "="*70, "",
         ]
         if rag=='VERT':
-            L.append(f"✅ QRT S.14.01 conforme. SCR={r_scr:.1f}% | MCR={r_mcr:.1f}%.")
+            L.append(f"✅ QRT S.14.01 conforme. SCR={texte_ratio(r_scr)} | MCR={texte_ratio(r_mcr)}.")
         elif rag=='AMBRE':
             L.append(f"⚠️ Acceptable — vérifier les points signalés.")
         else:
@@ -620,8 +641,8 @@ class AgentP4ReportingPrevoyance:
             "  " + "─"*45,
             f"  MCR Prévoyance                 : {mcr['mcr']:>12,.0f}€  [{mcr['regime']}]",
             f"  Fonds Propres                  : {fpp:>12,.0f}€",
-            f"  Ratio SCR                      : {r_scr:>11.1f}%",
-            f"  Ratio MCR                      : {r_mcr:>11.1f}%",
+            f"  Ratio SCR                      : {texte_ratio(r_scr)}",
+            f"  Ratio MCR                      : {texte_ratio(r_mcr)}",
             "", "📋 HYPOTHÈSES", "─"*40,
         ]
         for h in hyp:
@@ -815,7 +836,7 @@ class AgentP4ReportingPrevoyance:
             layout_g5.update(dict(
                 title=dict(
                     text=f"G5 — Structure financière prévoyance : BE/SCR/FPP | "
-                         f"Ratio SCR={r_scr:.1f}%",
+                         f"Ratio SCR={texte_ratio(r_scr)}",
                     font=dict(color=OR, size=12), x=0.01),
                 showlegend=False,
                 xaxis=dict(tickfont=dict(color=BLANC, size=9), showgrid=False),
@@ -849,7 +870,7 @@ class AgentP4ReportingPrevoyance:
         ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
         tracer(f"\n{'─'*70}")
         tracer(f"  P4 VALENTIN v{self.VERSION} | {aid} | {ic} {rag}")
-        tracer(f"  BE={be:,.0f}€ | TP={tp:,.0f}€ | SCR={scr:,.0f}€ | {r_scr:.1f}%/{r_mcr:.1f}%")
+        tracer(f"  BE={be:,.0f}€ | TP={tp:,.0f}€ | SCR={scr:,.0f}€ | {texte_ratio(r_scr)}/{texte_ratio(r_mcr)}")
         tracer(f"{'─'*70}")
 
     def _erreur(self, msg, aid):

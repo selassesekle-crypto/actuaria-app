@@ -53,6 +53,9 @@ __all__ = [
     "AMCR_NON_VIE", "COEFF_MCR", "MCR_CORRIDOR_BAS", "MCR_CORRIDOR_HAUT",
     "fonds_propres_declares", "ligne_qrt_fonds_propres",
     "mcr_lineaire_segment", "mcr_entite",
+    "MENTION_NON_CALCULABLE", "RATIO_NON_CALCULABLE",
+    "ratio_atteint", "ratio_couverture", "statut_sans_ratio",
+    "texte_ratio",
 ]
 
 # Annexe XIX du RD (UE) 2015/35, appelee par l article 250 par. 1 point d).
@@ -174,3 +177,108 @@ def mcr_entite(mcr_lineaire_total, scr_consolide, amcr=AMCR_NON_VIE):
             "plancher absolu AMCR, applique UNE SEULE FOIS au niveau entite "
             "(art. 248 par. 1) — valeur a confirmer sur la directive")
     return combine, contrainte
+
+
+#: Un ratio de couverture qu'on ne peut pas calculer. Ce n'est ni 0 %, ni
+#: 100 %, ni « on ne sait pas et on affiche quand même » : c'est l'absence.
+RATIO_NON_CALCULABLE = None
+MENTION_NON_CALCULABLE = (
+    "NON CALCULABLE — fonds propres eligibles non fournis. Un ratio de "
+    "couverture se lit dans un bilan prudentiel ; il ne s'estime pas a "
+    "partir des primes ou du Best Estimate. Fournir `fonds_propres=` "
+    "(fonds propres eligibles, QRT S.23.01) pour obtenir un ratio."
+)
+
+
+def ratio_couverture(fonds_propres, exigence, fonds_propres_estimes,
+                     libelle="SCR"):
+    """Rend `(ratio, publiable, mention)` — et REFUSE de publier une estimation.
+
+    ⛔ LA DÉCISION D'ARBITRAGE A3, PRISE PAR LE COMMANDITAIRE LE 12/09/2026.
+    Trois agents publiaient un ratio de couverture assis sur des fonds propres
+    FABRIQUÉS, chacun par sa propre formule :
+
+        S3       fpp = primes x 0,80               ->   379 652 EUR
+        P4       fpp = max(estime ; primes x 2,00) ->   877 105 EUR
+        SP-Coord fpp = max(... ; BE x 1,50)        -> 3 309 743 EUR
+
+    Trois montants pour la MÊME entité, aucun signalé comme estimation. Le
+    correctif du lot 9 les a rendus VISIBLES — c'était déjà beaucoup. La
+    décision d'arbitrage va plus loin, et c'est la bonne : **on ne publie pas
+    un ratio de solvabilité dont le numérateur est inventé.**
+
+    Les fonds propres éligibles ne se calculent pas : ils se lisent dans un
+    bilan prudentiel. Aucun coefficient ne peut les produire à partir des
+    primes ou du Best Estimate — ce qui veut dire qu'aucune des trois formules
+    n'était légitime, pas qu'il fallait choisir la meilleure.
+
+    ⚠️ CE QUE CELA COÛTE, ET QUI A ÉTÉ ACCEPTÉ EN CONNAISSANCE DE CAUSE : le
+    module ne rendra plus de ratio chez un prospect qui n'a pas encore son
+    bilan Solvabilité 2 sous la main. C'est le prix d'un chiffre qu'on peut
+    défendre devant un contrôleur.
+
+    Returns
+    -------
+    (float|None, bool, str)
+        Le ratio en pourcentage, `publiable`, et la mention à porter DANS le
+        document. `ratio` vaut None quand il n'est pas publiable — jamais 0,
+        qui se confondrait avec une insuffisance réelle.
+    """
+    if fonds_propres_estimes:
+        return RATIO_NON_CALCULABLE, False, MENTION_NON_CALCULABLE
+
+    try:
+        fp = float(fonds_propres or 0.0)
+        exig = float(exigence or 0.0)
+    except (TypeError, ValueError):
+        return RATIO_NON_CALCULABLE, False, MENTION_NON_CALCULABLE
+
+    if exig <= 0:
+        return (RATIO_NON_CALCULABLE, False,
+                "NON CALCULABLE — %s nul ou absent : un ratio de couverture "
+                "sans exigence au denominateur ne mesure rien." % libelle)
+
+    return round(fp / exig * 100.0, 1), True, ""
+
+
+def statut_sans_ratio(rag_calcule, ratio_publiable):
+    """Le RAG quand le ratio n'est pas publiable.
+
+    ⛔ Ni VERT ni ROUGE : **ROUGE**, et pour un motif explicite.
+    Un module qui ne peut pas mesurer sa solvabilité ne doit pas sortir VERT —
+    ce serait exactement le défaut « non mesuré = VERT ». Mais il ne doit pas
+    non plus se taire : le motif dit que c'est l'ABSENCE DE DONNÉE qui rougit,
+    et non une insuffisance de capital. La nuance décide de ce que le lecteur
+    va faire.
+    """
+    if ratio_publiable:
+        return rag_calcule, ""
+    return "ROUGE", (
+        "ROUGE par ABSENCE DE DONNEE, et non par insuffisance de capital : "
+        "les fonds propres eligibles n'ont pas ete fournis, donc aucun ratio "
+        "de couverture n'a pu etre calcule."
+    )
+
+
+def texte_ratio(ratio, suffixe=" %"):
+    """Rend un ratio en texte, ou « NON CALCULABLE » quand il n'existe pas.
+
+    ⚠️ POURQUOI UNE FONCTION POUR SI PEU. Les trois agents formatent leur ratio
+    à une trentaine d'endroits — console, QRT, hypothèses, graphique, audit.
+    Un `f"{ratio:.1f}%%"` sur `None` lève ; un repli à 0 à chacun de ces
+    endroits rouvrirait le défaut, parce que 0 %% se lit comme une INSUFFISANCE
+    DE CAPITAL et non comme une absence de mesure. Un seul endroit décide.
+    """
+    if ratio is None:
+        return "NON CALCULABLE"
+    return "%.1f%s" % (ratio, suffixe)
+
+
+def ratio_atteint(ratio, seuil):
+    """`ratio >= seuil`, mais FAUX quand le ratio n'existe pas.
+
+    Un seuil non atteint parce qu'on n'a pas mesuré n'est pas un seuil
+    franchi : les appelants doivent distinguer les deux, et c'est le rôle du
+    couple `(ratio_atteint, publiable)`, jamais d'une comparaison nue.
+    """
+    return ratio is not None and ratio >= seuil

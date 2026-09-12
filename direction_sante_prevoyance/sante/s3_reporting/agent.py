@@ -37,10 +37,14 @@ except ImportError:
 # Des fonds propres ne se calculent pas : une estimation doit se
 # DECLARER, et sa mention doit atteindre le document.
 try:
-    from ...services.sp_fonds_propres import fonds_propres_declares
+    from ...services.sp_fonds_propres import (
+        fonds_propres_declares, ratio_atteint,
+        ratio_couverture, statut_sans_ratio, texte_ratio,
+    )
 except ImportError:  # execution directe du module, hors paquet
     from direction_sante_prevoyance.services.sp_fonds_propres import (
-        fonds_propres_declares,
+        fonds_propres_declares, ratio_atteint,
+        ratio_couverture, statut_sans_ratio, texte_ratio,
     )
 
 # ── Coefficients MCR ───────────────────────────────────────────────────────
@@ -184,8 +188,19 @@ class AgentS3ReportingSante:
 
             # ── 5. RATIOS ─────────────────────────────────────────────────────
             fpp = src['fonds_propres']
-            ratio_scr = fpp / max(scr_sante, 1) * 100
-            ratio_mcr = fpp / max(mcr_sante, 1) * 100
+            # ⛔ ARBITRAGE A3, TRANCHE PAR LE COMMANDITAIRE LE 12/09/2026.
+            # Un ratio de couverture assis sur des fonds propres ESTIMES n est
+            # plus publie du tout. Les fonds propres eligibles se LISENT dans
+            # un bilan prudentiel ; aucun coefficient ne les produit a partir
+            # des primes ou du Best Estimate. Trois agents en fabriquaient
+            # trois montants differents pour la meme entite -- le lot 9 les a
+            # rendus VISIBLES, cet arbitrage les rend INOFFENSIFS.
+            # `ratio` vaut None, jamais 0 : un zero se confondrait avec une
+            # insuffisance de capital reelle.
+            ratio_scr, ratio_scr_publiable, mention_ratio = ratio_couverture(
+                fpp, scr_sante, src.get('fonds_propres_estimes', False), "SCR")
+            ratio_mcr, ratio_mcr_publiable, _ = ratio_couverture(
+                fpp, mcr_sante, src.get('fonds_propres_estimes', False), "MCR")
 
             # ── 6. QRT S.13.01 ────────────────────────────────────────────────
             qrt = self._generer_qrt(
@@ -200,6 +215,9 @@ class AgentS3ReportingSante:
                 src['primes_acquises'], be_sante
             )
             rag = self._rag(hyp, ratio_scr, ratio_mcr)
+            # Un ROUGE faute de donnee n est pas un ROUGE faute de
+            # capital. Le motif decide de ce que le lecteur va faire.
+            rag, motif_rag = statut_sans_ratio(rag, ratio_scr_publiable)
 
             # ── 8. COMMENTAIRE ────────────────────────────────────────────────
             com = self._commentaire(
@@ -243,8 +261,10 @@ class AgentS3ReportingSante:
                 'scr_res':       round(scr_res, 2),
                 'scr_cat':       round(scr_cat, 2),
                 'mcr_sante':     round(mcr_sante, 2),
-                'ratio_scr_pct': round(ratio_scr, 1),
-                'ratio_mcr_pct': round(ratio_mcr, 1),
+                'ratio_scr_pct': ratio_scr,
+                'mention_ratio':      mention_ratio,
+                'motif_rag':          motif_rag,
+                'ratio_mcr_pct': ratio_mcr,
                 'fonds_propres': round(fpp, 2),
                 # La mention d estimation atteint le document, et non
                 # seulement le journal : c est toute la difference
@@ -313,8 +333,14 @@ class AgentS3ReportingSante:
                 {'code':'R0050','libelle':'SCR Souscription Santé','C0040':round(scr,0)},
                 {'code':'R0060','libelle':'MCR Santé','C0040':round(mcr,0)},
                 {'code':'R0070','libelle':'Fonds Propres éligibles','C0050':round(fpp,0)},
-                {'code':'R0080','libelle':'Ratio SCR (%)','C0060':round(r_scr,1)},
-                {'code':'R0090','libelle':'Ratio MCR (%)','C0060':round(r_mcr,1)},
+                {'code':'R0080',
+             'libelle':'Ratio SCR (%)' if r_scr is not None
+                       else 'Ratio SCR (%) — NON CALCULABLE, fonds propres non fournis',
+             'C0060':r_scr},
+                {'code':'R0090',
+             'libelle':'Ratio MCR (%)' if r_mcr is not None
+                       else 'Ratio MCR (%) — NON CALCULABLE, fonds propres non fournis',
+             'C0060':r_mcr},
                 {'code':'R0100','libelle':'Primes acquises','C0010':round(src['primes_acquises'],0)},
             ],
         }
@@ -332,15 +358,15 @@ class AgentS3ReportingSante:
             h1_m = f"TP/BE = {ratio_tp_be:.3f} > 1.5 — RA élevé à justifier"
 
         # H2 — Ratio SCR ≥ 130%
-        if ratio_scr >= 130:
+        if ratio_atteint(ratio_scr, 130):
             h2_s = 'VALIDÉE'
-            h2_m = f"Ratio SCR = {ratio_scr:.1f}% ≥ 130% ✅"
-        elif ratio_scr >= 100:
+            h2_m = f"Ratio SCR = {texte_ratio(ratio_scr)} ≥ 130% ✅"
+        elif ratio_atteint(ratio_scr, 100):
             h2_s = 'À JUSTIFIER'
-            h2_m = f"Ratio SCR = {ratio_scr:.1f}% ∈ [100%,130%] — proche du seuil"
+            h2_m = f"Ratio SCR = {texte_ratio(ratio_scr)} ∈ [100%,130%] — proche du seuil"
         else:
             h2_s = 'NON VALIDÉE'
-            h2_m = f"Ratio SCR = {ratio_scr:.1f}% < 100% — insuffisance capital"
+            h2_m = f"Ratio SCR = {texte_ratio(ratio_scr)} < 100% — insuffisance capital"
 
         # H3 — BE/PA ≤ 30%
         ratio_be = be / max(pa, 1)
@@ -364,13 +390,13 @@ class AgentS3ReportingSante:
         ]
 
     def _rag(self, hyp, ratio_scr, ratio_mcr):
-        if ratio_mcr < 100:
+        if not ratio_atteint(ratio_mcr, 100):
             return 'ROUGE'
         non_val = [h for h in hyp if h['statut']=='NON VALIDÉE']
-        if non_val or ratio_scr < 100:
+        if non_val or not ratio_atteint(ratio_scr, 100):
             return 'ROUGE'
         a_just = [h for h in hyp if h['statut']=='À JUSTIFIER']
-        if a_just or ratio_scr < 130:
+        if a_just or not ratio_atteint(ratio_scr, 130):
             return 'AMBRE'
         return 'VERT'
 
@@ -385,7 +411,7 @@ class AgentS3ReportingSante:
             "📊 RÉSUMÉ DIRECTION", "─"*40,
         ]
         if rag=='VERT':
-            L.append(f"✅ QRT S.13.01 conforme. SCR={r_scr:.1f}% | MCR={r_mcr:.1f}%.")
+            L.append(f"✅ QRT S.13.01 conforme. SCR={texte_ratio(r_scr)} | MCR={texte_ratio(r_mcr)}.")
         elif rag=='AMBRE':
             L.append(f"⚠️ QRT acceptable — vérifier les points signalés.")
         else:
@@ -401,8 +427,8 @@ class AgentS3ReportingSante:
             f"  SCR Santé NSLT             : {scr:>15,.0f}€",
             f"  MCR Santé                  : {mcr:>15,.0f}€",
             f"  Fonds Propres              : {fpp:>15,.0f}€",
-            f"  Ratio SCR                  : {r_scr:>14.1f}%",
-            f"  Ratio MCR                  : {r_mcr:>14.1f}%",
+            f"  Ratio SCR                  : {texte_ratio(r_scr)}",
+            f"  Ratio MCR                  : {texte_ratio(r_mcr)}",
             "", "📋 HYPOTHÈSES", "─"*40,
         ]
         for h in hyp:
@@ -500,7 +526,7 @@ class AgentS3ReportingSante:
                 ))
             l = dict(**LAYOUT_BASE)
             l.update(dict(
-                title=dict(text=f"G3 — Capital vs Exigences | SCR={r_scr:.1f}% | MCR={r_mcr:.1f}%",
+                title=dict(text=f"G3 — Capital vs Exigences | SCR={texte_ratio(r_scr)} | MCR={texte_ratio(r_mcr)}",
                            font=dict(color=VERT if r_scr>=130 else AMBRE,size=11),x=0.01),
                 barmode='group',
                 legend=dict(font=dict(color=BLANC,size=9),bgcolor='rgba(0,0,0,0)'),
@@ -564,7 +590,7 @@ class AgentS3ReportingSante:
         ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
         tracer(f"\n{'─'*70}")
         tracer(f"  S3 BINTA v{self.VERSION} | {aid} | {ic} {rag}")
-        tracer(f"  BE={be:,.0f}€ | TP={tp:,.0f}€ | SCR={scr:,.0f}€ | Ratio={r_scr:.1f}%/{r_mcr:.1f}%")
+        tracer(f"  BE={be:,.0f}€ | TP={tp:,.0f}€ | SCR={scr:,.0f}€ | Ratio={texte_ratio(r_scr)}/{texte_ratio(r_mcr)}")
         tracer(f"{'─'*70}")
 
     def _erreur(self, msg, aid):

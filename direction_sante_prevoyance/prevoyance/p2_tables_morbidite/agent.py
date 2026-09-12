@@ -85,8 +85,21 @@ try:
         get_prob_maintien_itt as _get_maintien_central,
     )
     _TABLES_CENTRALISEES = True
-except ImportError:
+except ImportError as _erreur_tables:
     _TABLES_CENTRALISEES = False
+    # ⛔ ARBITRAGE A1, 12/09/2026 — PLUS DE REPLI SILENCIEUX.
+    # `Q_AI_BCAC` diverge de la table centrale, et les deux portent le
+    # meme nom de source. Un tarif calcule sur l une en croyant l autre
+    # est pire qu une panne. Les DEUX autres tables locales,
+    # `Q_IA_BCAC` (retour a l etat actif) et `Q_IP_COND_BCAC` (passage
+    # conditionnel en invalidite), sont en revanche UNIQUES : le service
+    # ne les porte pas, elles restent ici et sont declarees au registre.
+    raise ImportError(
+        "Les tables actuarielles centralisees n ont pas pu etre "
+        "importees, et cet agent n a plus de table d incidence de "
+        "repli : la sienne divergeait de la centrale sous le meme nom "
+        "de source. Voir l arbitrage A1."
+    ) from _erreur_tables
 
 # ── Trace console tolerante a l encodage ─────────────────────────────────────
 # `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
