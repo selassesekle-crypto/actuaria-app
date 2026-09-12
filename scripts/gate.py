@@ -55,23 +55,62 @@ DELAI_PAR_DEFAUT = 3600
 #: run lent passerait pour un run bloque.
 PATIENCE_SANS_ECRITURE = 900
 
+#: ⚠️⚠️ L'ENCODAGE DE SORTIE DU PROCESSUS FILS, ET SON GESTIONNAIRE D'ERREUR.
+#: Le gestionnaire compte autant que l'encodage : sans lui, un caractere non
+#: representable LEVE et fait tomber le test qui l'imprimait. Le depot emploie
+#: 26 caracteres hors cp1252 au voisinage de ses `print`, dans 51 fichiers.
+ENCODAGE_SORTIE = 'utf-8:backslashreplace'
+
+
+#: Les trois jetons que `unittest` ecrit SOUS sa ligne « Ran N tests ».
+#: ⚠️ `NO TESTS RAN` (Python >= 3.12) n'est PAS un succes : une cible vide ou
+#: mal orthographiee ne doit jamais rendre 0.
+_JETONS = {'OK': 'OK', 'FAILED': 'FAILED', 'NO TESTS RAN': 'AUCUN TEST'}
+
 
 def _verdict(chemin: pathlib.Path) -> tuple[str, int]:
-    """Le verdict LU AU FICHIER : (etat, nombre de tests)."""
+    """Le verdict LU AU FICHIER, DANS LE BLOC DU LANCEUR : (etat, nb tests).
+
+    ⚠️⚠️ LA LIGNE NE SUFFIT PAS, SA PLACE COMPTE. Cette fonction retenait la
+    DERNIERE ligne commencant par `OK` ou `FAILED`, ou qu'elle soit. Or les
+    `print` des tests partent sur stdout -- BLOC-bufferise quand la sortie est
+    redirigee -- et le verdict du lanceur sur stderr : le contenu de stdout est
+    donc vide APRES le verdict. Mesure du 11/09/2026 sur la sortie REELLE de la
+    suite A7 : 34 lignes de tests commencent par `OK` en colonne 0 apres le
+    verdict, et l'ancienne lecture rendait **OK sur un fichier portant
+    `FAILED (errors=87)`** -- 882 tests, 87 erreurs, code de sortie 0.
+      Le meme trou laissait passer deux autres formes, mesurees : un
+    `atexit` qui ecrit une ligne commencant par `OK`, et un test qui ecrit
+    `OK ...` puis se fige jusqu'a etre tue (le fichier ne porte alors AUCUNE
+    ligne `Ran`, et l'ancienne lecture rendait quand meme OK).
+
+    On ancre donc la lecture sur la ligne `Ran N tests in ...` du lanceur : le
+    verdict est la premiere ligne non vide qui la SUIT, et elle doit etre l'un
+    des trois jetons de `unittest`. Aucune autre ligne du fichier n'est lue.
+    """
     if not chemin.exists():
         return 'AUCUNE SORTIE', 0
-    n = 0
-    etat = 'SANS VERDICT'
-    for ligne in chemin.read_text(encoding='utf-8', errors='ignore').splitlines():
-        if ligne.startswith('Ran ') and ' test' in ligne:
-            try:
-                n = int(ligne.split()[1])
-            except (IndexError, ValueError):
-                pass
-        elif ligne.startswith('OK'):
-            etat = 'OK'
-        elif ligne.startswith('FAILED'):
-            etat = 'FAILED'
+    lignes = chemin.read_text(encoding='utf-8',
+                              errors='ignore').splitlines()
+    etat, n = 'SANS VERDICT', 0
+    # ⚠️ ON PARCOURT A L'ENVERS et on s'arrete au PREMIER bloc complet : un
+    # test qui imprimerait une fausse ligne « Ran 9999 tests » ne serait pas
+    # suivi d'un jeton, donc ne serait pas retenu.
+    for i in range(len(lignes) - 1, -1, -1):
+        ligne = lignes[i]
+        if not (ligne.startswith('Ran ') and ' test' in ligne):
+            continue
+        suite = next((x.strip() for x in lignes[i + 1:] if x.strip()), '')
+        trouve = next((v for k, v in _JETONS.items() if suite.startswith(k)),
+                      None)
+        if trouve is None:
+            continue
+        etat = trouve
+        try:
+            n = int(ligne.split()[1])
+        except (IndexError, ValueError):
+            n = 0
+        break
     return etat, n
 
 
@@ -86,7 +125,18 @@ def main() -> int:
     delai = a.delai or DELAIS.get(a.cible, DELAI_PAR_DEFAUT)
     sortie = pathlib.Path(a.sortie or (
         pathlib.Path(tempfile.gettempdir()) / f'gate_{a.cible.replace("/", "_")}.txt'))
-    env = {**os.environ, 'PYTHONUTF8': '1', 'PYTHONPATH': '.'}
+    # ⚠️⚠️ LE VERDICT NE DOIT PAS DEPENDRE DE LA CONSOLE. Mesure du
+    # 11/09/2026 : les memes 882 tests rendent « OK » sous `PYTHONUTF8=1` et
+    # « FAILED (errors=87) » dans une console cp1252 — 87 `UnicodeEncodeError`
+    # levees par des `print` de TESTS, aucun cadre en production.
+    # `backslashreplace` fait DEGRADER un caractere non representable au lieu
+    # de le faire LEVER : plus aucune impression ne peut faire tomber un test.
+    # ⚠️ CE N'EST PAS LA MEME CHOSE QUE `PYTHONUTF8=1`, QUI EST CONSERVE :
+    # l'un choisit l'encodage, l'autre garantit que l'ECHEC D'ENCODAGE
+    # n'existe plus. Le premier seul laissait le probleme entier des qu'on
+    # lancait la suite autrement que par ce script.
+    env = {**os.environ, 'PYTHONUTF8': '1', 'PYTHONPATH': '.',
+           'PYTHONIOENCODING': ENCODAGE_SORTIE}
 
     print(f'  gate {a.cible} — delai {delai} s — sortie {sortie}')
     t0 = time.time()
@@ -112,10 +162,25 @@ def main() -> int:
 
     etat, n = _verdict(sortie)
     duree = time.time() - t0
-    print(f'  {etat} — {n} tests — {duree:.0f} s')
     # ⚠️ LE VERDICT VIENT DU FICHIER, PAS DU CODE DE SORTIE DU PROCESSUS :
-    # un processus tue apres avoir ecrit son OK reste un OK.
-    return 0 if etat == 'OK' else 1
+    # un processus tue apres avoir ecrit son OK reste un OK. Mais quand le
+    # processus a rendu la main NORMALEMENT, son code de sortie est un SECOND
+    # temoin, independant du texte : s'ils se contredisent, on ne choisit pas,
+    # on le DIT et on rend 1. Un desaccord entre deux temoins n'est jamais un
+    # succes.
+    code = p.poll()
+    desaccord = (code is not None
+                 and ((etat == 'OK' and code != 0)
+                      or (etat != 'OK' and code == 0)))
+    # ⚠️ UN VERDICT SE LIT AVEC SES CONDITIONS. Celui-ci a ete obtenu sous
+    # un encodage impose par ce script ; le taire, c'est laisser croire qu'il
+    # vaut sous n'importe quelle console — ce que la mesure dement.
+    print(f'  {etat} — {n} tests — {duree:.0f} s '
+          f'— sortie {ENCODAGE_SORTIE}')
+    if desaccord:
+        print(f'  /!\\ DESACCORD : le fichier dit « {etat} », le processus a '
+              f'rendu {code}. Verdict force a l echec.')
+    return 0 if (etat == 'OK' and not desaccord) else 1
 
 
 if __name__ == '__main__':
