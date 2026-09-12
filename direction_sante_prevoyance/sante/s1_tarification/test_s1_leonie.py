@@ -127,8 +127,21 @@ def _impl_test_s1_donnees_reelles(s1):
     r = s1.run(result_a2=r_build, nb_assures=500, age_moyen=40,
                contrat="collectif", generer_graphiques=False)
     assert r["success"] is True
-    assert r.get("source_donnees") == "donnees_reelles_a2", (
-        f"Source attendue 'donnees_reelles_a2', obtenu : {r.get('source_donnees')}"
+    # ⚠️ ATTENDU CORRIGÉ LE 12/09/2026, en même temps que le contrat.
+    # Ce test exigeait `source_donnees == "donnees_reelles_a2"` — une chaîne
+    # fixée EN AMONT, sur la seule présence d'un DataFrame, et non sur l'usage
+    # effectif de ses colonnes. Il verrouillait donc l'affirmation fausse :
+    # mesuré, 5 postes sur 5 venaient de DREES 2023 pendant que la sortie
+    # publiait « données réelles ». La provenance se déduit désormais des
+    # postes réellement alimentés, et le cas MIXTE — ici, seul le poste
+    # médecine est fourni — devient dicible au lieu d'être passé sous silence.
+    assert r.get("source_donnees") in ("donnees_client", "mixte"), (
+        f"Un poste au moins vient des donnees client : source attendue "
+        f"'donnees_client' ou 'mixte', obtenu : {r.get('source_donnees')!r}"
+    )
+    assert r.get("source_donnees_detail"), (
+        "La provenance doit etre motivee : sans detail, un lecteur ne peut pas "
+        "savoir QUELS postes viennent du client."
     )
     assert r["nb_assures"] == n
 

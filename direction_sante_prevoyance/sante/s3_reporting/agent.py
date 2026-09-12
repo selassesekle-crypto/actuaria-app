@@ -43,6 +43,15 @@ except ImportError:  # execution directe du module, hors paquet
         fonds_propres_declares,
     )
 
+# ── Coefficients MCR ───────────────────────────────────────────────────────
+# Annexe XIX du RD (UE) 2015/35, appelee par l article 250 par. 1 point d).
+try:
+    from ...services.sp_fonds_propres import mcr_lineaire_segment
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_fonds_propres import (
+        mcr_lineaire_segment,
+    )
+
 # ── Trace console tolerante a l encodage ─────────────────────────────────────
 # `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
 # une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
@@ -75,8 +84,12 @@ SCR_SANTE_SIGMA_RES  = 0.14   # σ réserves santé NSLT — Art.148 RD 2015/35
 # ── MCR Santé — Règlement Délégué Art.252 ────────────────────────────────
 # Source : Art.252 RD 2015/35 | Plancher minimum absolu S2 Art.129 §1(d)
 MCR_PLANCHER_ABS     = 2_500_000.0  # 2.5M€ — plancher absolu santé Art.129
-MCR_COEFF_PREM       = 0.0453       # coefficient primes MCR santé
-MCR_COEFF_RES        = 0.0351       # coefficient provisions MCR santé
+# ⚠️ CORRIGÉ LE 12/09/2026 — ces valeurs ne figurent pas au Reglement.
+# Annexe XIX, segment 1 « assurance des frais medicaux » (lignes
+# d'activite 1 et 13) : alpha 4,7 % sur les provisions, beta 4,7 %
+# sur les primes. Le calcul passe par services/sp_fonds_propres.py.
+MCR_COEFF_PREM_AVANT = 0.0453   # valeur historique, hors Reglement
+MCR_COEFF_RES_AVANT  = 0.0351   # valeur historique, hors Reglement
 
 # ── Risk Adjustment IFRS 17 ───────────────────────────────────────────────
 # Méthode : CoC (coût du capital) — IFRS 17 §B91
@@ -152,9 +165,19 @@ class AgentS3ReportingSante:
 
             # ── 4. MCR SANTÉ ─────────────────────────────────────────────────
             # MCR santé — Art.252 RD 2015/35
-            # MCR_lin = 0.0418 × PA + 0.0261 × BE (coefficients réglementaires)
+            # ⚠️ COMMENTAIRE CORRIGÉ LE 12/09/2026 — il annonçait
+            # « 0.0418 × PA + 0.0261 × BE », deux valeurs que le code
+            # n'utilisait pas et qui ne figurent nulle part ailleurs dans
+            # le périmètre : un commentaire périmé, trompeur lu à côté de
+            # D16 où deux jeux de coefficients étaient réellement en
+            # concurrence. Les facteurs de l'annexe XIX pour le segment 1
+            # « frais médicaux » sont alpha 4,7 % sur les provisions et
+            # beta 4,7 % sur les primes.
             # Plancher = max(25% SCR, 2.5M€) | Plafond = 45% SCR
-            mcr_lin   = MCR_COEFF_PREM * src['primes_acquises'] + MCR_COEFF_RES * be_sante
+            mcr_lin, mcr_reference = mcr_lineaire_segment(
+                "frais_medicaux",
+                provisions_techniques=be_sante,
+                primes_emises=src['primes_acquises'])
             plancher  = max(0.25 * scr_sante, MCR_PLANCHER_ABS)
             plafond   = 0.45 * scr_sante
             mcr_sante = max(min(mcr_lin, plafond), plancher)

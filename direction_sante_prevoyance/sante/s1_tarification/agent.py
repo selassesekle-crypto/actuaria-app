@@ -43,6 +43,18 @@ try:
 except ImportError:
     PLOTLY_OK = False
 
+# ── Provenance des donnees ──────────────────────────────────────────────────
+# La provenance se DEDUIT des postes alimentes, elle ne se declare pas
+# en amont. Voir services/sp_provenance.py.
+try:
+    from ...services.sp_provenance import (
+        colonne_sinistres, source_reellement_retenue,
+    )
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_provenance import (
+        colonne_sinistres, source_reellement_retenue,
+    )
+
 # ── Trace console tolerante a l encodage ─────────────────────────────────────
 # `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
 # une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
@@ -176,6 +188,10 @@ class AgentS1TarificationSante:
             # ANI 2013 : applicable uniquement au collectif (Art. L911-7 CSS)
             ani = self._verifier_ani(postes, contrat)
 
+            # Provenance REELLE, deduite poste par poste.
+            source_reelle, source_detail = source_reellement_retenue(
+                postes, source)
+
             # ── 6. STATUT RAG + HYPOTHÈSES ───────────────────────────────────
             hyp = self._hypotheses(lr_attendu, postes, prime_comm, prime_marche,
                                    ani, garantie_niveau)
@@ -208,7 +224,15 @@ class AgentS1TarificationSante:
                 'version':         self.VERSION,
                 'audit_id':        aid,
                 'statut_rag':      rag,
-                'source_donnees':  source,
+                # ⚠️ La provenance était fixée EN AMONT, sur la seule
+                # présence d'un DataFrame, et non sur l'usage effectif de ses
+                # colonnes : le document affirmait « données réelles » en
+                # publiant une moyenne nationale. Elle se déduit désormais des
+                # postes réellement alimentés, et distingue le cas MIXTE que
+                # l'ancienne version ne savait pas exprimer.
+                'source_donnees':  source_reelle,
+                'source_donnees_detail': source_detail,
+                'source_donnees_amont':  source,
 
                 # ── Tarification ────────────────────────────────────────────
                 'prime_pure':           round(prime_pure, 2),
@@ -320,9 +344,16 @@ class AgentS1TarificationSante:
         if result_a2 and result_a2.get('success'):
             df = result_a2.get('dataframe')
             if df is not None:
+                # ⚠️ CORRIGÉ LE 12/09/2026 — S1 cherchait `sinistre_<poste>`
+                # au SINGULIER, alors que SPDataBuilder produit
+                # `sinistres_<poste>` au pluriel. Un `s` d'écart : la recherche
+                # échouait en silence et TOUS les postes basculaient sur la
+                # table DREES 2023. Mesuré : 5 postes sur 5 venaient de DREES
+                # pendant que la sortie publiait `donnees_reelles_a2`.
+                # Le nom canonique est cherché d'abord, l'ancien ensuite.
                 for p in COUTS_POSTES_REF:
-                    col_sin = f'sinistre_{p}'
-                    if col_sin in df.columns:
+                    col_sin = colonne_sinistres(df.columns, p)
+                    if col_sin is not None:
                         donnees_reelles[p] = float(df[col_sin].mean())
 
         for poste, ref in COUTS_POSTES_REF.items():

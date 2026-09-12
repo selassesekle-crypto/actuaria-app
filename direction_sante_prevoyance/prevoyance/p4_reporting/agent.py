@@ -55,6 +55,15 @@ except ImportError:  # execution directe du module, hors paquet
         fonds_propres_declares,
     )
 
+# ── Coefficients MCR ───────────────────────────────────────────────────────
+# Annexe XIX du RD (UE) 2015/35, appelee par l article 250 par. 1 point d).
+try:
+    from ...services.sp_fonds_propres import mcr_lineaire_segment
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_fonds_propres import (
+        mcr_lineaire_segment,
+    )
+
 # ── Trace console tolerante a l encodage ─────────────────────────────────────
 # `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
 # une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
@@ -89,8 +98,16 @@ CHOC_CESSATION_BAISSE  = 0.20   # -20% taux cessation (moins guérisons) — Art
 # Source : Art.252 RD 2015/35 | Art.129 §1(d) Directive S2
 MCR_PLANCHER_ABS       = 3_700_000.0  # plancher absolu prévoyance — Art.129 S2
 # NB : plancher niveau entreprise — ROUGE sur petit portefeuille = normal
-MCR_ALPHA_PREV         = 0.0338   # coefficient primes prévoyance — Art.252
-MCR_BETA_PREV          = 0.0191   # coefficient provisions prévoyance — Art.252
+# ⚠️ CORRIGÉ LE 12/09/2026 — ces deux valeurs ne figurent nulle part dans le
+# Règlement délégué, et elles sous-estimaient le MCR. La référence citée était
+# fausse : l'article 252 s'intitule « Minimum de capital requis : entreprises
+# d'assurance multibranches » et ne contient AUCUN coefficient. Les facteurs
+# sont à l'ANNEXE XIX, appelée par l'article 250 §1 point d). Et le Règlement
+# nomme ALPHA le facteur sur les PROVISIONS, BETA celui sur les PRIMES : les
+# deux noms étaient à l'envers ici.
+# Segment 2, assurance de protection du revenu : alpha 13,1 %, beta 8,5 %.
+MCR_ALPHA_PREV_AVANT   = 0.0338   # valeur historique, hors Reglement
+MCR_BETA_PREV_AVANT    = 0.0191   # valeur historique, hors Reglement
 
 # ── Risk Adjustment IFRS 17 ───────────────────────────────────────────────
 # Méthode CoC utilisée dans P3 — P4 réutilise le RA de P3 via sorties_p4
@@ -208,6 +225,11 @@ class AgentP4ReportingPrevoyance:
                 'scr_cessation':     round(scr['scr_cessation'], 2),
                 'scr_longevite':     round(scr['scr_longevite'], 2),
                 'mcr':               round(mcr['mcr'], 2),
+                # Le terme lineaire et sa reference reglementaire
+                # accompagnent le chiffre publie.
+                'mcr_lineaire':      round(mcr['mcr_lineaire'], 2),
+                'mcr_reference':     mcr.get('mcr_reference', ''),
+                'mcr_regime':        mcr.get('regime', ''),
                 'ratio_scr_pct':     round(ratio_scr, 1),
                 'ratio_mcr_pct':     round(ratio_mcr, 1),
                 'fonds_propres':     round(fpp, 2),
@@ -378,8 +400,10 @@ class AgentP4ReportingPrevoyance:
         Différents des coefficients Non-Vie (α=0.0418, β=0.0261).
         Plancher absolu prévoyance = 3.7M€ (vs 2.5M€ santé/Non-Vie).
         """
-        mcr_lin   = MCR_ALPHA_PREV * src['primes_acquises'] + \
-                    MCR_BETA_PREV  * src['be_prevoyance']
+        mcr_lin, mcr_reference = mcr_lineaire_segment(
+            "protection_du_revenu",
+            provisions_techniques=src['be_prevoyance'],
+            primes_emises=src['primes_acquises'])
         plancher  = max(0.25 * scr['scr_total'], MCR_PLANCHER_ABS)
         plafond   = 0.45 * scr['scr_total']
         mcr       = max(min(mcr_lin, plafond), plancher)
@@ -394,6 +418,7 @@ class AgentP4ReportingPrevoyance:
         return {
             'mcr':          round(mcr, 2),
             'mcr_lineaire': round(mcr_lin, 2),
+            'mcr_reference': mcr_reference,
             'plancher':     round(plancher, 2),
             'plafond':      round(plafond, 2),
             'regime':       regime,

@@ -62,6 +62,17 @@ from core import traitement_ia
 
 import numpy as np
 
+# ── Coefficients MCR ───────────────────────────────────────────────────────
+# Annexe XIX du RD (UE) 2015/35, appelee par l article 250 par. 1 point d).
+try:
+    from ...services.sp_fonds_propres import mcr_lineaire_segment
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_fonds_propres import (
+        mcr_lineaire_segment,
+    )
+
+
+
 warnings.filterwarnings("ignore")
 logging.basicConfig(
     level=logging.INFO,
@@ -95,8 +106,12 @@ SEUIL_SCR_CIBLE  = 130.0   # seuil cible interne
 CHOC_MORB_HAUT   = 0.35    # choc morbidité +35% (1ère année)
 CHOC_CESSATION   = 0.20    # choc cessation −20%
 # MCR Prévoyance — Art.252 RD 2015/35
-MCR_COEFF_PREM   = 0.0453
-MCR_COEFF_RES    = 0.0351
+# ⚠️ CORRIGÉ LE 12/09/2026 — ce module appliquait a la PREVOYANCE les
+# coefficients de la branche SANTE : MCR 92 383 EUR contre 54 284 EUR
+# pour P4 sur le meme portefeuille (+70,2 %). Aucune des deux valeurs ne
+# figure au Reglement. Voir services/sp_fonds_propres.py.
+MCR_COEFF_PREM_AVANT = 0.0453   # valeur historique, hors Reglement
+MCR_COEFF_RES_AVANT  = 0.0351   # valeur historique, hors Reglement
 MCR_PLANCHER     = 3_700_000.0  # plancher absolu prévoyance Art.129 S2
 # LR marché CTIP 2023
 LR_CTIP_ITT      = 0.68    # LR ITT médiane marché France — CTIP 2023
@@ -1473,7 +1488,9 @@ class AgentRapportPrevoyance:
             scr_cess  = pm_rentes * CHOC_CESSATION
             scr_long  = pm_rentes * 0.20
             scr_inv   = float(np.sqrt(scr_morb**2 + scr_cess**2 + scr_long**2))
-            mcr_lin   = MCR_COEFF_PREM * primes_acq + MCR_COEFF_RES * be_prev
+            mcr_lin, _mcr_ref = mcr_lineaire_segment(
+                "protection_du_revenu",
+                provisions_techniques=be_prev, primes_emises=primes_acq)
             plancher  = max(0.25 * scr_inv, MCR_PLANCHER)
             plafond   = 0.45 * scr_inv
             mcr       = max(min(mcr_lin, plafond), plancher)

@@ -226,7 +226,33 @@ class AgentSPTablesBiometriques:
         t0  = datetime.now()
         aid = f"SPTAB_{t0.strftime('%Y%m%d_%H%M%S')}"
         _tbl_client = tables_client or {}
-        _src_tables = "TABLE PROPRIÉTAIRE CLIENT" if _tbl_client else "BCAC 2019 / TD 88-90 / TH 00-02"
+        # ⚠️ CORRIGÉ LE 12/09/2026 — l'étiquette mentait.
+        # Elle valait « TABLE PROPRIÉTAIRE CLIENT » dès que `tables_client`
+        # était fourni, alors que cette table n'est transmise à AUCUNE des cinq
+        # méthodes de calcul de cet agent. Mesuré en injectant une valeur
+        # témoin de 0,950, choisie pour être immanquable : la sortie valait
+        # 0,066 — exactement la valeur du cas sans client — et l'étiquette
+        # annonçait la table du client. Un client qui fournit ses tables
+        # d'expérience, démarche coûteuse et argument commercial fort, recevait
+        # un document certifiant leur usage sans qu'elles aient été lues.
+        #
+        # L'étiquette dit désormais la vérité. Câbler réellement les tables
+        # client aux cinq méthodes est un chantier distinct : tant qu'il n'est
+        # pas fait, le document ne doit pas prétendre le contraire.
+        _tables_client_exploitees = False   # aucune methode ne les consomme
+        if _tbl_client and not _tables_client_exploitees:
+            _src_tables = (
+                "BCAC 2019 / TD 88-90 / TH 00-02 — tables client FOURNIES mais "
+                "NON EXPLOITEES par le calcul")
+            self.logger.warning(
+                "[%s] %d table(s) client fournie(s) et NON exploitee(s) : le "
+                "calcul reste sur les tables de place. Ne pas presenter ce "
+                "resultat comme calibre sur les donnees du client.",
+                aid, len(_tbl_client))
+        elif _tbl_client:
+            _src_tables = "TABLE PROPRIÉTAIRE CLIENT"
+        else:
+            _src_tables = "BCAC 2019 / TD 88-90 / TH 00-02"
         if _tbl_client:
             self.logger.info(f"[{aid}] Tables client : {list(_tbl_client.keys())}")
         else:
@@ -289,6 +315,9 @@ class AgentSPTablesBiometriques:
                 "audit_id":   aid,
                 "source_tables": _src_tables,
                 "tables_client_fournies": bool(_tbl_client),
+                # FOURNIES et EXPLOITEES sont deux choses differentes,
+                # et c est toute la question.
+                "tables_client_exploitees": _tables_client_exploitees,
                 "statut_rag": rag,
                 "table":      table,
                 "age":        age,
