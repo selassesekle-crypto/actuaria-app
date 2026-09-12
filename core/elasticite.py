@@ -977,12 +977,59 @@ def sensibilite_tarifaire(plan, df, etat, variations=VARIATIONS_DEFAUT,
     """
     import numpy as np
 
-    ch = dict(CHARGEMENTS_DEFAUT if chargements is None else chargements)
+    # ⚠️⚠️ TROIS SOURCES ORDONNÉES, ET L'ORIGINE SE PUBLIE — constat `EL-D1`,
+    # 12/09/2026. Cette ligne valait
+    # `dict(CHARGEMENTS_DEFAUT if chargements is None else chargements)` : le
+    # SEUL appelant de production (`a4_ml/agent.py`) ne passe pas
+    # `chargements=`, donc la marge publiée retombait TOUJOURS sur les
+    # littéraux du module — frais 15 %, commission 10 %.
+    #
+    # Or l'arbitrage du 08/09/2026 a retiré ces deux défauts du chemin du
+    # prix, au motif qu'*« une valeur par défaut EST une valeur devinée »*.
+    # `core/chargements_declares.py` écrit en en-tête que sans déclaration,
+    # « la prime commerciale n'est pas calculée et le refus est publié —
+    # jamais un repli muet ». **La prime pure refusait de deviner ces
+    # nombres ; la marge les devinait encore.**
+    #
+    # ⚠️ LATENT AUJOURD'HUI, ET LA MESURE LE DIT : 0 plan sur 20 déclare un
+    # bloc `comportement`, 0 sur 20 déclare ses `chargements` — le repli ne
+    # tire donc sur aucun plan réel, et AUCUN chiffre publié ne bouge. Ce
+    # qui est fermé ici est la contradiction, avant qu'un client ne déclare
+    # ses taux : sur un plan déclarant frais 5 % / commission 25 %, la marge
+    # au tarif actuel passe de 637 489,65 à 473 455,32 EUR, soit
+    # **−164 034,33 EUR (−25,73 %)** — mesure du premier auditeur.
+    #
+    # ⚠️ LES TAXES NE SE COMPLÈTENT PAS DEPUIS LE DÉFAUT. Quand le plan
+    # déclare ses chargements sans taux de taxe, `taxes` reste `None` : une
+    # absence se déclare, un taux fiscal ne s'invente pas. La marge n'en
+    # dépend pas — elle ne lit que `commission` et `frais`.
+    _ch_plan = getattr(plan, 'chargements', None) if plan is not None else None
+    _declare_au_plan = _ch_plan is not None and all(
+        getattr(_ch_plan, _c, None) is not None
+        for _c in ('frais', 'commission', 'marge'))
+    if chargements is not None:
+        ch = dict(chargements)
+        _origine_ch = "fournis explicitement a l'appel"
+    elif _declare_au_plan:
+        ch = {_c: getattr(_ch_plan, _c)
+              for _c in ('frais', 'commission', 'marge', 'taxes')}
+        _origine_ch = (
+            f"DECLARES AU PLAN '{getattr(plan, 'lob', '?')}' par "
+            f"{getattr(_ch_plan, 'declare_par', '') or 'declarant non trace'}"
+            f" le "
+            f"{getattr(_ch_plan, 'declare_le', '') or 'date non tracee'}")
+    else:
+        ch = dict(CHARGEMENTS_DEFAUT)
+        _origine_ch = "conventions du module — aucun texte n'en fixe"
     conventions = {
         'chargements': ch,
         'centiles_domaine': [CENTILE_DOMAINE_BAS, CENTILE_DOMAINE_HAUT],
         'primes_supposees': 'hors taxes',
-        'origine': "conventions du module — aucun texte n'en fixe",
+        # ⚠️⚠️ CE CHAMP DISAIT TOUJOURS LA MEME CHOSE, ET C'ETAIT FAUX DES
+        # QU'UN APPELANT PASSAIT SES TAUX. Il nomme desormais la source qui
+        # a REELLEMENT gouverne : *un chiffre publie sans l'endroit d'ou il
+        # vient n'est pas contestable.*
+        'origine': _origine_ch,
     }
     vide = {
         'disponible': False, 'scenarios': [], 'optimum': None,

@@ -968,5 +968,114 @@ class T_La_Sensibilite_Ne_Reproduit_Aucun_Defaut_De_L_Ancienne(
               f"écart max {ecart:.1%} ✅")
 
 
+class T_LaMargeSuitLesChargementsDeclares(unittest.TestCase):
+    r"""⚠️⚠️ LA MARGE PUBLIÉE NE DEVINE PLUS SES TAUX — constat `EL-D1`.
+
+    `sensibilite_tarifaire` retombait TOUJOURS sur `CHARGEMENTS_DEFAUT`
+    (frais 15 %, commission 10 %) : son SEUL appelant de production ne
+    passe pas `chargements=`. Or l'arbitrage du 08/09/2026 a retiré ces
+    deux littéraux du chemin du prix — *« une valeur par défaut EST une
+    valeur devinée »* — et `core/chargements_declares` écrit que sans
+    déclaration, « la prime commerciale n'est pas calculée et le refus est
+    publié, jamais un repli muet ».
+
+      *La prime pure refusait de deviner ces nombres ; la marge les
+      devinait encore.*
+
+    ⚠️ LATENT, ET LA MESURE LE DIT — 12/09/2026 : 0 plan sur 20 déclare un
+    bloc `comportement`, 0 sur 20 déclare ses `chargements`. Aucun chiffre
+    publié ne bouge aujourd'hui. Ce qui est tenu ici, c'est le jour où un
+    client déclarera ses taux : sur un plan à frais 5 % / commission 25 %,
+    la marge au tarif actuel passe de 637 489,65 à 473 455,32 EUR —
+    **−164 034,33 EUR (−25,73 %)**, mesure du premier auditeur.
+    """
+
+    class _Plan:
+        def __init__(self, lob='auto', chargements=None):
+            self.lob, self.chargements, self.comportement = \
+                lob, chargements, None
+
+    def _conventions(self, plan, chargements=None):
+        """Les conventions sont posées AVANT tout calcul : un état sans
+        élasticité estimée suffit à les lire, et le test reste rapide."""
+        from core.elasticite import sensibilite_tarifaire
+        return sensibilite_tarifaire(
+            plan, None, {'etat': 'RIEN'},
+            chargements=chargements)['conventions']
+
+    def test_ELD1_sans_declaration_le_comportement_ne_bouge_PAS(self):
+        """⚠️⚠️ LA CONTRE-ÉPREUVE, ET ELLE PASSE EN PREMIER. Les 20 plans du
+        dépôt ne déclarent rien : si ce cas bougeait, le correctif aurait
+        déplacé un euro là où il n'y avait rien à corriger."""
+        from core.plan_tarifaire import CHARGEMENTS_DEFAUT
+        c = self._conventions(self._Plan())
+        self.assertEqual(
+            c['chargements'], dict(CHARGEMENTS_DEFAUT),
+            "un plan SANS chargements déclarés ne retombe plus sur la "
+            "convention du module : le comportement d'aujourd'hui a bougé")
+        self.assertIn('module', c['origine'])
+        print(f"    ELD-1 sans déclaration : {c['chargements']} — inchangé")
+
+    def test_ELD2_les_taux_DECLARES_au_plan_gouvernent_la_marge(self):
+        """⚠️ Le cœur du constat : la déclaration du plan, hachée dans
+        l'empreinte opposable, était ignorée par la seule surface qui
+        publie une marge."""
+        from core.plan_tarifaire import Chargements
+        c = self._conventions(self._Plan('auto', Chargements(
+            frais=0.05, commission=0.25, marge=0.02,
+            declare_par='Direction Technique', declare_le='2026-09-01')))
+        self.assertEqual(c['chargements']['frais'], 0.05)
+        self.assertEqual(c['chargements']['commission'], 0.25)
+        self.assertIn('PLAN', c['origine'])
+        self.assertIn('Direction Technique', c['origine'])
+        self.assertIn('2026-09-01', c['origine'],
+                      "l'origine ne porte pas la DATE de déclaration : un "
+                      "taux opposable sans sa date n'est pas contestable")
+        print(f"    ELD-2 déclarés au plan : {c['origine'][:54]}…")
+
+    def test_ELD3_le_taux_de_TAXE_ne_se_complete_JAMAIS_depuis_le_defaut(
+            self):
+        """⛔⛔ UN TAUX FISCAL NE S'INVENTE PAS. Le défaut du module porte
+        `taxes: 0.33` — le taux AUTO — et l'appliquer à une LoB qui ne l'a
+        pas déclaré est exactement le défaut `pipeline/C5` : mesuré à
+        +22,02 % sur la prime TTC en RC. Une absence se DÉCLARE."""
+        from core.plan_tarifaire import Chargements
+        c = self._conventions(self._Plan('rc_pro', Chargements(
+            frais=0.05, commission=0.25, marge=0.02,
+            declare_par='Direction Technique', declare_le='2026-09-01')))
+        self.assertIsNone(
+            c['chargements']['taxes'],
+            "le taux de taxe est complété depuis le défaut du module "
+            "(0,33, le taux AUTO) alors que le plan ne le déclare pas")
+        print("    ELD-3 taxes non déclarées → None, jamais 0,33")
+
+    def test_ELD4_une_declaration_INCOMPLETE_ne_gouverne_pas(self):
+        """⚠️⚠️ LE SECOND SENS, ET IL EST INDISPENSABLE. Une déclaration
+        partielle qui gouvernerait ferait un MÉLANGE — frais déclarés,
+        commission devinée — sans que rien ne le dise. *Un demi-document
+        opposable n'est pas opposable.* Le module reprend alors la main, et
+        l'origine le dit."""
+        from core.plan_tarifaire import CHARGEMENTS_DEFAUT, Chargements
+        c = self._conventions(self._Plan('auto', Chargements(frais=0.05)))
+        self.assertEqual(
+            c['chargements'], dict(CHARGEMENTS_DEFAUT),
+            "une déclaration INCOMPLÈTE gouverne : la marge mélange des "
+            "taux déclarés et des taux devinés, en silence")
+        self.assertIn('module', c['origine'])
+        print("    ELD-4 déclaration incomplète → le module reprend la main")
+
+    def test_ELD5_l_argument_EXPLICITE_prime_sur_le_plan(self):
+        """⚠️ L'ordre des trois sources se vérifie par son sommet : un
+        appelant qui passe ses taux n'est pas écrasé par le plan."""
+        from core.plan_tarifaire import Chargements
+        c = self._conventions(
+            self._Plan('auto', Chargements(frais=0.05, commission=0.25,
+                                           marge=0.02)),
+            chargements={'frais': 0.42, 'commission': 0.01})
+        self.assertEqual(c['chargements']['frais'], 0.42)
+        self.assertIn('explicitement', c['origine'])
+        print("    ELD-5 l'argument explicite prime, et l'origine le dit")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
