@@ -36,6 +36,15 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
+# ── Normalisation CSP ───────────────────────────────────────────────────────
+# La reconnaissance est RENDUE, pas supposee. Voir services/sp_csp.py.
+try:
+    from .sp_csp import construire_map_csp, normaliser_csp
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_csp import (
+        construire_map_csp, normaliser_csp,
+    )
+
 warnings.filterwarnings("ignore")
 logging.basicConfig(
     level=logging.INFO,
@@ -569,12 +578,32 @@ class SPDataBuilder:
                 df.loc[df["sexe"].isin(variantes), "sexe"] = std
             df.loc[~df["sexe"].isin(["M", "F"]), "sexe"] = "M"  # fallback
 
-        # Normaliser la catégorie CSP — map inversé pour éviter les écrasements
+        # Normaliser la catégorie CSP
+        #
+        # ⚠️ CORRIGÉ LE 12/09/2026. La table de correspondance était construite
+        # TELLE QUELLE depuis CSP_VALIDES, qui contient les codes « O », « E »,
+        # « C » et « CS » en MAJUSCULES — alors que la colonne venait d'être
+        # mise en minuscules juste au-dessus. Aucun code d'une lettre ne pouvait
+        # donc être reconnu. Mesuré : un portefeuille en codes courts voyait
+        # **100 % de ses lignes devenir « employe »**, et combiné au double
+        # comptage CSP de P1, toute la population était tarifée au facteur 1,00.
+        #
+        # Et le repli était MUET : rien ne disait combien de lignes avaient été
+        # repliées. Le taux de reconnaissance est désormais mesuré et publié —
+        # un diagnostic qui ignore ses propres réparations mesure les
+        # réparations, pas la qualité des données reçues.
+        self._csp_reconnues = None
         if "categorie" in df.columns:
             df["categorie"] = df["categorie"].astype(str).str.lower().str.strip()
-            _csp_map = {v: k for k, vs in CSP_VALIDES.items() for v in vs}
-            df["categorie"] = df["categorie"].map(
-                lambda x: _csp_map.get(x, x if x in CSP_VALIDES else "employe")
+            _csp_map = construire_map_csp(CSP_VALIDES)
+            _issues = df["categorie"].map(
+                lambda x: normaliser_csp(x, _csp_map, CSP_VALIDES)
+            )
+            df["categorie"] = [c for c, _ in _issues]
+            _reconnues = [r for _, r in _issues]
+            self._csp_reconnues = (
+                sum(1 for r in _reconnues if r) / len(_reconnues)
+                if len(_reconnues) else None
             )
 
         # Normaliser le niveau de garantie

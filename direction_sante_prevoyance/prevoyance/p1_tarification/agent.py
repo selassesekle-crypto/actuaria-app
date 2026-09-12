@@ -79,6 +79,12 @@ try:
         get_qx_th0002       as _get_qx,
         BCAC_2019_TAUX_ITT, TD_8890_TAUX_IP, TH0002_QX,
     )
+    # Facteur CSP residuel : la table centralisee porte deja le groupe.
+    from direction_sante_prevoyance.services.sp_csp import facteur_residuel
+    # Mortalite de tarification : unisexe par defaut, base publiee.
+    from direction_sante_prevoyance.services.sp_mortalite import (
+        part_hommes, qx_tarification,
+    )
     _TABLES_CENTRALISEES = True
 except ImportError:
     _TABLES_CENTRALISEES = False
@@ -187,7 +193,12 @@ class AgentP1TarificationPrevoyance:
             # Calcul sur profil moyen (ou profil unique)
             age_m      = np.mean([p['age']      for p in profils])
             salaire_m  = np.mean([p['salaire']  for p in profils])
-            cat_m      = profils[0]['categorie']  # CSP dominant
+            # CSP retenue pour le tarif : la DOMINANTE, nommee comme telle.
+            # Lire `profils[0]` ne marchait que parce que toutes les
+            # categories venaient d etre ecrasees par la dominante.
+            from collections import Counter as _Cnt
+            _repart_p1 = _Cnt(p['categorie'] for p in profils)
+            cat_m      = _repart_p1.most_common(1)[0][0]
             nb_assures = len(profils)
 
             self.logger.info(
@@ -196,19 +207,36 @@ class AgentP1TarificationPrevoyance:
             )
 
             # ── 2. TAUX ACTUARIELS ────────────────────────────────────────────
+            # Part d'hommes du portefeuille, si le sexe est renseigne.
+            # `None` signifie « non observe » : la base publiee le dira.
+            _part_h = part_hommes(profils)
             fact_csp = FACT_CSP_ITT.get(cat_m, 1.0)
             if _TABLES_CENTRALISEES:
-                # Tables centralisées sp_tables_actuarielles.py
-                # get_taux_itt_bcac intègre le CSP en csp='cadre'/'non_cadre'
-                _csp_arg = 'cadre' if cat_m in ('cadre', 'cadre_sup') else 'non_cadre'
-                taux_itt = _get_taux_itt(age_m, _csp_arg) * fact_csp
+                # ⚠️ CORRIGÉ LE 12/09/2026 — le facteur CSP était compté DEUX
+                # fois. `get_taux_itt_bcac` rend un taux DÉJÀ différencié par
+                # colonne cadre / non-cadre ; le remultiplier par le facteur
+                # fin recomptait le groupe. Mesure : +35,0 % (ouvrier),
+                # −25,0 % (cadre), −40,0 % (cadre sup.), à tout âge.
+                # Le facteur ne porte plus que l'écart RÉSIDUEL au groupe,
+                # ce qui conserve la finesse à quatre catégories sans
+                # recompter la colonne. Voir services/sp_csp.py.
+                _csp_arg, _resid = facteur_residuel(cat_m, FACT_CSP_ITT)
+                taux_itt = _get_taux_itt(age_m, _csp_arg) * _resid
+                # TD 88-90 n'est pas différenciée par CSP : le facteur fin y
+                # reste entier, et c'est volontaire.
                 taux_ip  = _get_taux_ip(age_m) * fact_csp
-                qx       = _get_qx(age_m)
+                qx, base_mortalite = qx_tarification(
+                    age_m, _get_qx, part_h=_part_h)
             else:
-                # Fallback tables locales
+                # Repli : la table locale n'a qu'UNE colonne, toutes CSP
+                # confondues. Le facteur plein y est légitime — ne pas y
+                # toucher était le risque principal de ce correctif.
                 taux_itt = _interp(TAUX_ITT_BCAC, age_m) * fact_csp
                 taux_ip  = _interp(TAUX_IP_TD88,  age_m) * fact_csp
                 qx       = _interp(QX_TH0002,     age_m)
+                base_mortalite = (
+                    'table locale QX_TH0002 (repli) — base masculine, '
+                    'non unisexe')
 
             # ── 3. PRIME ITT ──────────────────────────────────────────────────
             sal_men      = salaire_m / 12
@@ -333,6 +361,16 @@ class AgentP1TarificationPrevoyance:
                     'age':            round(age_m, 1),
                     'categorie':      cat_m,
                     'fact_csp':       fact_csp,
+                    # La base de mortalite voyage AVEC le taux : un
+                    # lecteur doit savoir si le tarif est unisexe.
+                    'base_mortalite': base_mortalite,
+                    'part_hommes':    _part_h,
+                    # Composition reelle : le tarif porte sur la CSP
+                    # dominante, et le lecteur doit savoir laquelle et
+                    # quelle part du portefeuille elle represente.
+                    'repartition_csp': dict(_repart_p1),
+                    'part_csp_retenue': (
+                        _repart_p1[cat_m] / max(nb_assures, 1)),
                     'taux_itt':       round(taux_itt, 4),
                     'taux_ip':        round(taux_ip, 6),
                     'qx':             round(qx, 6),
@@ -390,11 +428,21 @@ class AgentP1TarificationPrevoyance:
 
                 profils.append({'age':age_r,'salaire':sal_r,'categorie':cat_r})
 
-            # CSP dominant
+            # CSP dominante
+            #
+            # ⚠️ CORRIGÉ LE 12/09/2026. Le code écrasait la catégorie RÉELLE de
+            # chaque assuré par la catégorie dominante :
+            #     for p in profils: p['categorie'] = csp_dom
+            # La ventilation par CSP publiée plus loin ne contenait donc plus
+            # qu'une seule catégorie, et se contredisait elle-même. La
+            # tarification porte bien sur un profil moyen — c'est assumé — mais
+            # la composition réelle du portefeuille ne doit pas être détruite
+            # pour autant : elle est conservée et publiée.
             from collections import Counter
-            csp_dom = Counter(p['categorie'] for p in profils).most_common(1)[0][0]
+            _repartition = Counter(p['categorie'] for p in profils)
+            csp_dom = _repartition.most_common(1)[0][0]
             for p in profils:
-                p['categorie'] = csp_dom
+                p['csp_retenue_tarif'] = csp_dom
 
             self.logger.info(
                 f"Données réelles A2 : {len(profils)} assurés | "
