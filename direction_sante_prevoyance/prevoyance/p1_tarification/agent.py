@@ -89,6 +89,16 @@ try:
 except ImportError:
     _TABLES_CENTRALISEES = False
 
+# ── Financement patronal ───────────────────────────────────────────────────
+# Une mention de conformite se CALCULE, et seulement la ou le texte
+# s applique. Voir services/sp_ani.py.
+try:
+    from ...services.sp_ani import part_patronale_conforme
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_ani import (
+        part_patronale_conforme,
+    )
+
 # ── Trace console tolerante a l encodage ─────────────────────────────────────
 # `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
 # une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
@@ -180,6 +190,13 @@ class AgentP1TarificationPrevoyance:
             taux_rente_ipp:float = 0.60,
             duree_contrat: int   = 20,
             chargement_pct:float = 0.20,
+            # ⚠️ AJOUTE LE 12/09/2026 (D05) — le taux etait un LITTERAL 0.60,
+            # et la mention de conformite une CHAINE CONSTANTE a cote. Quelle
+            # que soit la repartition reelle du contrat client, le document
+            # publiait « 60 % — conforme ». Mesure : en faisant varier la
+            # prime, la garantie et la population, la chaine ne bougeait
+            # jamais. C'est un controle qui atteste sans surveiller.
+            part_patronale_pct: float = 0.60,
             generer_graphiques: bool = True) -> Dict:
 
         t0  = datetime.now()
@@ -287,8 +304,16 @@ class AgentP1TarificationPrevoyance:
             prime_comm     = prime_pure * (1 + chargement_pct)
             prime_mois     = prime_comm / 12
             taux_cot       = prime_comm / max(salaire_m, 1) * 100
-            part_patronale = prime_comm * 0.60
-            part_salariale = prime_comm * 0.40
+            taux_patronal  = max(0.0, min(1.0, float(part_patronale_pct)))
+            part_patronale = prime_comm * taux_patronal
+            part_salariale = prime_comm - part_patronale
+            # ⚠️ L art. L911-7 CSS impose 50 % de financement patronal EN
+            # FRAIS DE SANTE. L etendre a la prevoyance est une extension que
+            # le texte ne fait pas — sur un sujet ou un controleur verifiera
+            # la source. `part_patronale_conforme` rend donc HORS CHAMP ici,
+            # et non « conforme ». Voir services/sp_ani.py.
+            statut_patronal, mention_patronale = part_patronale_conforme(
+                taux_patronal, nature="prevoyance")
             primes_acq     = prime_comm * nb_assures
 
             # ── 7. HYPOTHÈSES + RAG ───────────────────────────────────────────
@@ -304,7 +329,8 @@ class AgentP1TarificationPrevoyance:
                 prime_itt, prime_ip, prime_deces, prime_pure,
                 prime_comm, prime_mois, taux_cot,
                 part_patronale, part_salariale,
-                taux_itt, taux_ip, qx, franchise_jours, hyp
+                taux_itt, taux_ip, qx, franchise_jours, hyp,
+                mention_pat=mention_patronale,
             )
 
             # ── 9. GRAPHIQUES ─────────────────────────────────────────────────
@@ -312,7 +338,9 @@ class AgentP1TarificationPrevoyance:
             if generer_graphiques and PLOTLY_OK:
                 gph = self._graphiques(
                     prime_itt, prime_ip, prime_deces,
-                    prime_comm, salaire_m, taux_cot, hyp
+                    prime_comm, salaire_m, taux_cot, hyp,
+                    part_pat=part_patronale, part_sal=part_salariale,
+                    pct_pat=taux_patronal,
                 )
 
             self._audit(aid, prime_pure, prime_comm, taux_cot, rag, nb_assures)
@@ -350,6 +378,9 @@ class AgentP1TarificationPrevoyance:
                 'taux_cotisation_pct': round(taux_cot, 3),
                 'part_patronale':    round(part_patronale, 2),
                 'part_salariale':    round(part_salariale, 2),
+                'part_patronale_pct': round(taux_patronal, 4),
+                'statut_financement_patronal': statut_patronal,
+                'mention_financement_patronal': mention_patronale,
                 'primes_acquises':   round(primes_acq, 2),
 
                 # ── Taux actuariels ───────────────────────────────────────────
@@ -523,7 +554,8 @@ class AgentP1TarificationPrevoyance:
     def _commentaire(self, rag, age, sal, cat, nb_ass, source,
                      p_itt, p_ip, p_deces, p_pure, p_comm, p_mois,
                      taux_cot, part_pat, part_sal,
-                     t_itt, t_ip, qx, franchise, hyp):
+                     t_itt, t_ip, qx, franchise, hyp,
+                     mention_pat=""):
         ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
         L = [
             "="*70,
@@ -553,10 +585,10 @@ class AgentP1TarificationPrevoyance:
             f"  Prime pure totale          : {p_pure:>12.2f}€/an",
             f"  Prime commerciale          : {p_comm:>12.2f}€/an ({p_mois:.2f}€/mois)",
             f"  Taux de cotisation         : {taux_cot:>11.2f}% du salaire brut",
-            "", "🤝 RÉPARTITION ANI 2013", "─"*40,
-            f"  Part patronale (60%)       : {part_pat:>12.2f}€/an",
-            f"  Part salariale (40%)       : {part_sal:>12.2f}€/an",
-            f"  → Conforme ANI 2013 (employeur ≥ 50%) ✅",
+            "", "🤝 RÉPARTITION EMPLOYEUR / SALARIÉ", "─"*40,
+            f"  Part patronale             : {part_pat:>12.2f}€/an",
+            f"  Part salariale             : {part_sal:>12.2f}€/an",
+            f"  → {mention_pat}",
             "", "📋 HYPOTHÈSES", "─"*40,
         ]
         for h in hyp:
@@ -577,7 +609,8 @@ class AgentP1TarificationPrevoyance:
     # ══════════════════════════════════════════════════════════════════════════
     # 4. GRAPHIQUES
     # ══════════════════════════════════════════════════════════════════════════
-    def _graphiques(self, p_itt, p_ip, p_deces, p_comm, salaire, taux_cot, hyp):
+    def _graphiques(self, p_itt, p_ip, p_deces, p_comm, salaire, taux_cot,
+                    hyp, part_pat=None, part_sal=None, pct_pat=0.60):
         gph = {}
 
         # G1 — Décomposition primes pures
@@ -646,10 +679,11 @@ class AgentP1TarificationPrevoyance:
 
         # G3 — Part patronale vs salariale
         try:
-            part_pat = p_comm * 0.60
-            part_sal = p_comm * 0.40
+            part_pat = p_comm * pct_pat if part_pat is None else part_pat
+            part_sal = p_comm - part_pat if part_sal is None else part_sal
             fig = go.Figure(go.Bar(
-                x=["Part patronale (60%)", "Part salariale (40%)"],
+                x=[f"Part patronale ({pct_pat*100:.0f}%)",
+                   f"Part salariale ({(1-pct_pat)*100:.0f}%)"],
                 y=[part_pat, part_sal],
                 marker_color=[VERT, BLEU], width=0.4, opacity=0.88,
                 text=[f"{part_pat:.0f}€", f"{part_sal:.0f}€"],
@@ -657,7 +691,7 @@ class AgentP1TarificationPrevoyance:
             ))
             l = dict(**LAYOUT_BASE)
             l.update(dict(
-                title=dict(text="G3 — Répartition prime patronale/salariale (ANI 2013)",
+                title=dict(text="G3 — Répartition prime patronale / salariale",
                            font=dict(color=BLANC,size=11),x=0.01),
                 showlegend=False,
                 xaxis=dict(tickfont=dict(color=BLANC),showgrid=False),

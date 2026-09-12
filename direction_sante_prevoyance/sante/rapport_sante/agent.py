@@ -1490,7 +1490,10 @@ class AgentRapportSante:
         contrat        = (s1 or {}).get("contrat", "collectif")
         garantie       = (s1 or {}).get("garantie_niveau", "confort")
         source_donnees = (s1 or {}).get("source_donnees", "—")
-        ani_conforme   = bool((s1 or {}).get("ani_conforme", True))
+        # ⚠️ `ani_conforme` vaut None HORS CHAMP : `bool(None)` vaut False
+        # et ferait passer un contrat NON SOUMIS pour non conforme.
+        ani_statut_s1  = (s1 or {}).get("ani_statut", "")
+        ani_conforme   = ani_statut_s1 != "NON CONFORME"
 
         # Fonds propres
         fp = fonds_propres
@@ -1505,6 +1508,7 @@ class AgentRapportSante:
             "garantie_niveau": garantie,
             "source_donnees": source_donnees,
             "ani_conforme":   ani_conforme,
+            "ani_statut":     ani_statut_s1,
             "fonds_propres":  fp,
             "lr_fnmf_ref":    "65%-75% garantie confort — FNMF 2023",
         }
@@ -1535,15 +1539,21 @@ class AgentRapportSante:
         prime_comm    = float((s1 or {}).get("prime_commerciale", 0))
         primes_acq    = float((s1 or {}).get("primes_acquises", 0))
         lr_attendu    = float((s1 or {}).get("ratio_sp_attendu", 0))
-        ani_conforme  = bool((s1 or {}).get("ani_conforme", True))
+        ani_conforme  = (s1 or {}).get("ani_statut", "") != "NON CONFORME"
         ani_detail    = (s1 or {}).get("ani_detail", {})
         postes_s1     = (s1 or {}).get("postes", {})
 
-        # ANI détail string
+        # ⚠️ Le panier D911-1 a TROIS etats et son seuil peut valoir None
+        # (forfait journalier : le modele ne porte pas de duree de sejour).
+        # `d.get("seuil", 0) > 0` levait TypeError sur ce None.
+        ani_statut = (s1 or {}).get("ani_statut", "")
         ani_detail_str = " | ".join(
-            f"{p}: {d.get('note', '—')}"
-            for p, d in ani_detail.get("detail", {}).items()
-            if d.get("seuil", 0) > 0
+            "%s: %s%s" % (
+                p, d.get("statut", "—"),
+                "" if d.get("seuil") is None
+                else " (%.2f€ vs %.2f€)" % (d.get("charge", 0), d["seuil"]))
+            for p, d in sorted(ani_detail.get("detail", {}).items())
+            if d.get("statut")
         ) or "N/A"
 
         # ── Provisionnement (S2) ──
@@ -1618,6 +1628,7 @@ class AgentRapportSante:
             "loss_ratio":         loss_ratio,
             "ae_ratio":           ae_ratio,
             "ani_conforme":       ani_conforme,
+            "ani_statut":         ani_statut,
             "ani_detail_str":     ani_detail_str,
             # Postes
             "postes":             postes_consolides,
@@ -1681,13 +1692,24 @@ class AgentRapportSante:
             "critique": False,
         })
 
-        # H4 — ANI 2013
-        ok4 = bool(m3.get("ani_conforme", True))
+        # H4 — panier de soins minimal, art. D911-1 CSS
+        # ⚠️ TROIS etats : HORS CHAMP n'est ni conforme ni non conforme.
+        statut_panier = m3.get("ani_statut", "")
+        if statut_panier == "HORS CHAMP":
+            h4_statut, h4_valeur = "NON MESURÉE", (
+                "Hors champ — le panier s'applique au contrat collectif "
+                "obligatoire (art. L911-7 CSS)")
+        elif statut_panier == "NON CONFORME":
+            h4_statut = "NON VALIDÉE"
+            h4_valeur = "Non conforme : %s" % m3.get("ani_detail_str", "—")
+        else:
+            h4_statut, h4_valeur = "VALIDÉE", (
+                "Panier minimal atteint ✅ | %s" % m3.get("ani_detail_str", "—"))
         hyp.append({
             "id": "H4",
-            "hypothese": "Conformité ANI 2013 — Art. L911-7 CSS",
-            "valeur": "Panier ANI conforme ✅" if ok4 else f"Non conforme : {m3.get('ani_detail_str', '—')}",
-            "statut": "VALIDÉE" if ok4 else "NON VALIDÉE",
+            "hypothese": "Panier de soins minimal — art. D911-1 CSS",
+            "valeur": h4_valeur,
+            "statut": h4_statut,
             "critique": True,
         })
 

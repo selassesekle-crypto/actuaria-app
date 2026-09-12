@@ -101,16 +101,23 @@ NIVEAUX_GARANTIE = {"eco": 0.60, "confort": 1.00, "premium": 1.40, "luxe": 1.80}
 # Ouvriers : +20% vs employés | Cadres : -15% | Cadres sup : -25%
 FACT_CSP = {"ouvrier": 1.20, "employe": 1.00, "cadre": 0.85, "cadre_sup": 0.75}
 
-# Seuils ANI 2013 — panier minimum de garanties complémentaire collective
-# Source : ANI du 11 janvier 2013 | Art. L911-7 CSS (transposé par Loi du 14/06/2013)
-# Applicable uniquement aux contrats collectifs obligatoires
-ANI_PANIER_MIN = {
-    "medecine":        30.0,   # ≥ 100% BR consultations
-    "hospitalisation": 100.0,  # ≥ 100% BR séjour
-    "dentaire":        75.0,   # ≥ 125% BR soins dentaires
-    "optique":         100.0,  # verres + montures min
-    "pharmacie":       0.0,
-}
+# ── Panier de soins minimal ────────────────────────────────────────────────
+# ⚠️ CORRIGÉ LE 12/09/2026 — `ANI_PANIER_MIN` portait quatre nombres NUS
+# (30, 100, 75, 100) comparés à une charge EN EUROS, et commentés en
+# POURCENTAGE DE BASE DE REMBOURSEMENT. Les deux lectures étaient
+# incompatibles. Mesure sur 24 configurations (6 âges × 4 niveaux de
+# garantie) : 0 CONFORME SUR 24. L'erreur accusait à tort, dans 100 % des cas.
+# Le panier légal est HÉTÉROGÈNE — ticket modérateur (taux), forfait
+# journalier (EUR/jour), 125 % du tarif (taux), forfait optique (EUR) — ce
+# que quatre nombres nus ne pouvaient pas exprimer.
+# La règle, avec l'unité et la base de chaque ligne, vit désormais dans
+# services/sp_ani.py, et SP-REG3 applique EXACTEMENT la même (voir D34).
+try:
+    from ...services.sp_ani import part_patronale_conforme, verifier_panier
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_ani import (
+        part_patronale_conforme, verifier_panier,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -253,7 +260,11 @@ class AgentS1TarificationSante:
                 'postes': postes,
 
                 # ── ANI 2013 ─────────────────────────────────────────────────
+                # `ani_conforme` vaut None HORS CHAMP. Le STATUT, lui, est
+                # toujours lisible : c'est lui que les lecteurs doivent lire.
                 'ani_conforme': ani['conforme'],
+                'ani_statut':   ani['statut'],
+                'ani_complet':  ani['complet'],
                 'ani_detail':   ani,
 
                 # ── Sorties vers S2 Selma ────────────────────────────────────
@@ -402,43 +413,33 @@ class AgentS1TarificationSante:
     # ══════════════════════════════════════════════════════════════════════════
     def _verifier_ani(self, postes, contrat='collectif'):
         """
-        Vérifie la conformité au panier ANI 2013 (complémentaire collective).
-        Le panier minimum doit couvrir : médecine, hospit, dentaire, optique.
-        NB : ANI applicable UNIQUEMENT aux contrats collectifs (Art. L911-7 CSS).
-        Pour les contrats individuels → conforme=True automatiquement.
+        Vérifie le panier de soins minimal — art. D911-1 CSS, dans la BONNE UNITÉ.
+
+        ⚠️ CORRIGÉ LE 12/09/2026. L'ancienne version comparait la charge
+        mutuelle en euros à quatre seuils nus dont le commentaire disait qu'ils
+        étaient des pourcentages de base de remboursement. Résultat mesuré :
+        **0 configuration conforme sur 24**, et le RAG ROUGE pour tout contrat
+        collectif testé. Le poste médecine sortait à 7,52 € face à un seuil
+        de 30.
+
+        ⚠️ ET « individuel → conforme=True » ÉTAIT UNE FAUSSE CONFORMITÉ. Un
+        contrat hors du champ de l'obligation n'a rien satisfait : il n'y est
+        pas soumis. Le service rend désormais HORS_CHAMP et `conforme=None`.
+
+        La règle vit dans services/sp_ani.py, et SP-REG3 applique la MÊME —
+        c'était D34 : deux agents du même module, deux verdicts réglementaires
+        opposés sur le même portefeuille, tous deux publiés.
         """
-        resultats = {}
-        conforme  = True
-
-        for poste, seuil in ANI_PANIER_MIN.items():
-            if seuil == 0 or poste not in postes:
-                resultats[poste] = {'ok': True, 'seuil': seuil, 'note': 'N/A'}
-                continue
-            charge = postes[poste].get('charge_mutuelle', 0)
-            ok = charge >= seuil
-            if not ok:
-                conforme = False
-            resultats[poste] = {
-                'ok':     ok,
-                'seuil':  seuil,
-                'charge': round(charge, 2),
-                'note':   '✅' if ok else f'❌ {charge:.0f}€ < {seuil:.0f}€ min ANI',
-            }
-
-        # ANI non applicable aux contrats individuels (Art. L911-7 CSS)
-        if contrat == 'individuel':
-            conforme = True
-            for k in resultats:
-                resultats[k]['note'] = 'N/A (contrat individuel — ANI non applicable)'
-
+        verdict = verifier_panier(postes, contrat)
         return {
-            'conforme':   conforme,
-            'detail':     resultats,
-            'note_globale': (
-                "✅ Garanties conformes au panier ANI 2013"
-                if conforme else
-                "⚠️ Panier ANI 2013 non atteint sur certains postes"
-            ),
+            # `conforme` vaut None hors champ : ni vrai, ni faux.
+            'conforme':   verdict['conforme'],
+            'statut':     verdict['statut'],
+            'complet':    verdict['complet'],
+            'contrat':    verdict['contrat'],
+            'non_mesurables': verdict.get('non_mesurables', []),
+            'detail':     verdict['detail'],
+            'note_globale': verdict['note'],
         }
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -473,18 +474,26 @@ class AgentS1TarificationSante:
             h2_m = f"Hospit = {part_hospit*100:.1f}% > 65% — concentration risque hospitalier"
 
         # H3 — Prime compétitive vs marché + conformité ANI
+        # ⚠️ `ani['conforme']` vaut None HORS CHAMP (contrat individuel) :
+        # `not None` vaudrait True et ferait passer un contrat non soumis pour
+        # non conforme. Le statut est donc lu explicitement.
         ratio_comp = prime_comm / max(prime_marche, 1)
-        if ratio_comp <= 1.10 and ani['conforme']:
+        ani_statut = ani.get('statut', '')
+        ani_ok = ani_statut == 'CONFORME'
+        ani_hors_champ = ani_statut == 'HORS CHAMP'
+        mention_ani = ('hors champ (contrat individuel)' if ani_hors_champ
+                       else 'conforme ✅' if ani_ok else 'non conforme ⚠️')
+        if ratio_comp <= 1.10 and (ani_ok or ani_hors_champ):
             h3_s = 'VALIDÉE'
-            h3_m = f"Prime/marché = {ratio_comp:.3f} ✅ | ANI 2013 conforme ✅"
+            h3_m = f"Prime/marché = {ratio_comp:.3f} ✅ | panier D911-1 : {mention_ani}"
         elif ratio_comp <= 1.25:
             h3_s = 'À JUSTIFIER'
-            h3_m = f"Prime/marché = {ratio_comp:.3f} légèrement élevée | ANI: {'✅' if ani['conforme'] else '⚠️'}"
+            h3_m = f"Prime/marché = {ratio_comp:.3f} légèrement élevée | panier D911-1 : {mention_ani}"
         else:
             h3_s = 'NON VALIDÉE'
             h3_m = f"Prime/marché = {ratio_comp:.3f} > 1.25 — non compétitif"
-            if not ani['conforme']:
-                h3_m += " | ANI 2013 non conforme"
+            if not (ani_ok or ani_hors_champ):
+                h3_m += f" | panier D911-1 : {mention_ani}"
 
         # H4 — LR calculé vs LR marché FNMF 2023
         # Source : FNMF — Rapport sinistralité mutuelles 2023
@@ -510,33 +519,42 @@ class AgentS1TarificationSante:
             h4_m = (f"LR tarifaire = {lr*100:.1f}% > {lr_max*100:.0f}% FNMF "
                     f"{garantie_niveau} — sinistralité supérieure au marché")
 
-        # H5 — ANI 2013 poste par poste
-        # Détail de conformité par poste : médecine, hospit, dentaire, optique
-        # Source : ANI 11/01/2013 — Art. L911-7 CSS
-        postes_ani = ['medecine', 'hospitalisation', 'dentaire', 'optique']
+        # H5 — Panier de soins minimal, poste par poste
+        # Source : art. D911-1 CSS (décret n° 2014-1025), pris en application
+        # de l'ANI du 11 janvier 2013 — cf. art. L911-7 CSS.
+        # ⚠️ Trois états, et non deux : CONFORME, NON CONFORME, NON MESURABLE.
+        # Le forfait journalier hospitalier se compte PAR JOUR, et le modèle
+        # de tarification ne porte pas de durée de séjour : cette ligne-là ne
+        # peut pas être conclue, et l'inventer serait fabriquer de
+        # l'actuariat. Un poste non mesurable ne rend pas le contrat non
+        # conforme — il rend le verdict INCOMPLET, et le document le dit.
         detail_ani = ani.get('detail', {})
-        if ani.get('conforme'):
-            h5_s = 'VALIDÉE'
-            lignes = []
-            for p in postes_ani:
-                d = detail_ani.get(p, {})
-                if d.get('seuil', 0) > 0:
-                    lignes.append(f"{p}={d.get('charge',0):.0f}€≥{d['seuil']:.0f}€")
-            h5_m = "ANI poste/poste ✅ | " + " | ".join(lignes) if lignes else "ANI conforme ✅"
+        statut_ani = ani.get('statut', '')
+
+        def _ligne(poste, donnees):
+            seuil = donnees.get('seuil')
+            if seuil is None:
+                return f"{poste}=non mesurable"
+            signe = '≥' if donnees.get('statut') == 'CONFORME' else '<'
+            return f"{poste}={donnees.get('charge', 0):.0f}€{signe}{seuil:.0f}€"
+
+        if statut_ani == 'HORS CHAMP':
+            h5_s = 'NON MESURÉE'
+            h5_m = ("Panier D911-1 : hors champ (contrat individuel). "
+                    "Aucun verdict de conformité n'est émis.")
+        elif statut_ani == 'NON CONFORME':
+            manques = [_ligne(p, d) for p, d in sorted(detail_ani.items())
+                       if d.get('statut') == 'NON CONFORME']
+            h5_s = 'NON VALIDÉE'
+            h5_m = "Panier D911-1 non atteint : " + " | ".join(manques)
         else:
-            non_conf = []
-            for p in postes_ani:
-                d = detail_ani.get(p, {})
-                if d.get('seuil', 0) > 0 and not d.get('ok', True):
-                    non_conf.append(
-                        f"{p}={d.get('charge',0):.0f}€<{d['seuil']:.0f}€"
-                    )
-            if non_conf:
-                h5_s = 'NON VALIDÉE'
-                h5_m = "ANI non conforme : " + " | ".join(non_conf)
-            else:
-                h5_s = 'VALIDÉE'
-                h5_m = "ANI conforme (contrat individuel — ANI non applicable)"
+            mesures = [_ligne(p, d) for p, d in sorted(detail_ani.items())
+                       if d.get('statut') == 'CONFORME']
+            h5_s = 'VALIDÉE' if ani.get('complet') else 'À JUSTIFIER'
+            h5_m = "Panier D911-1 ✅ | " + " | ".join(mesures)
+            if not ani.get('complet'):
+                h5_m += (" | verdict INCOMPLET — non mesurable : %s"
+                         % ", ".join(ani.get('non_mesurables', [])))
 
         return [
             {'id':'H1','hypothese':'Ratio S/P dans la norme mutualité [65%, 85%]',
@@ -559,7 +577,10 @@ class AgentS1TarificationSante:
         a_just  = [h for h in hyp if h['statut'] == 'À JUSTIFIER']
         if non_val:
             return 'ROUGE'
-        if a_just or not ani['conforme']:
+        # ⚠️ HORS CHAMP n'est pas NON CONFORME : un contrat individuel n'est
+        # pas soumis au panier, il n'a donc rien manqué. `not ani['conforme']`
+        # valait True sur le None de HORS CHAMP et l'aurait fait passer AMBRE.
+        if a_just or ani.get('statut') == 'NON CONFORME':
             return 'AMBRE'
         return 'VERT'
 
@@ -607,12 +628,23 @@ class AgentS1TarificationSante:
             f"  Ratio S/P attendu         : {lr*100:>11.1f}%",
             f"  Nombre d'assurés          : {nb_assures:>12,}",
             f"  Âge moyen                 : {age_moyen:>12.1f} ans",
-            "", "📋 ANI 2013", "─"*40,
+            "", "📋 PANIER DE SOINS MINIMAL — art. D911-1 CSS", "─"*40,
             f"  {ani['note_globale']}",
         ]
-        for p, d in ani['detail'].items():
-            if d['note'] != 'N/A':
-                L.append(f"  {p:<20} : {d['note']}")
+        # Chaque ligne dit sa REGLE, son SEUIL et son UNITE — c'etait tout le
+        # defaut : quatre nombres nus ne pouvaient pas exprimer un panier qui
+        # melange taux, forfaits journaliers et forfaits en euros.
+        for p, d in sorted(ani.get('detail', {}).items()):
+            statut = d.get('statut', '')
+            if not statut:
+                continue
+            if d.get('seuil') is None:
+                L.append(f"  {p:<16} : {statut} — {d.get('explication', '')}")
+            else:
+                L.append(
+                    f"  {p:<16} : {statut} — charge {d.get('charge', 0):.2f}€ "
+                    f"vs seuil {d['seuil']:.2f}€ ({d.get('regle', '')}, "
+                    f"{d.get('reference', '')})")
 
         L += ["", "📋 HYPOTHÈSES", "─"*40]
         for h in hyp:
@@ -790,7 +822,8 @@ class AgentS1TarificationSante:
         return {'success':False,'agent':self.NOM,'version':self.VERSION,
                 'audit_id':aid,'statut_rag':'ROUGE',
                 'prime_pure':0,'prime_commerciale':0,'primes_acquises':0,
-                'ratio_sp_attendu':0,'postes':{},'ani_conforme':False,
+                'ratio_sp_attendu':0,'postes':{},'ani_conforme':None,
+                'ani_statut':'NON MESURABLE','ani_complet':False,
                 'sorties_s2':{},'hypotheses':[],'commentaire':f"❌ ERREUR S1:{msg}",
                 'graphiques':{},'duree_sec':0.0,'erreur':msg}
 
@@ -828,7 +861,7 @@ if __name__ == '__main__':
     tracer(f"  Prime comm : {r['prime_commerciale']:.2f}€/an ({r['prime_mensuelle']:.2f}€/mois)")
     tracer(f"  Primes acq : {r['primes_acquises']:,.0f}€")
     tracer(f"  Ratio S/P  : {r['ratio_sp_attendu']*100:.1f}%")
-    tracer(f"  ANI 2013   : {'✅' if r['ani_conforme'] else '⚠️'}")
+    tracer(f"  Panier D911-1 : {r.get('ani_statut', '—')}")
     tracer(f"\n  Sinistralité par poste :")
     for p, v in r['postes'].items():
         tracer(f"    {p:<20} : {v['sinistre_annuel']:>8.0f}€/assuré/an [{v['source']}]")

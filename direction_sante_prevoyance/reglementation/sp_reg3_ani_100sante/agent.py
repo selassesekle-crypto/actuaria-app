@@ -57,16 +57,19 @@ LAYOUT_BASE = dict(
     hoverlabel=dict(bgcolor=NAVY_LL, bordercolor=OR, font_size=12, font_color=BLANC),
 )
 
-# ── Seuils réglementaires ─────────────────────────────────────────────────────
-# ANI 2013 — panier minimum annuel par poste (€/assuré)
-# Source : ANI 11/01/2013 + Art. L911-7 CSS
-ANI_SEUILS = {
-    "medecine":        30.0,    # ≥ 100% BR consultations généraliste
-    "hospitalisation": 100.0,   # ≥ 100% BR séjour + forfait journalier
-    "dentaire":        75.0,    # ≥ 125% BR soins dentaires
-    "optique":         100.0,   # verres + montures, minimum conventionnel
-    "pharmacie":       0.0,     # pas de seuil ANI (pharmaco couvert SS)
-}
+# ── Panier de soins minimal ────────────────────────────────────────────────
+# ⚠️ CORRIGÉ LE 12/09/2026 (D34) — cet agent portait sa PROPRE copie des
+# seuils, avec les MÊMES valeurs fausses que S1 et la MÊME comparaison en
+# euros. Deux agents du même module rendaient donc deux verdicts
+# réglementaires opposés sur le même portefeuille, le même jour, sur les
+# mêmes données — et aucun agent ne les rapprochait.
+# La règle vit maintenant dans services/sp_ani.py, et les deux l'appellent.
+try:
+    from ...services.sp_ani import HORS_CHAMP, NON_MESURABLE, verifier_panier
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_ani import (
+        HORS_CHAMP, NON_MESURABLE, verifier_panier,
+    )
 
 # 100% Santé — paniers RAC 0 (Décrets 2019-21)
 # Optique : verres classe A + monture ≤ 30€ → prise en charge totale
@@ -209,51 +212,33 @@ class AgentSPReg3ANI100Sante:
 
     def _verifier_ani(self, src, contrat):
         """
-        Vérifie la conformité au panier ANI 2013.
-        Source : ANI 11/01/2013 | Art. L911-7 CSS.
-        Applicable uniquement aux contrats collectifs obligatoires.
+        Panier de soins minimal — art. D911-1 CSS, MÊME RÈGLE QUE S1.
+
+        ⚠️ CORRIGÉ LE 12/09/2026 (D19, D34). Cet agent comparait la charge
+        mutuelle en euros à quatre seuils nus commentés en pourcentage de base
+        de remboursement — la même erreur que S1, dans sa propre copie. Et
+        « individuel → conforme_global=True » était une FAUSSE CONFORMITÉ :
+        un contrat hors du champ de l'obligation n'a rien satisfait, il n'y est
+        pas soumis.
+
+        La règle porte désormais l'UNITÉ et la BASE de chaque ligne, elle vit
+        dans services/sp_ani.py, et S1 appelle exactement la même. C'est ce
+        qui ferme D34 : il n'y a plus deux règles, donc plus deux verdicts.
         """
-        if contrat == "individuel":
-            detail = {p: {"ok":True, "note":"N/A (individuel — ANI non applicable)"}
-                      for p in ANI_SEUILS}
-            return {
-                "conforme_global": True,
-                "detail":          detail,
-                "note_globale":    "N/A — ANI 2013 s'applique uniquement au collectif (Art. L911-7 CSS)",
-            }
-
-        postes = src["postes"]
-        detail = {}
-        conforme = True
-
-        for poste, seuil in ANI_SEUILS.items():
-            if seuil == 0:
-                detail[poste] = {"ok":True, "seuil":seuil, "note":"Pas de seuil ANI"}
-                continue
-            # Charge mutuelle par poste (annuelle par assuré)
-            p_info  = postes.get(poste, {})
-            charge  = float(p_info.get("charge_mutuelle", 0))
-            ok      = charge >= seuil
-            if not ok:
-                conforme = False
-            detail[poste] = {
-                "ok":     ok,
-                "seuil":  seuil,
-                "charge": round(charge, 2),
-                "ecart":  round(charge - seuil, 2),
-                "note":   (f"✅ {charge:.0f}€ ≥ {seuil:.0f}€ seuil ANI"
-                           if ok else
-                           f"❌ {charge:.0f}€ < {seuil:.0f}€ — déficit {seuil-charge:.0f}€"),
-            }
-
+        verdict = verifier_panier(src.get("postes", {}), contrat)
+        detail = dict(verdict["detail"])
+        if verdict["statut"] == HORS_CHAMP:
+            detail = {p: {"statut": HORS_CHAMP, "note": verdict["note"]}
+                      for p in ("medecine", "pharmacie", "hospitalisation",
+                                "dentaire", "optique")}
         return {
-            "conforme_global": conforme,
+            # `conforme_global` vaut None hors champ : ni vrai, ni faux.
+            "conforme_global": verdict["conforme"],
+            "statut":          verdict["statut"],
+            "complet":         verdict["complet"],
+            "non_mesurables":  verdict.get("non_mesurables", []),
             "detail":          detail,
-            "note_globale":    (
-                "✅ Panier ANI 2013 respecté sur tous les postes"
-                if conforme else
-                "❌ Panier ANI 2013 non atteint — réviser les niveaux de garantie"
-            ),
+            "note_globale":    verdict["note"],
         }
 
     def _verifier_100_sante(self, src):
@@ -348,7 +333,17 @@ class AgentSPReg3ANI100Sante:
         }
 
     def _hypotheses(self, ani, sante_100, contrat_resp, contrat):
-        h1_s = "VALIDÉE" if ani["conforme_global"] else "NON VALIDÉE"
+        # ⚠️ Trois etats : hors champ n'est ni conforme ni non conforme, et
+        # un verdict INCOMPLET (poste non mesurable) ne se declare pas VALIDE.
+        statut_ani = ani.get("statut", "")
+        if statut_ani == HORS_CHAMP:
+            h1_s = "NON MESURÉE"
+        elif statut_ani == "NON CONFORME":
+            h1_s = "NON VALIDÉE"
+        elif ani.get("complet"):
+            h1_s = "VALIDÉE"
+        else:
+            h1_s = "À JUSTIFIER"
         h1_m = ani["note_globale"]
 
         if sante_100:
@@ -373,7 +368,9 @@ class AgentSPReg3ANI100Sante:
         ]
 
     def _rag(self, hyp, ani, contrat):
-        if contrat != "individuel" and not ani["conforme_global"]:
+        # ⚠️ `not ani["conforme_global"]` valait True sur le None de HORS
+        # CHAMP : un contrat non soumis serait passe ROUGE. Le statut se lit.
+        if ani.get("statut") == "NON CONFORME":
             return "ROUGE"
         non_val = [h for h in hyp if h["statut"]=="NON VALIDÉE" and h["critique"]]
         if non_val:
@@ -415,11 +412,15 @@ class AgentSPReg3ANI100Sante:
 
     def _graphiques(self, ani, sante_100):
         gph = {}
-        postes = list(ANI_SEUILS.keys())
-        seuils = [ANI_SEUILS[p] for p in postes]
-        charges = [ani["detail"].get(p, {}).get("charge", 0) for p in postes]
-        couleurs = [("#2ECC71" if ani["detail"].get(p,{}).get("ok", True) else "#E74C3C")
-                    for p in postes]
+        # Les seuils viennent du VERDICT, plus d'une table locale : c'est ce
+        # qui garantit que le graphique montre la regle reellement appliquee.
+        detail = ani.get("detail", {})
+        postes = [p for p, d in sorted(detail.items())
+                  if isinstance(d, dict) and d.get("seuil") is not None]
+        seuils = [detail[p]["seuil"] for p in postes]
+        charges = [detail[p].get("charge", 0) for p in postes]
+        couleurs = [("#2ECC71" if detail[p].get("statut") == "CONFORME"
+                     else "#E74C3C") for p in postes]
 
         fig = go.Figure()
         fig.add_trace(go.Bar(name="Seuil ANI", x=postes, y=seuils,

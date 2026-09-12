@@ -39,21 +39,27 @@ def _impl_test_reg3_success(r_s1_collectif, r_s1_individuel):
     assert r_i["success"] is True and r_i["erreur"] is None, "Individuel doit réussir"
 
 
-# ── T2 : ANI individuel → conforme automatiquement ────────────────────────────
+# ── T2 : contrat individuel → HORS CHAMP, et non « conforme » ────────────────
 def _impl_test_reg3_ani_individuel_conforme(r_s1_individuel):
-    """ANI 2013 ne s'applique qu'aux collectifs (Art. L911-7 CSS).
-    Un contrat individuel doit toujours être conforme ANI.
+    """Le panier de l'art. D911-1 CSS s'applique au contrat COLLECTIF
+    obligatoire (art. L911-7 CSS). Un contrat individuel en est HORS CHAMP.
+
+    ⚠️ CORRIGÉ LE 12/09/2026 — CE TEST VERROUILLAIT UNE FAUSSE CONFORMITÉ,
+    la même que son jumeau de S1. Un contrat hors du champ de l'obligation
+    n'a rien satisfait : il n'y est pas soumis.
     """
     reg3 = AgentSPReg3ANI100Sante(verbose=False)
     r = reg3.run(result_s1=r_s1_individuel, contrat="individuel",
                  generer_graphiques=False)
-    assert r["ani_conforme"] is True, (
-        "Contrat individuel → ANI conforme auto (Art. L911-7 CSS)"
+    assert r["ani_conforme"] is None, (
+        "Hors champ, la conformite n'est ni vraie ni fausse ; obtenu : %r"
+        % r["ani_conforme"]
     )
-    notes = [v.get("note", "") for v in r["ani_detail"].values()]
-    assert any("N/A" in n for n in notes), (
-        "Notes ANI individuel doivent contenir N/A"
+    statuts = {v.get("statut") for v in r["ani_detail"].values()}
+    assert statuts == {"HORS CHAMP"}, (
+        "Tous les postes doivent etre HORS CHAMP ; obtenu : %s" % statuts
     )
+    assert "COLLECTIF" in r["ani_note"].upper() if "ani_note" in r else True
 
 
 # ── T3 : ANI collectif vérifié poste par poste ────────────────────────────────

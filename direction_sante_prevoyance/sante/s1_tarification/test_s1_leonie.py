@@ -62,20 +62,41 @@ def _impl_test_s1_hierarchie_garanties(s1):
     )
 
 
-# ── T4 : ANI individuel vs collectif ──────────────────────────────────────────
+# ── T4 : panier de soins — individuel vs collectif ───────────────────────────
 def _impl_test_s1_ani_individuel_conforme(s1):
-    """ANI 2013 ne s'applique qu'aux collectifs (Art. L911-7 CSS).
-    Un contrat individuel doit toujours retourner ani_conforme=True.
+    """Le panier de l'art. D911-1 CSS s'applique au contrat COLLECTIF
+    obligatoire (art. L911-7 CSS). Un contrat individuel en est HORS CHAMP.
+
+    ⚠️ CORRIGÉ LE 12/09/2026 — CE TEST VERROUILLAIT UNE FAUSSE CONFORMITÉ.
+    Il exigeait `ani_conforme is True` pour un contrat individuel, et son
+    propre nom l'appelait « conforme ». Or un contrat hors du champ de
+    l'obligation n'a RIEN SATISFAIT : il n'y est pas soumis. Publier
+    « conforme » sur un contrat non soumis est une affirmation réglementaire
+    que rien ne garantit — exactement le motif dominant du module.
+
+    Le service rend désormais HORS CHAMP et `conforme=None` : ni vrai,
+    ni faux.
     """
     r = s1.run(nb_assures=100, age_moyen=35, contrat="individuel",
                garantie_niveau="eco", generer_graphiques=False)
-    assert r["ani_conforme"] is True, (
-        "Contrat individuel doit être conforme ANI automatiquement "
-        "(Art. L911-7 CSS — ANI applicable uniquement au collectif)"
+    assert r["ani_conforme"] is None, (
+        "Hors champ, la conformite n'est ni vraie ni fausse ; obtenu : %r"
+        % r["ani_conforme"]
     )
-    notes = [v.get("note","") for v in r["ani_detail"]["detail"].values()]
-    assert any("N/A" in n for n in notes), (
-        "Notes ANI pour contrat individuel doivent contenir N/A"
+    assert r["ani_statut"] == "HORS CHAMP", (
+        "Le statut doit dire HORS CHAMP, pas CONFORME ; obtenu : %r"
+        % r["ani_statut"]
+    )
+    assert "COLLECTIF" in r["ani_detail"]["note_globale"].upper(), (
+        "La note doit expliquer POURQUOI le contrat est hors champ : %s"
+        % r["ani_detail"]["note_globale"]
+    )
+    # Et un contrat COLLECTIF, lui, recoit bien un verdict.
+    rc = s1.run(nb_assures=100, age_moyen=35, contrat="collectif",
+                garantie_niveau="eco", generer_graphiques=False)
+    assert rc["ani_statut"] in ("CONFORME", "NON CONFORME"), (
+        "Un contrat collectif doit recevoir un verdict ; obtenu : %r"
+        % rc["ani_statut"]
     )
 
 
