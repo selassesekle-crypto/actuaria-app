@@ -249,5 +249,102 @@ class TestLeCoutMoyenSegmente(unittest.TestCase):
               "cout segmente")
 
 
+class TestLesAutresCheminsDuPrixSegmententAussi(unittest.TestCase):
+    """⚠️⚠️ SUR QUELLE ASSIETTE ? A3 N'EST PAS LE SEUL A TARIFER.
+
+    Le defaut du 13/09 etait local a A3, et c'est MESURE : `tarifer` et
+    `predire_portefeuille` prennent `glm_cout.predict(Xc)` directement,
+    sans `.values`, et rendent un cout segmente. *Mais un sceau qui ne
+    couvre qu'un des trois chemins du prix reproduit exactement la faute
+    reprochee au correctif recu -- fermer une branche sur trois.*
+
+    Ces deux chemins partagent la MEME classe de modele, `ModeleCout`,
+    celle-la meme dont la forme de retour avait tue la ligne d'A3. Une
+    cause future qui rendrait ce modele plat les atteindrait tous.
+    """
+
+    def _tarif(self):
+        if 'tarif' in _CACHE:
+            return _CACHE['tarif']
+        import logging
+        import tempfile
+        import warnings
+
+        from core.plan_tarifaire import PlanTarifaire
+        from direction_non_vie.tarification.pipeline_tarifaire import (
+            pipeline_complet,
+        )
+        warnings.filterwarnings('ignore')
+        niveau = logging.getLogger().level
+        logging.disable(logging.CRITICAL)
+        try:
+            tmp = tempfile.mkdtemp(prefix='seg_pipe_')
+            plan = PlanTarifaire.depuis_yaml(
+                str(_RACINE / 'plans' / 'auto.yaml'))
+            d = _portefeuille_heterogene(graine=11, n=3000, taux=0.30)
+            tarif = pipeline_complet(
+                d, plan, models_path=tmp, audit_path=tmp,
+                qualite_validee_par='controle interne')
+        finally:
+            logging.disable(niveau)
+        _CACHE['tarif'] = (tarif, d)
+        return _CACHE['tarif']
+
+    def test_SEG5_SCEAU_predire_portefeuille_rend_un_cout_SEGMENTE(self):
+        """⚠️⚠️ LE CHEMIN PORTEFEUILLE DE `pipeline_tarifaire`. Il alimente
+        le tarif signe sans passer par A3 : un cout plat y serait le meme
+        defaut, sur une autre surface."""
+        import numpy as np
+        tarif, d = self._tarif()
+        p = tarif.predire_portefeuille(d)
+        cm = np.asarray(p['cout_moyen'], dtype=float)
+        self.assertTrue(cm.size, 'aucun cout moyen rendu')
+        distinctes = len(np.unique(cm))
+        self.assertGreater(
+            distinctes, cm.size // 2,
+            f"{distinctes} couts distincts pour {cm.size} contrats : le "
+            f"chemin portefeuille ne segmente pas sur le cout.")
+        etendue = float(np.max(cm) / max(float(np.min(cm)), 1e-9))
+        self.assertGreater(
+            etendue, 1.10,
+            f"le cout ne s'etale que de x{etendue:.3f} : du bruit, pas une "
+            f"segmentation.")
+        print(f"    SEG-5 SCEAU : {distinctes} couts distincts sur "
+              f"{cm.size}, etendue x{etendue:.2f}")
+
+    def test_SEG6_SCEAU_tarifer_rend_des_couts_DIFFERENTS(self):
+        """⚠️⚠️ LE LIVRABLE QUI VEND. `tarifer` sort un prix par contrat :
+        si le cout y est constant, deux profils opposes paient la meme
+        moitie de prime -- et c'est le chemin qu'une API expose."""
+        tarif, d = self._tarif()
+        couts, echecs = [], 0
+        for i in range(60):
+            r = tarif.tarifer(d.iloc[i].to_dict())
+            if not r.get('success'):
+                echecs += 1
+                continue
+            couts.append(round(float(r['cout_moyen']), 6))
+        self.assertEqual(
+            echecs, 0,
+            f"{echecs} contrats sur 60 refuses : ce controle ne peut rien "
+            f"attester d'un chemin qui ne tarife pas.")
+        distinctes = len(set(couts))
+        self.assertGreater(
+            distinctes, len(couts) // 2,
+            f"{distinctes} couts distincts pour {len(couts)} contrats "
+            f"pourtant differents : `tarifer` ne segmente pas sur le cout.")
+        #: ⚠️ `tarifer` ARRONDIT a 2 decimales pour son contrat JSON
+        #: (`pipeline_tarifaire.py:504`). L'ecart avec le chemin
+        #: portefeuille vaut donc au plus 0,005 -- mesure : 0,0048678295.
+        #: *Une difference expliquee se DIT, sinon elle se redecouvre.*
+        etendue = max(couts) / max(min(couts), 1e-9)
+        self.assertGreater(
+            etendue, 1.10,
+            f"les 60 couts tiennent dans x{etendue:.3f} : pas une "
+            f"segmentation.")
+        print(f"    SEG-6 SCEAU : {distinctes} couts distincts sur "
+              f"{len(couts)} contrats, etendue x{etendue:.2f}")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
