@@ -1871,6 +1871,43 @@ def _fragment_interactif(objet) -> str:
         return ''
 
 
+def _mesure(valeur, motif: str, suffixe: str = '') -> str:
+    """Une grandeur FORMATEE, ou le tiret de l'absence — jamais une exception.
+
+    ⚠️⚠️ POURQUOI ELLE EXISTE — MESURE DU 11/09/2026. Six sites de ce module
+    formataient une grandeur en `:.4f` ou `:.2f` derriere le garde
+    `if 'cle' in d`. Or ce garde a EXACTEMENT l'angle mort que ce fichier
+    denonce quinze lignes plus haut pour `.get(cle, defaut)` : *il ne protege
+    de rien quand la cle EXISTE et vaut `None`*. Mesure, une cle a la fois :
+
+        modele_production['score_global'] = None   HTML 0  ·  Word 0
+        modele_production['interpretabilite'] = None        Word 0
+        relativites['pvalue'] = None                        Word 0
+        detail du tarif : exposition / prime_pure = None    Word 0
+
+    ⚠️ ET LE DERNIER EST VIVANT, PAS THEORIQUE. `tarif_publie` pose
+    deliberement `None` sur un contrat NON TARIFABLE — sa docstring le dit :
+    « Un contrat NON TARIFABLE n'est pas ecarte : il figure au detail avec ses
+    primes a `None`. » Mesure sur la chaine complete : **UN SEUL facteur
+    illisible parmi les dix premiers contrats** fait tomber `export_word` sur
+    `TypeError: unsupported format string passed to NoneType.__format__`, le
+    `except` avale, et le Word du rapport signe vaut **0 octet**. L'HTML, lui,
+    survit — il passe ses valeurs par `_c(v)`.
+
+    ⚠️ `export_html` N'A AUCUN `try/except` : sur `score_global`, l'exception
+    SORT de la fonction et les DEUX documents disparaissent ensemble.
+
+    *Un document ne peut pas annoncer sa propre absence ; c'est au format de
+    ne pas se supprimer sur une valeur que le module publie a dessein.*
+    """
+    if valeur is None:
+        return F.ABSENT
+    try:
+        return format(valeur, motif) + suffixe
+    except (TypeError, ValueError):
+        return F.ABSENT
+
+
 def _valeur_ou_absente(valeur, unite: str = '') -> str:
     """Une grandeur pour le contexte du modele, ou le tiret de l'absence.
 
@@ -2003,7 +2040,7 @@ def _construire_contexte_tarif(
 
     # ⚠️ NE PAS MASQUER UN ABSENT PAR 0.0000 (constat C5) : une clé absente
     # s'affiche « — », jamais un zéro — ce que le module condamne ailleurs.
-    _sc = f"{prod['score_global']:.4f}" if 'score_global' in prod else '—'
+    _sc = _mesure(prod.get('score_global'), '.4f')
     _gi = gini_texte(prod['gini_test'])     if 'gini_test' in prod else '—'
     _ov = gini_texte(prod['overfit_ratio'], 3) if 'overfit_ratio' in prod else '—'
     lines += [
@@ -2800,7 +2837,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
     html += _ouvrir_chapitre(6)
     if prod:
         prod_col = _statut_col((result_a6 or {}).get('statut_rag','AMBRE'))
-        _score_txt = f"{prod.get('score_global'):.4f}" if 'score_global' in prod else '—'
+        _score_txt = _mesure(prod.get('score_global'), '.4f')
         html += f"""
     <div class="kpi-grid">
       <div class="kpi"><div class="kpi-label">Modèle retenu</div><div class="kpi-value" style="font-size:15px;color:{NAVY}">{nom_modele(prod.get('modele'))}</div></div>
@@ -3206,13 +3243,21 @@ def export_word(
             _run(p, f"   Detail des {_t['n_lignes_detail']} premiers contrats "
                     f"sur {_t['n_contrats']} -- le total ci-dessus porte sur "
                     f"TOUS les contrats.", sz=9, col=NR).add_break()
+            # ⚠️⚠️ LES TROIS VALEURS PEUVENT ETRE `None`, PAS UNE SEULE.
+            # `tarif_publie` le declare : « Un contrat NON TARIFABLE n'est pas
+            # ecarte : il figure au detail avec ses primes a `None`. » Seul
+            # `prime_commerciale_ht` etait garde. Mesure du 11/09/2026, chaine
+            # complete : UN facteur illisible parmi les dix premiers contrats
+            # -> `TypeError`, `except` avale, **Word = 0 octet**, et A6
+            # journalise « LIVRABLE NON PRODUIT ». *Le garde avait ete pose a
+            # une porte et pas a sa jumelle : l'HTML, lui, passe par `_c(v)`.*
             for _l in _tar_w['detail']:
                 _fac = ' · '.join(f'{k}={v}' for k, v in _l['facteurs'].items())
-                _pc = ('—' if _l['prime_commerciale_ht'] is None
-                       else f"{_l['prime_commerciale_ht']:.2f}")
                 _run(p, f"   #{_l['rang']} {_fac} · expo "
-                        f"{_l['exposition']:.4g} -> pure "
-                        f"{_l['prime_pure']:.2f} EUR, commerciale HT {_pc}",
+                        f"{_mesure(_l['exposition'], '.4g')} -> pure "
+                        f"{_mesure(_l['prime_pure'], '.2f')} EUR, "
+                        f"commerciale HT "
+                        f"{_mesure(_l['prime_commerciale_ht'], '.2f')}",
                      sz=8, col=NR).add_break()
             # ⚠️ L'ORIGINE EN TETE, ET DANS LES DEUX FORMATS : elle dit d'ou
             # vient le montant qu'on vient de lire, et signale le cas ou le
@@ -3354,7 +3399,7 @@ def export_word(
                 F.nombre(d.get('ic95_low'), F.DEC_GINI),
                 F.nombre(d.get('ic95_high'), F.DEC_GINI),
                 # Audit V7 IMPORTANT : garde NA cohérent avec le HTML.
-                f"{d.get('pvalue'):.4f}" if 'pvalue' in d else '—',
+                _mesure(d.get('pvalue'), '.4f'),
                 'Oui' if d.get('significatif') else 'Non',
                 d.get('sens',''),
             ])
@@ -3480,7 +3525,7 @@ def export_word(
         _h(chapitre(6)); _sep()
         if prod:
             p_col = VR if statut=='VERT' else AR if statut=='AMBRE' else RgR
-            _score_txt = f"{prod.get('score_global'):.4f}" if 'score_global' in prod else '—'
+            _score_txt = _mesure(prod.get('score_global'), '.4f')
             _tbl(titres('production'),
                  [['Modèle retenu', nom_modele(prod.get('modele')),
                    'Famille', prod.get('famille','—')],
@@ -3488,7 +3533,8 @@ def export_word(
                    'Gini test', gini_texte(prod['gini_test']) if 'gini_test' in prod else '—'],
                   ['Overfit ratio', gini_texte(prod['overfit_ratio'], 3) if 'overfit_ratio' in prod else '—',
                    'Interprétabilité',
-                   f"{prod['interpretabilite']:.2f}/1.0" if 'interpretabilite' in prod else '—']],
+                   _mesure(prod.get('interpretabilite'), '.2f',
+                           '/1.0')]],
                  ws=[4.0,4.0,4.0,4.0])
             # Audit V7 IMPORTANT #1 : qualification du score composite.
             # ⚠️⚠️ ET LA QUALIFICATION ÉTAIT FAUSSE. Elle affirmait que « le
