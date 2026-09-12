@@ -75,6 +75,15 @@ try:
 except ImportError:
     SCIPY_OK = False
 
+# ── Trace console tolerante a l encodage ─────────────────────────────────────
+# `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
+# une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
+# echouer tout le calcul de cet agent. Voir services/sp_console.py.
+try:
+    from ...services.sp_console import tracer
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_console import tracer
+
 # ── Palette ActuarIA ──────────────────────────────────────────────────────────
 NAVY   = "#0F2E52"; NAVY_L = "#1B3A5C"; NAVY_LL = "#243F6A"; OR = "#C9A84C"
 BLANC  = "#F0F4F8"; GRIS   = "#8A9AB0"; VERT   = "#2ECC71"; ROUGE = "#E74C3C"
@@ -2083,17 +2092,17 @@ class AgentP3ProvissionnementPrevoyance:
 
     def _console(self, aid, rag, be_itt, pm_rentes, prov_tot, lr, mack):
         ic = "🟢" if rag=="VERT" else ("🟡" if rag=="AMBRE" else "🔴")
-        print(f"\n{'─'*70}")
-        print(f"  P3 ÉLODIE v{self.VERSION} | {aid} | {ic} {rag}")
-        print(
+        tracer(f"\n{'─'*70}")
+        tracer(f"  P3 ÉLODIE v{self.VERSION} | {aid} | {ic} {rag}")
+        tracer(
             f"  BE ITT={be_itt:,.0f}€ | PM Rentes={pm_rentes:,.0f}€ | "
             f"Total={prov_tot:,.0f}€ | LR={lr*100:.1f}%"
         )
-        print(
+        tracer(
             f"  σ Mack={mack['sigma_total']:,.0f}€ | "
             f"CV={mack['cv_pct']:.1f}% | statut={mack['statut']}"
         )
-        print(f"{'─'*70}")
+        tracer(f"{'─'*70}")
 
     def _erreur(self, msg: str, aid: str = "") -> Dict:
         return {
@@ -2116,10 +2125,10 @@ class AgentP3ProvissionnementPrevoyance:
 # =============================================================================
 
 if __name__ == "__main__":
-    print("=" * 70)
-    print("  P3 ÉLODIE v3.0 — PROVISIONNEMENT PRÉVOYANCE")
-    print("  Triangle ITT | CL | Mack 1993 | BF CTIP | Bootstrap ODP")
-    print("=" * 70)
+    tracer("=" * 70)
+    tracer("  P3 ÉLODIE v3.0 — PROVISIONNEMENT PRÉVOYANCE")
+    tracer("  Triangle ITT | CL | Mack 1993 | BF CTIP | Bootstrap ODP")
+    tracer("=" * 70)
 
     r_p1 = {
         "success": True, "age": 40.0, "salaire_brut": 45_000,
@@ -2143,21 +2152,21 @@ if __name__ == "__main__":
     )
     r = agent.run(result_p1=r_p1, result_p2=r_p2, generer_graphiques=False)
 
-    print(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
-    print(f"  Statut       : {r['statut_rag']}")
-    print(f"  Triangle     : {r['n_annees']}×{r['n_periodes']} — {r['triangle_meta'].get('mode','?')}")
-    print(f"  BE ITT (CL)  : {r['chain_ladder']['reserve_totale']:>12,.0f}€")
-    print(f"  BE ITT (Mack): {r['mack']['reserve_best_estimate']:>12,.0f}€ | CV={r['mack']['cv_pct']:.1f}%")
-    print(f"  BE ITT (BF)  : {r['bf']['reserve_totale']:>12,.0f}€ | LR={r['bf']['lr_apriori']:.1%}")
-    print(f"  Bootstrap BE : {r['bootstrap'].get('be_bootstrap',0):>12,.0f}€")
-    print(f"  P90 ITT      : {r['be_itt_detail']['p90']:>12,.0f}€")
-    print(f"  P99.5 ITT    : {r['be_itt_detail']['p99_5']:>12,.0f}€")
-    print(f"  PM Rentes IP : {r['pm_rentes_ip']:>12,.0f}€")
-    print(f"  BE Prévoyance: {r['be_prevoyance']:>12,.0f}€")
-    print(f"  SCR NSLT     : {r['scr']['scr_provisions']:>12,.0f}€")
-    print(f"  LR           : {r['loss_ratio']*100:>11.1f}%")
-    print(f"  Durée        : {r['duree_sec']:.2f}s")
-    print("\n  Hypothèses :")
+    tracer(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
+    tracer(f"  Statut       : {r['statut_rag']}")
+    tracer(f"  Triangle     : {r['n_annees']}×{r['n_periodes']} — {r['triangle_meta'].get('mode','?')}")
+    tracer(f"  BE ITT (CL)  : {r['chain_ladder']['reserve_totale']:>12,.0f}€")
+    tracer(f"  BE ITT (Mack): {r['mack']['reserve_best_estimate']:>12,.0f}€ | CV={r['mack']['cv_pct']:.1f}%")
+    tracer(f"  BE ITT (BF)  : {r['bf']['reserve_totale']:>12,.0f}€ | LR={r['bf']['lr_apriori']:.1%}")
+    tracer(f"  Bootstrap BE : {r['bootstrap'].get('be_bootstrap',0):>12,.0f}€")
+    tracer(f"  P90 ITT      : {r['be_itt_detail']['p90']:>12,.0f}€")
+    tracer(f"  P99.5 ITT    : {r['be_itt_detail']['p99_5']:>12,.0f}€")
+    tracer(f"  PM Rentes IP : {r['pm_rentes_ip']:>12,.0f}€")
+    tracer(f"  BE Prévoyance: {r['be_prevoyance']:>12,.0f}€")
+    tracer(f"  SCR NSLT     : {r['scr']['scr_provisions']:>12,.0f}€")
+    tracer(f"  LR           : {r['loss_ratio']*100:>11.1f}%")
+    tracer(f"  Durée        : {r['duree_sec']:.2f}s")
+    tracer("\n  Hypothèses :")
     for hi in r["hypotheses"]:
         ic = "✅" if hi["statut"]=="VALIDÉE" else "⚠️"
-        print(f"    {ic} [{hi['id']}] {hi['hypothese']} — {hi['score']}/100")
+        tracer(f"    {ic} [{hi['id']}] {hi['hypothese']} — {hi['score']}/100")

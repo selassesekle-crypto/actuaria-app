@@ -45,6 +45,15 @@ try:
 except ImportError:
     PLOTLY_OK = False
 
+# ── Trace console tolerante a l encodage ─────────────────────────────────────
+# `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
+# une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
+# echouer tout le calcul de cet agent. Voir services/sp_console.py.
+try:
+    from ...services.sp_console import tracer
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_console import tracer
+
 warnings.filterwarnings('ignore')
 logging.basicConfig(level=logging.INFO,
     format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
@@ -758,10 +767,10 @@ class AgentP4ReportingPrevoyance:
 
     def _console(self, aid, rag, be, tp, scr, r_scr, r_mcr):
         ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
-        print(f"\n{'─'*70}")
-        print(f"  P4 VALENTIN v{self.VERSION} | {aid} | {ic} {rag}")
-        print(f"  BE={be:,.0f}€ | TP={tp:,.0f}€ | SCR={scr:,.0f}€ | {r_scr:.1f}%/{r_mcr:.1f}%")
-        print(f"{'─'*70}")
+        tracer(f"\n{'─'*70}")
+        tracer(f"  P4 VALENTIN v{self.VERSION} | {aid} | {ic} {rag}")
+        tracer(f"  BE={be:,.0f}€ | TP={tp:,.0f}€ | SCR={scr:,.0f}€ | {r_scr:.1f}%/{r_mcr:.1f}%")
+        tracer(f"{'─'*70}")
 
     def _erreur(self, msg, aid):
         return {'success':False,'agent':self.NOM,'version':self.VERSION,
@@ -774,10 +783,10 @@ class AgentP4ReportingPrevoyance:
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
-    print("="*70)
-    print("  P4 VALENTIN v2.0 — DÉMO REPORTING PRÉVOYANCE QRT S.14")
-    print("  SCR Invalidité EIOPA | MCR prévoyance | QRT S.14.01")
-    print("="*70)
+    tracer("="*70)
+    tracer("  P4 VALENTIN v2.0 — DÉMO REPORTING PRÉVOYANCE QRT S.14")
+    tracer("  SCR Invalidité EIOPA | MCR prévoyance | QRT S.14.01")
+    tracer("="*70)
 
     import sys; sys.path.insert(0,'/home/claude')
     from direction_sante_prevoyance.prevoyance.p1_tarification.agent import AgentP1TarificationPrevoyance
@@ -799,18 +808,18 @@ if __name__ == '__main__':
     r = agent.run(result_p1=r1, result_p2=r2, result_p3=r3,
                   fonds_propres=5_000_000, generer_graphiques=False)
 
-    print(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
-    print(f"  Statut         : {r['statut_rag']}")
-    print(f"  PM Rentes IP   : {r['pm_rentes_ip']:>12,.0f}€")
-    print(f"  PSAP ITT       : {r['psap_total']:>12,.0f}€")
-    print(f"  BE Prévoyance  : {r['be_prevoyance']:>12,.0f}€")
-    print(f"  TP Prévoyance  : {r['tp_prevoyance']:>12,.0f}€")
-    print(f"  SCR Morbidité  : {r['scr_morbidite']:>12,.0f}€")
-    print(f"  SCR Cessation  : {r['scr_cessation']:>12,.0f}€")
-    print(f"  SCR Longévité  : {r['scr_longevite']:>12,.0f}€")
-    print(f"  SCR Total      : {r['scr_invalidite']:>12,.0f}€")
-    print(f"  MCR            : {r['mcr']:>12,.0f}€")
-    print(f"  Ratio SCR      : {r['ratio_scr_pct']:>11.1f}%")
-    print(f"  Ratio MCR      : {r['ratio_mcr_pct']:>11.1f}%")
-    print(f"  QRT lignes     : {len(r['qrt_s14']['lignes'])}")
-    print(f"  Durée          : {r['duree_sec']:.2f}s")
+    tracer(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
+    tracer(f"  Statut         : {r['statut_rag']}")
+    tracer(f"  PM Rentes IP   : {r['pm_rentes_ip']:>12,.0f}€")
+    tracer(f"  PSAP ITT       : {r['psap_total']:>12,.0f}€")
+    tracer(f"  BE Prévoyance  : {r['be_prevoyance']:>12,.0f}€")
+    tracer(f"  TP Prévoyance  : {r['tp_prevoyance']:>12,.0f}€")
+    tracer(f"  SCR Morbidité  : {r['scr_morbidite']:>12,.0f}€")
+    tracer(f"  SCR Cessation  : {r['scr_cessation']:>12,.0f}€")
+    tracer(f"  SCR Longévité  : {r['scr_longevite']:>12,.0f}€")
+    tracer(f"  SCR Total      : {r['scr_invalidite']:>12,.0f}€")
+    tracer(f"  MCR            : {r['mcr']:>12,.0f}€")
+    tracer(f"  Ratio SCR      : {r['ratio_scr_pct']:>11.1f}%")
+    tracer(f"  Ratio MCR      : {r['ratio_mcr_pct']:>11.1f}%")
+    tracer(f"  QRT lignes     : {len(r['qrt_s14']['lignes'])}")
+    tracer(f"  Durée          : {r['duree_sec']:.2f}s")

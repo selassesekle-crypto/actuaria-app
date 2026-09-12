@@ -21,6 +21,13 @@ from core import traitement_ia
 
 import numpy as np
 
+# ── Lecture du contrat reel des agents ──────────────────────────────────────────
+# SP-ALM publie `duration`, `bv01` et `lcr` comme des SOUS-DICTIONNAIRES.
+# Les lire au premier niveau rendait 0 pour les durations et levait une
+# TypeError fatale sur le LCR. Voir services/sp_contrats.py.
+from .sp_contrats import lire_alm
+
+
 logger = logging.getLogger('actuaria.sp.rapport_prevoyance')
 
 # ── Réimporter logo et CSS depuis n5_rapport pour cohérence visuelle ──────────
@@ -163,9 +170,10 @@ def _construire_contexte(p1, p2, p3, p4, alm, reg1, arrete):
     r_mcr= float(p4.get('ratio_mcr_pct',  0) or 0)
     trans = p2.get('transitions', {})
     dur   = p2.get('esperances',   {})
-    dur_a = float(alm.get('duration_actif',  0) or 0)
-    dur_p = float(alm.get('duration_passif', 0) or 0)
-    lcr   = float(alm.get('lcr',             0) or 0)
+    _alm  = lire_alm(alm)          # contrat imbrique reel, voir sp_contrats
+    dur_a = _alm['duration_actif']
+    dur_p = _alm['duration_passif']
+    lcr   = _alm['lcr_ratio']
     cv    = float(p3.get('cv_inter',         0) or 0)
     lines = [
         f'DOSSIER PRÉVOYANCE — Arrêté {arrete}',
@@ -307,9 +315,10 @@ def export_html(result_p1, result_p2, result_p3, result_p4,
         fpp  = float(p4.get('fonds_propres',     0) or 0)
         r_scr= float(p4.get('ratio_scr_pct',     0) or 0)
         r_mcr= float(p4.get('ratio_mcr_pct',     0) or 0)
-        dur_a= float(alm.get('duration_actif',   0) or 0)
-        dur_p= float(alm.get('duration_passif',  0) or 0)
-        lcr  = float(alm.get('lcr',              0) or 0)
+        _alm  = lire_alm(alm)          # contrat imbrique reel, voir sp_contrats
+        dur_a = _alm['duration_actif']
+        dur_p = _alm['duration_passif']
+        lcr   = _alm['lcr_ratio']
 
         narration, source = _generer_narration(p1, p2, p3, p4, alm, reg1, arr)
         narration_html = _md_to_html(narration)
@@ -478,11 +487,11 @@ def export_html(result_p1, result_p2, result_p3, result_p4,
             f'<td class="center">{_pct(lcr*100)}</td><td class="center">≥ 100%</td>'
             f'<td class="center">{("✅" if lcr_ok else "❌")}</td></tr>'
             f'<tr><td class="label">Immunisation Redington</td>'
-            f'<td class="center">{alm.get("redington_ok","—")}</td>'
+            f'<td class="center">{(lire_alm(alm)['redington_ok'] or '—')}</td>'
             f'<td class="center">Convexité ≥ 0</td><td class="center">—</td></tr>'
             '<tr class="highlight-gold">'
             f'<td class="label">BV01 stress +100bp</td>'
-            f'<td class="center">{_f(alm.get("bv01_stress_100",0))}</td>'
+            f'<td class="center">{_f(lire_alm(alm)['impact_100bp'])}</td>'
             f'<td class="center">Impact taux</td><td class="center">—</td></tr>'
             '</tbody></table>'
         )
@@ -754,9 +763,10 @@ def export_word(result_p1, result_p2, result_p3, result_p4,
         fpp  = float(p4.get('fonds_propres',     0) or 0)
         r_scr= float(p4.get('ratio_scr_pct',     0) or 0)
         r_mcr= float(p4.get('ratio_mcr_pct',     0) or 0)
-        dur_a= float(alm.get('duration_actif',   0) or 0)
-        dur_p= float(alm.get('duration_passif',  0) or 0)
-        lcr  = float(alm.get('lcr',              0) or 0)
+        _alm  = lire_alm(alm)          # contrat imbrique reel, voir sp_contrats
+        dur_a = _alm['duration_actif']
+        dur_p = _alm['duration_passif']
+        lcr   = _alm['lcr_ratio']
 
         doc = Document()
         for s in doc.sections:
@@ -882,7 +892,7 @@ def export_word(result_p1, result_p2, result_p3, result_p4,
               ['Duration passif',f'{dur_p:.2f} ans','—','—'],
               ['Gap duration',f'{dur_a-dur_p:+.2f} ans','≤ 2 ans','✅' if abs(dur_a-dur_p)<=2 else '⚠️'],
               ['LCR',_pct(lcr*100),'≥ 100%','✅' if lcr>=1 else '❌'],
-              ['Redington',alm.get('redington_ok','—'),'Convexité ≥ 0','—']],
+              ['Redington',(lire_alm(alm)['redington_ok'] or '—'),'Convexité ≥ 0','—']],
              ws=[4.5,3.0,2.5,4.0])
         doc.add_page_break()
 

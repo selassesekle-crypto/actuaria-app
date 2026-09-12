@@ -33,6 +33,15 @@ try:
 except ImportError:
     PLOTLY_OK = False
 
+# ── Trace console tolerante a l encodage ─────────────────────────────────────
+# `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
+# une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
+# echouer tout le calcul de cet agent. Voir services/sp_console.py.
+try:
+    from ...services.sp_console import tracer
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_console import tracer
+
 warnings.filterwarnings('ignore')
 logging.basicConfig(level=logging.INFO,
     format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
@@ -506,10 +515,10 @@ class AgentS3ReportingSante:
 
     def _console(self, aid, rag, be, tp, scr, r_scr, r_mcr):
         ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
-        print(f"\n{'─'*70}")
-        print(f"  S3 BINTA v{self.VERSION} | {aid} | {ic} {rag}")
-        print(f"  BE={be:,.0f}€ | TP={tp:,.0f}€ | SCR={scr:,.0f}€ | Ratio={r_scr:.1f}%/{r_mcr:.1f}%")
-        print(f"{'─'*70}")
+        tracer(f"\n{'─'*70}")
+        tracer(f"  S3 BINTA v{self.VERSION} | {aid} | {ic} {rag}")
+        tracer(f"  BE={be:,.0f}€ | TP={tp:,.0f}€ | SCR={scr:,.0f}€ | Ratio={r_scr:.1f}%/{r_mcr:.1f}%")
+        tracer(f"{'─'*70}")
 
     def _erreur(self, msg, aid):
         return {'success':False,'agent':self.NOM,'version':self.VERSION,
@@ -521,10 +530,10 @@ class AgentS3ReportingSante:
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
-    print("="*70)
-    print("  S3 BINTA v2.0 — DÉMO REPORTING SANTÉ QRT S.13")
-    print("  SCR NSLT EIOPA | MCR | Ratio SCR/MCR | QRT S.13.01")
-    print("="*70)
+    tracer("="*70)
+    tracer("  S3 BINTA v2.0 — DÉMO REPORTING SANTÉ QRT S.13")
+    tracer("  SCR NSLT EIOPA | MCR | Ratio SCR/MCR | QRT S.13.01")
+    tracer("="*70)
 
     r_s1 = {'success':True,'primes_acquises':2_421_438.0,'ratio_sp_attendu':0.848,'nb_assures':5000}
     r_s2 = {
@@ -543,13 +552,13 @@ if __name__ == '__main__':
     r = agent.run(result_s1=r_s1, result_s2=r_s2,
                   fonds_propres=2_000_000.0, generer_graphiques=False)
 
-    print(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
-    print(f"  Statut     : {r['statut_rag']}")
-    print(f"  BE Santé   : {r['be_sante']:>12,.0f}€")
-    print(f"  TP Santé   : {r['tp_sante']:>12,.0f}€")
-    print(f"  SCR Santé  : {r['scr_sante']:>12,.0f}€")
-    print(f"  MCR Santé  : {r['mcr_sante']:>12,.0f}€")
-    print(f"  Ratio SCR  : {r['ratio_scr_pct']:>11.1f}%")
-    print(f"  Ratio MCR  : {r['ratio_mcr_pct']:>11.1f}%")
-    print(f"  QRT lignes : {len(r['qrt_s13']['lignes'])}")
-    print(f"  Durée      : {r['duree_sec']:.2f}s")
+    tracer(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
+    tracer(f"  Statut     : {r['statut_rag']}")
+    tracer(f"  BE Santé   : {r['be_sante']:>12,.0f}€")
+    tracer(f"  TP Santé   : {r['tp_sante']:>12,.0f}€")
+    tracer(f"  SCR Santé  : {r['scr_sante']:>12,.0f}€")
+    tracer(f"  MCR Santé  : {r['mcr_sante']:>12,.0f}€")
+    tracer(f"  Ratio SCR  : {r['ratio_scr_pct']:>11.1f}%")
+    tracer(f"  Ratio MCR  : {r['ratio_mcr_pct']:>11.1f}%")
+    tracer(f"  QRT lignes : {len(r['qrt_s13']['lignes'])}")
+    tracer(f"  Durée      : {r['duree_sec']:.2f}s")

@@ -43,6 +43,15 @@ try:
 except ImportError:
     PLOTLY_OK = False
 
+# ── Trace console tolerante a l encodage ─────────────────────────────────────
+# `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
+# une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
+# echouer tout le calcul de cet agent. Voir services/sp_console.py.
+try:
+    from ...services.sp_console import tracer
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_console import tracer
+
 warnings.filterwarnings('ignore')
 logging.basicConfig(level=logging.INFO,
     format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
@@ -740,11 +749,11 @@ class AgentS1TarificationSante:
 
     def _console(self, aid, rag, prime_pure, prime_comm, lr, nb_assures, primes_acq):
         ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
-        print(f"\n{'─'*70}")
-        print(f"  S1 LÉONIE v{self.VERSION} | {aid} | {ic} {rag}")
-        print(f"  Prime pure={prime_pure:.2f}€ | Commerciale={prime_comm:.2f}€ | S/P={lr*100:.1f}%")
-        print(f"  Portfolio: {nb_assures:,} assurés | Primes={primes_acq:,.0f}€")
-        print(f"{'─'*70}")
+        tracer(f"\n{'─'*70}")
+        tracer(f"  S1 LÉONIE v{self.VERSION} | {aid} | {ic} {rag}")
+        tracer(f"  Prime pure={prime_pure:.2f}€ | Commerciale={prime_comm:.2f}€ | S/P={lr*100:.1f}%")
+        tracer(f"  Portfolio: {nb_assures:,} assurés | Primes={primes_acq:,.0f}€")
+        tracer(f"{'─'*70}")
 
     def _erreur(self, msg, aid):
         return {'success':False,'agent':self.NOM,'version':self.VERSION,
@@ -757,10 +766,10 @@ class AgentS1TarificationSante:
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
-    print("="*70)
-    print("  S1 LÉONIE v2.0 — DÉMO TARIFICATION FRAIS DE SANTÉ")
-    print("  DREES 2023 | ANI 2013 | Branchement A2 | Standard ActuarIA")
-    print("="*70)
+    tracer("="*70)
+    tracer("  S1 LÉONIE v2.0 — DÉMO TARIFICATION FRAIS DE SANTÉ")
+    tracer("  DREES 2023 | ANI 2013 | Branchement A2 | Standard ActuarIA")
+    tracer("="*70)
 
     agent = AgentS1TarificationSante(
         models_path='/tmp/s1/models', audit_path='/tmp/s1/audit', verbose=True
@@ -778,20 +787,20 @@ if __name__ == '__main__':
         generer_graphiques=False,
     )
 
-    print(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
-    print(f"  Statut     : {r['statut_rag']}")
-    print(f"  Source     : {r['source_donnees']}")
-    print(f"  Prime pure : {r['prime_pure']:.2f}€/an/assuré")
-    print(f"  Prime comm : {r['prime_commerciale']:.2f}€/an ({r['prime_mensuelle']:.2f}€/mois)")
-    print(f"  Primes acq : {r['primes_acquises']:,.0f}€")
-    print(f"  Ratio S/P  : {r['ratio_sp_attendu']*100:.1f}%")
-    print(f"  ANI 2013   : {'✅' if r['ani_conforme'] else '⚠️'}")
-    print(f"\n  Sinistralité par poste :")
+    tracer(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
+    tracer(f"  Statut     : {r['statut_rag']}")
+    tracer(f"  Source     : {r['source_donnees']}")
+    tracer(f"  Prime pure : {r['prime_pure']:.2f}€/an/assuré")
+    tracer(f"  Prime comm : {r['prime_commerciale']:.2f}€/an ({r['prime_mensuelle']:.2f}€/mois)")
+    tracer(f"  Primes acq : {r['primes_acquises']:,.0f}€")
+    tracer(f"  Ratio S/P  : {r['ratio_sp_attendu']*100:.1f}%")
+    tracer(f"  ANI 2013   : {'✅' if r['ani_conforme'] else '⚠️'}")
+    tracer(f"\n  Sinistralité par poste :")
     for p, v in r['postes'].items():
-        print(f"    {p:<20} : {v['sinistre_annuel']:>8.0f}€/assuré/an [{v['source']}]")
-    print(f"\n  Sorties vers S2 Selma :")
+        tracer(f"    {p:<20} : {v['sinistre_annuel']:>8.0f}€/assuré/an [{v['source']}]")
+    tracer(f"\n  Sorties vers S2 Selma :")
     s2 = r['sorties_s2']
-    print(f"    Primes acquises    : {s2['primes_acquises']:,.0f}€")
-    print(f"    Sinistres attendus : {s2['sinistres_attendus']:,.0f}€")
-    print(f"    Loss Ratio attendu : {s2['loss_ratio_attendu']*100:.1f}%")
-    print(f"\n  Durée : {r['duree_sec']:.2f}s")
+    tracer(f"    Primes acquises    : {s2['primes_acquises']:,.0f}€")
+    tracer(f"    Sinistres attendus : {s2['sinistres_attendus']:,.0f}€")
+    tracer(f"    Loss Ratio attendu : {s2['loss_ratio_attendu']*100:.1f}%")
+    tracer(f"\n  Durée : {r['duree_sec']:.2f}s")

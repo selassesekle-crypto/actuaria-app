@@ -138,7 +138,7 @@ def _construire_contexte(s1, s2, s3, reg2, reg3, arrete):
     tp   = float(s2.get("tp_sante",         0) or 0)
     lr_o = float(s2.get("loss_ratio",       0) or 0)
     scr  = float(s3.get("scr_sante",        0) or 0)
-    mcr  = float(s3.get("mcr",              0) or 0)
+    mcr  = float(s3.get("mcr_sante", 0) or 0)
     r_scr= float(s3.get("ratio_scr_pct",    0) or 0)
 
     lines = [
@@ -247,7 +247,7 @@ def export_html(result_s1, result_s2, result_s3,
         tp   = float(s2.get("tp_sante",         0) or 0)
         lr_o = float(s2.get("loss_ratio",       0) or 0)
         scr  = float(s3.get("scr_sante",        0) or 0)
-        mcr  = float(s3.get("mcr",              0) or 0)
+        mcr  = float(s3.get("mcr_sante", 0) or 0)
         fpp  = float(s3.get("fonds_propres",    0) or 0)
         r_scr= float(s3.get("ratio_scr_pct",    0) or 0)
         r_mcr= float(s3.get("ratio_mcr_pct",    0) or 0)
@@ -454,7 +454,7 @@ def export_word(result_s1, result_s2, result_s3,
         tp   = float(s2.get("tp_sante",         0) or 0)
         lr_o = float(s2.get("loss_ratio",       0) or 0)
         scr  = float(s3.get("scr_sante",        0) or 0)
-        mcr  = float(s3.get("mcr",              0) or 0)
+        mcr  = float(s3.get("mcr_sante", 0) or 0)
         fpp  = float(s3.get("fonds_propres",    0) or 0)
         r_scr= float(s3.get("ratio_scr_pct",    0) or 0)
         r_mcr= float(s3.get("ratio_mcr_pct",    0) or 0)

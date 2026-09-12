@@ -88,6 +88,15 @@ try:
 except ImportError:
     _TABLES_CENTRALISEES = False
 
+# ── Trace console tolerante a l encodage ─────────────────────────────────────
+# `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
+# une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
+# echouer tout le calcul de cet agent. Voir services/sp_console.py.
+try:
+    from ...services.sp_console import tracer
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_console import tracer
+
 # ══════════════════════════════════════════════════════════════════════════════
 # TABLES BCAC 2019 — VALEURS DE RÉFÉRENCE PAR DÉFAUT
 # ══════════════════════════════════════════════════════════════════════════════
@@ -854,13 +863,13 @@ class AgentP2TablesMorbidite:
 
     def _console(self, aid, rag, age, cat, trans, esp, maint):
         ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
-        print(f"\n{'─'*70}")
-        print(f"  P2 RAYAN v{self.VERSION} | {aid} | {ic} {rag}")
-        print(f"  âge={age:.0f} | CSP={cat} | q_AI={trans['q_AI']*100:.1f}% | "
+        tracer(f"\n{'─'*70}")
+        tracer(f"  P2 RAYAN v{self.VERSION} | {aid} | {ic} {rag}")
+        tracer(f"  âge={age:.0f} | CSP={cat} | q_AI={trans['q_AI']*100:.1f}% | "
               f"q_IP={trans['q_IP_annuel']*100:.3f}%")
-        print(f"  Maintien 6m={maint['mois_6']*100:.1f}% | 12m={maint['mois_12']*100:.1f}% | "
+        tracer(f"  Maintien 6m={maint['mois_6']*100:.1f}% | 12m={maint['mois_12']*100:.1f}% | "
               f"Durée ITT={esp['duree_moy_itt_mois']:.0f} mois")
-        print(f"{'─'*70}")
+        tracer(f"{'─'*70}")
 
     def _erreur(self, msg, aid):
         return {'success':False,'agent':self.NOM,'version':self.VERSION,
@@ -873,10 +882,10 @@ class AgentP2TablesMorbidite:
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
-    print("="*70)
-    print("  P2 RAYAN v2.0 — DÉMO TABLES MORBIDITÉ")
-    print("  Chaîne de Markov 4 états | BCAC 2019 | TD88-90")
-    print("="*70)
+    tracer("="*70)
+    tracer("  P2 RAYAN v2.0 — DÉMO TABLES MORBIDITÉ")
+    tracer("  Chaîne de Markov 4 états | BCAC 2019 | TD88-90")
+    tracer("="*70)
 
     r_p1 = {
         'success': True,
@@ -896,20 +905,20 @@ if __name__ == '__main__':
     )
     r = agent.run(result_p1=r_p1, horizon_ans=10, generer_graphiques=False)
 
-    print(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
-    print(f"  Statut        : {r['statut_rag']}")
+    tracer(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
+    tracer(f"  Statut        : {r['statut_rag']}")
     t = r['transitions']
-    print(f"  q_AI          : {t['q_AI']*100:.2f}%")
-    print(f"  q_IP annuel   : {t['q_IP_annuel']*100:.3f}%")
-    print(f"  q_PD          : {t['q_PD']*100:.2f}%")
+    tracer(f"  q_AI          : {t['q_AI']*100:.2f}%")
+    tracer(f"  q_IP annuel   : {t['q_IP_annuel']*100:.3f}%")
+    tracer(f"  q_PD          : {t['q_PD']*100:.2f}%")
     e = r['esperances']
-    print(f"  Durée moy ITT : {e['duree_moy_itt_mois']:.0f} mois")
-    print(f"  Espérance IP  : {e['esperance_duree_ip_ans']:.1f} ans")
+    tracer(f"  Durée moy ITT : {e['duree_moy_itt_mois']:.0f} mois")
+    tracer(f"  Espérance IP  : {e['esperance_duree_ip_ans']:.1f} ans")
     m = r['prob_maintien']
-    print(f"  Maintien 6m   : {m['mois_6']*100:.1f}%")
-    print(f"  Maintien 12m  : {m['mois_12']*100:.1f}%")
-    print(f"  Maintien 24m  : {m['mois_24']*100:.1f}%")
+    tracer(f"  Maintien 6m   : {m['mois_6']*100:.1f}%")
+    tracer(f"  Maintien 12m  : {m['mois_12']*100:.1f}%")
+    tracer(f"  Maintien 24m  : {m['mois_24']*100:.1f}%")
     ef = r['projection']['etat_final']
-    print(f"\n  Projection 10 ans : Actif={ef['Actif']*100:.1f}% | "
+    tracer(f"\n  Projection 10 ans : Actif={ef['Actif']*100:.1f}% | "
           f"ITT={ef['ITT']*100:.2f}% | IP={ef['IP']*100:.2f}% | Décès={ef['Décès']*100:.2f}%")
-    print(f"  Durée : {r['duree_sec']:.2f}s")
+    tracer(f"  Durée : {r['duree_sec']:.2f}s")

@@ -41,6 +41,15 @@ try:
 except ImportError:
     PLOTLY_OK = False
 
+# ── Trace console tolerante a l encodage ─────────────────────────────────────
+# `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
+# une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
+# echouer tout le calcul de cet agent. Voir services/sp_console.py.
+try:
+    from ...services.sp_console import tracer
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_console import tracer
+
 warnings.filterwarnings('ignore')
 logging.basicConfig(level=logging.INFO,
     format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
@@ -795,10 +804,10 @@ class AgentS2ProvissionnementSante:
 
     def _console(self, aid, rag, psap, prec, prov, lr):
         ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
-        print(f"\n{'─'*70}")
-        print(f"  S2 SELMA v{self.VERSION} | {aid} | {ic} {rag}")
-        print(f"  PSAP={psap:,.0f}€ | PREC={prec:,.0f}€ | Total={prov:,.0f}€ | LR={lr*100:.1f}%")
-        print(f"{'─'*70}")
+        tracer(f"\n{'─'*70}")
+        tracer(f"  S2 SELMA v{self.VERSION} | {aid} | {ic} {rag}")
+        tracer(f"  PSAP={psap:,.0f}€ | PREC={prec:,.0f}€ | Total={prov:,.0f}€ | LR={lr*100:.1f}%")
+        tracer(f"{'─'*70}")
 
     def _erreur(self, msg, aid):
         return {'success':False,'agent':self.NOM,'version':self.VERSION,
@@ -810,10 +819,10 @@ class AgentS2ProvissionnementSante:
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
-    print("="*70)
-    print("  S2 SELMA v2.0 — DÉMO PROVISIONNEMENT SANTÉ")
-    print("  PSAP par poste | IBNR cadences santé | PREC | Triangle")
-    print("="*70)
+    tracer("="*70)
+    tracer("  S2 SELMA v2.0 — DÉMO PROVISIONNEMENT SANTÉ")
+    tracer("  PSAP par poste | IBNR cadences santé | PREC | Triangle")
+    tracer("="*70)
 
     # Simuler result_s1
     r_s1 = {
@@ -848,16 +857,16 @@ if __name__ == '__main__':
     )
     r = agent.run(result_s1=r_s1, generer_graphiques=False)
 
-    print(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
-    print(f"  Statut          : {r['statut_rag']}")
-    print(f"  PSAP dossiers   : {r['psap_dossiers']:>12,.0f}€")
-    print(f"  PSAP IBNR       : {r['psap_ibnr']:>12,.0f}€")
-    print(f"  PSAP Total      : {r['psap_total']:>12,.0f}€")
-    print(f"  PREC            : {r['prec']:>12,.0f}€")
-    print(f"  Provision totale: {r['provision_totale']:>12,.0f}€")
-    print(f"  Loss Ratio      : {r['loss_ratio']*100:>11.1f}%")
-    print(f"\n  Sorties vers S3 :")
+    tracer(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
+    tracer(f"  Statut          : {r['statut_rag']}")
+    tracer(f"  PSAP dossiers   : {r['psap_dossiers']:>12,.0f}€")
+    tracer(f"  PSAP IBNR       : {r['psap_ibnr']:>12,.0f}€")
+    tracer(f"  PSAP Total      : {r['psap_total']:>12,.0f}€")
+    tracer(f"  PREC            : {r['prec']:>12,.0f}€")
+    tracer(f"  Provision totale: {r['provision_totale']:>12,.0f}€")
+    tracer(f"  Loss Ratio      : {r['loss_ratio']*100:>11.1f}%")
+    tracer(f"\n  Sorties vers S3 :")
     s3 = r['sorties_s3']
-    print(f"    BE santé    : {s3['be_sante']:,.0f}€")
-    print(f"    TP santé    : {s3['tp_sante']:,.0f}€")
-    print(f"  Durée : {r['duree_sec']:.2f}s")
+    tracer(f"    BE santé    : {s3['be_sante']:,.0f}€")
+    tracer(f"    TP santé    : {s3['tp_sante']:,.0f}€")
+    tracer(f"  Durée : {r['duree_sec']:.2f}s")

@@ -83,6 +83,15 @@ try:
 except ImportError:
     _TABLES_CENTRALISEES = False
 
+# ── Trace console tolerante a l encodage ─────────────────────────────────────
+# `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
+# une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
+# echouer tout le calcul de cet agent. Voir services/sp_console.py.
+try:
+    from ...services.sp_console import tracer
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_console import tracer
+
 # ── Tables actuarielles locales (fallback) ────────────────────────────────
 # Source primaire : sp_tables_actuarielles.py (services centralisés)
 # Source : BCAC 2019 — Bureau Commun des Assurances Collectives
@@ -653,11 +662,11 @@ class AgentP1TarificationPrevoyance:
 
     def _console(self, aid, rag, pp, pc, taux_cot, t_itt, nb):
         ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
-        print(f"\n{'─'*70}")
-        print(f"  P1 AXEL v{self.VERSION} | {aid} | {ic} {rag}")
-        print(f"  Prime pure={pp:.2f}€ | Commerciale={pc:.2f}€ | Taux cot.={taux_cot:.2f}%")
-        print(f"  Taux ITT={t_itt*100:.1f}% | {nb} assuré(s)")
-        print(f"{'─'*70}")
+        tracer(f"\n{'─'*70}")
+        tracer(f"  P1 AXEL v{self.VERSION} | {aid} | {ic} {rag}")
+        tracer(f"  Prime pure={pp:.2f}€ | Commerciale={pc:.2f}€ | Taux cot.={taux_cot:.2f}%")
+        tracer(f"  Taux ITT={t_itt*100:.1f}% | {nb} assuré(s)")
+        tracer(f"{'─'*70}")
 
     def _erreur(self, msg, aid):
         return {'success':False,'agent':self.NOM,'version':self.VERSION,
@@ -670,10 +679,10 @@ class AgentP1TarificationPrevoyance:
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
-    print("="*70)
-    print("  P1 AXEL v2.0 — DÉMO TARIFICATION PRÉVOYANCE ITT/IP/DÉCÈS")
-    print("  BCAC 2019 | TD88-90 | TH0002 | Branchement A2 | ANI 2013")
-    print("="*70)
+    tracer("="*70)
+    tracer("  P1 AXEL v2.0 — DÉMO TARIFICATION PRÉVOYANCE ITT/IP/DÉCÈS")
+    tracer("  BCAC 2019 | TD88-90 | TH0002 | Branchement A2 | ANI 2013")
+    tracer("="*70)
 
     agent = AgentP1TarificationPrevoyance(
         models_path='/tmp/p1/models', audit_path='/tmp/p1/audit', verbose=True
@@ -685,17 +694,17 @@ if __name__ == '__main__':
         chargement_pct=0.20, generer_graphiques=False,
     )
 
-    print(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
-    print(f"  Statut       : {r['statut_rag']}")
+    tracer(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
+    tracer(f"  Statut       : {r['statut_rag']}")
     pp = r['primes_pures']
-    print(f"  Prime ITT    : {pp['itt']:>10.2f}€/an")
-    print(f"  Prime IP     : {pp['ip']:>10.2f}€/an")
-    print(f"  Prime Décès  : {pp['deces']:>10.2f}€/an")
-    print(f"  Prime pure   : {pp['total']:>10.2f}€/an")
-    print(f"  Prime comm.  : {r['prime_commerciale']:>10.2f}€/an ({r['prime_mensuelle']:.2f}€/mois)")
-    print(f"  Taux cot.    : {r['taux_cotisation_pct']:>9.2f}%")
-    print(f"\n  Taux ITT BCAC: {r['taux_sinistralite']['itt']*100:.1f}%")
-    print(f"  Taux IP TD88 : {r['taux_sinistralite']['ip']*100:.3f}%")
-    print(f"  qx TH0002    : {r['taux_sinistralite']['deces']*100:.4f}%")
-    print(f"\n  Sorties P2   : âge={r['sorties_p2']['age']} | CSP={r['sorties_p2']['categorie']}")
-    print(f"  Durée        : {r['duree_sec']:.2f}s")
+    tracer(f"  Prime ITT    : {pp['itt']:>10.2f}€/an")
+    tracer(f"  Prime IP     : {pp['ip']:>10.2f}€/an")
+    tracer(f"  Prime Décès  : {pp['deces']:>10.2f}€/an")
+    tracer(f"  Prime pure   : {pp['total']:>10.2f}€/an")
+    tracer(f"  Prime comm.  : {r['prime_commerciale']:>10.2f}€/an ({r['prime_mensuelle']:.2f}€/mois)")
+    tracer(f"  Taux cot.    : {r['taux_cotisation_pct']:>9.2f}%")
+    tracer(f"\n  Taux ITT BCAC: {r['taux_sinistralite']['itt']*100:.1f}%")
+    tracer(f"  Taux IP TD88 : {r['taux_sinistralite']['ip']*100:.3f}%")
+    tracer(f"  qx TH0002    : {r['taux_sinistralite']['deces']*100:.4f}%")
+    tracer(f"\n  Sorties P2   : âge={r['sorties_p2']['age']} | CSP={r['sorties_p2']['categorie']}")
+    tracer(f"  Durée        : {r['duree_sec']:.2f}s")
