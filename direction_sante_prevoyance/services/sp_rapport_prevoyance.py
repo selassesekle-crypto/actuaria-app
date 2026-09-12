@@ -110,8 +110,15 @@ CONTEXTE RÉGLEMENTAIRE ET TECHNIQUE :
 - Solvabilité 2 : module Santé SLT (invalidité-morbidité), Art. 145 RD 2015/35, \
   chocs morbidité +35% (incidence) et cessation -20% (guérison), QRT S.14.01, \
   SCR Invalidité agrégé avec corrélation ρ=0.25 EIOPA Annexe IV
-- MCR Prévoyance : Art. 252 RD 2015/35, coefficients α=0.0338/β=0.0191, \
-  plancher absolu 3,7 M€ (vs 2,5 M€ santé), bornes 25%/45% SCR
+- MCR Prévoyance : art. 250 §1 d) et ANNEXE XIX du RD (UE) 2015/35, segment 2 \
+  « assurance de protection du revenu », α=13,1 % sur les provisions et \
+  β=8,5 % sur les primes ; plancher absolu 3,7 M€ (vs 2,5 M€ santé), \
+  bornes 25 %/45 % du SCR (art. 248 §1-2). \
+  ⚠️ CORRIGÉ LE 12/09/2026 — ce contexte annonçait « Art. 252 RD 2015/35, \
+  coefficients α=0.0338/β=0.0191 ». L'article 252 s'intitule « entreprises \
+  d'assurance multibranches » et ne contient AUCUN coefficient ; les valeurs \
+  citées ne figurent nulle part dans le Règlement, et α/β y étaient inversés \
+  (α porte sur les provisions, β sur les primes)
 - IFRS 17 : BE prévoyance = PM Rentes IP + PSAP ITT, Risk Adjustment CoC 6%, \
   floor 3%, CSM prévoyance
 - Tables de référence incapacité : BCAC 2019 (CTIP/INSEE), \

@@ -55,6 +55,15 @@ from core import traitement_ia
 
 import numpy as np
 
+# ── Coefficients du MCR ────────────────────────────────────────────────────
+# Annexe XIX du RD (UE) 2015/35, appelee par l article 250 par. 1 point d).
+try:
+    from ...services.sp_fonds_propres import mcr_lineaire_segment
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_fonds_propres import (
+        mcr_lineaire_segment,
+    )
+
 warnings.filterwarnings("ignore")
 logging.basicConfig(
     level=logging.INFO,
@@ -81,10 +90,20 @@ BLEU      = "#3498DB"
 VIOLET    = "#9B59B6"
 
 # ── Paramètres réglementaires ─────────────────────────────────────────────────
-SCR_SIGMA_PREM   = 0.05    # σ primes santé NSLT — Art.148 RD 2015/35
-SCR_SIGMA_RES    = 0.14    # σ réserves santé NSLT
-MCR_COEFF_PREM   = 0.0453  # coefficient primes MCR santé
-MCR_COEFF_RES    = 0.0351  # coefficient provisions MCR santé
+# ── Parametres du module sante NSLT ────────────────────────────────────────
+# ⚠️ CORRIGE LE 12/09/2026 — `SCR_SIGMA_RES` valait 0,14, qui est l ecart-type
+# du SEGMENT 2 « assurance de protection du revenu ». Applique ici a des FRAIS
+# DE SOINS. L annexe XIV du RD (UE) 2015/35 donne, pour le segment 1
+# « Assurance frais medicaux et reassurance proportionnelle y afferente,
+# lignes d activite 1 et 13 » : sigma primes 5 %, sigma reserves 5,7 %.
+SCR_SIGMA_PREM   = 0.05    # σ primes — annexe XIV, segment 1
+SCR_SIGMA_RES    = 0.057   # σ réserves — annexe XIV, segment 1
+# ⚠️ CORRIGE LE 12/09/2026 — les coefficients du MCR etaient 4,53 % et 3,51 %,
+# valeurs qui ne figurent NULLE PART dans le Reglement delegue. L annexe XIX
+# donne 4,7 % sur les provisions ET sur les primes pour le segment 1.
+# Ils viennent desormais du service, qui publie aussi sa reference exacte.
+MCR_COEFF_PREM_AVANT = 0.0453  # valeur historique, hors Reglement
+MCR_COEFF_RES_AVANT  = 0.0351  # valeur historique, hors Reglement
 MCR_PLANCHER     = 2_500_000.0  # plancher absolu Art.129 S2
 COC_RATE         = 0.06    # EIOPA CoC rate — IFRS 17 §B91
 SEUIL_SCR        = 100.0   # seuil minimal % — Art.129 S2
@@ -1604,7 +1623,9 @@ class AgentRapportSante:
             scr_sous  = float(np.sqrt(scr_prem**2 + 2 * 0.5 * scr_prem * scr_res + scr_res**2))
             scr_cat   = primes_acq * 0.01
             scr_sante = float(np.sqrt(scr_sous**2 + scr_cat**2))
-            mcr_lin   = MCR_COEFF_PREM * primes_acq + MCR_COEFF_RES * be_sante
+            mcr_lin, _mcr_ref = mcr_lineaire_segment(
+                "frais_medicaux", provisions_techniques=be_sante,
+                primes_emises=primes_acq)
             plancher  = max(0.25 * scr_sante, MCR_PLANCHER)
             plafond   = 0.45 * scr_sante
             mcr_sante = max(min(mcr_lin, plafond), plancher)

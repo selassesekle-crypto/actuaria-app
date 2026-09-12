@@ -198,5 +198,162 @@ class TestUneValeurDeQrtSeLitParSaCle(unittest.TestCase):
         self.assertGreater(float(primes_qrt), 0.0)
 
 
+class TestAucunCoefficientHorsReglementNeSurvit(unittest.TestCase):
+    """⚠️ CE QUE LE LOT 9 AVAIT MANQUÉ, TROUVÉ LE 12/09/2026.
+
+    Le service portait bien l'annexe XIX, et S3 comme P4 l'appelaient. Mais
+    `sante/rapport_sante/agent.py` gardait **sa propre paire** 4,53 % / 3,51 %
+    et l'utilisait dans sa branche de repli — atteignable : le rapport
+    s'exécute sans S3 et publie. Aucune de ces deux valeurs ne figure dans le
+    Règlement délégué.
+
+    ⚠️ ET LA PORTÉE SE MESURE. Sur le portefeuille de test, AUCUN euro ne
+    bouge : le plancher absolu de 2,5 M€ absorbe tout (MCR linéaire
+    34 009 €). Au-delà d'environ **45 M€ de primes**, l'écart devient réel —
+    à 50 M€, **259 814 € de MCR sous-estimé** ; à 100 M€, 519 629 €. Le défaut
+    est donc LATENT, et ce sceau dit à partir d'où il cesse de l'être.
+
+    Un troisième écart au même endroit : `SCR_SIGMA_RES` valait 0,14, qui est
+    l'écart-type du **segment 2, protection du revenu**, appliqué à des FRAIS
+    DE SOINS. L'annexe XIV donne pour le segment 1 « Assurance frais médicaux,
+    lignes d'activité 1 et 13 » : σ primes 5 %, σ réserves **5,7 %**.
+    Vérifié au texte consolidé le 12/09/2026.
+    """
+
+    #: Valeurs qui ne figurent nulle part dans le Reglement delegue.
+    HORS_REGLEMENT = frozenset({"0.0453", "0.0351", "0.0338", "0.0191",
+                                "0.0418", "0.0261"})
+
+    @property
+    def racine(self):
+        import os
+        return os.path.dirname(os.path.abspath(__file__))
+
+    def _source(self, *parties):
+        import io as _io
+        import os
+        return _io.open(os.path.join(self.racine, *parties),
+                        encoding="utf-8").read()
+
+    def _fichiers(self, avec_tests=True):
+        import os
+        for dossier, sous, fichiers in os.walk(self.racine):
+            sous[:] = [x for x in sous if x != "__pycache__"]
+            for fichier in sorted(fichiers):
+                if not fichier.endswith(".py"):
+                    continue
+                if not avec_tests and fichier.startswith("test_"):
+                    continue
+                yield os.path.join(dossier, fichier)
+
+    def test_les_coefficients_du_service_sont_ceux_de_l_annexe_xix(self):
+        from .services import sp_fonds_propres as fp
+        attendu = {"frais_medicaux": (0.047, 0.047),
+                   "protection_du_revenu": (0.131, 0.085)}
+        for segment, (alpha, beta) in attendu.items():
+            with self.subTest(segment=segment):
+                c = fp.COEFF_MCR[segment]
+                self.assertAlmostEqual(alpha, c["alpha"], places=4)
+                self.assertAlmostEqual(beta, c["beta"], places=4)
+
+    def test_aucun_agent_ne_calcule_un_mcr_avec_ses_propres_coefficients(self):
+        """Une paire locale UTILISÉE rouvre le défaut en silence.
+
+        Le contrôle distingue la constante POSÉE (documentaire, légitime : elle
+        garde trace de ce qui a été corrigé) de la constante LUE, qui agit.
+        """
+        import ast
+        import io as _io
+        import os
+
+        fautifs = []
+        for chemin in self._fichiers(avec_tests=False):
+            arbre = ast.parse(_io.open(chemin, encoding="utf-8").read())
+            rel = os.path.relpath(chemin, self.racine).replace("\\", "/")
+            posees, lues = {}, set()
+            for n in ast.walk(arbre):
+                if (isinstance(n, ast.Assign)
+                        and isinstance(n.value, ast.Constant)
+                        and str(n.value.value) in self.HORS_REGLEMENT):
+                    for cible in n.targets:
+                        if hasattr(cible, "id"):
+                            posees[cible.id] = (str(n.value.value), n.lineno)
+                if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
+                    lues.add(n.id)
+                if isinstance(n, ast.BinOp):
+                    for cote in (n.left, n.right):
+                        if (isinstance(cote, ast.Constant)
+                                and str(cote.value) in self.HORS_REGLEMENT):
+                            fautifs.append(
+                                "%s:%d  litteral %s dans un calcul"
+                                % (rel, cote.lineno, cote.value))
+            for nom, (valeur, ligne) in sorted(posees.items()):
+                if nom in lues:
+                    fautifs.append("%s:%d  %s = %s, et elle est LUE"
+                                   % (rel, ligne, nom, valeur))
+        self.assertEqual(
+            [], fautifs,
+            "Coefficient(s) hors Reglement delegue UTILISE(S) : "
+            + " | ".join(fautifs)
+            + " -- les facteurs du MCR sont a l'annexe XIX, appelee par "
+              "l'art. 250 par. 1 point d).")
+
+    def test_le_sigma_sante_est_celui_des_frais_medicaux(self):
+        """Annexe XIV segment 1 : sigma primes 5 %, sigma reserves 5,7 %."""
+        import re
+        src = self._source("sante", "rapport_sante", "agent.py")
+        prem = re.search(r"SCR_SIGMA_PREM\s*=\s*([0-9.]+)", src)
+        res = re.search(r"SCR_SIGMA_RES\s*=\s*([0-9.]+)", src)
+        self.assertIsNotNone(prem, "SCR_SIGMA_PREM introuvable")
+        self.assertIsNotNone(res, "SCR_SIGMA_RES introuvable")
+        self.assertAlmostEqual(0.05, float(prem.group(1)), places=4)
+        self.assertAlmostEqual(
+            0.057, float(res.group(1)), places=4,
+            msg="0,14 est le sigma du SEGMENT 2 (protection du revenu). "
+                "L'appliquer a des frais de soins surestime le SCR de "
+                "reserve d'un facteur 2,46.")
+
+    def test_le_rapport_sante_passe_par_le_service_pour_son_mcr(self):
+        src = self._source("sante", "rapport_sante", "agent.py")
+        self.assertIn(
+            "mcr_lineaire_segment(", src,
+            "Le rapport Sante doit prendre ses coefficients au service, qui "
+            "publie aussi la reference exacte a porter a cote du chiffre.")
+        self.assertIn("frais_medicaux", src)
+
+    def test_aucun_module_ne_cite_l_article_252_pour_des_coefficients(self):
+        """L'art. 252 s'intitule « entreprises d'assurance multibranches »
+        et ne contient AUCUN coefficient.
+
+        ⚠️ Le contrôle laisse passer la CITATION du défaut corrigé — plusieurs
+        modules expliquent l'erreur pour qu'on ne la refasse pas. Ce qui est
+        interdit, c'est de présenter l'article 252 comme la SOURCE, sans dire
+        qu'il ne l'est pas.
+        """
+        import io as _io
+        import os
+        import re
+
+        fautifs = []
+        for chemin in self._fichiers():
+            src = _io.open(chemin, encoding="utf-8").read()
+            rel = os.path.relpath(chemin, self.racine).replace("\\", "/")
+            for m in re.finditer(r"[Aa]rt\.?\s*252", src):
+                no = src[:m.start()].count("\n") + 1
+                ligne = src.splitlines()[no - 1]
+                if not re.search(r"coefficient|alpha|beta", ligne, re.I):
+                    continue
+                # la phrase qui DEMENT l article 252 est legitime
+                voisinage = src[max(0, m.start() - 500):m.start() + 500]
+                if re.search(r"CORRIG|ne contient AUCUN|aucun coefficient"
+                             r"|multibranches|FAUSSE|perime", voisinage, re.I):
+                    continue
+                fautifs.append("%s:%d  %s" % (rel, no, ligne.strip()[:66]))
+        self.assertEqual(
+            [], fautifs,
+            "L'article 252 presente comme source de coefficients : "
+            + " | ".join(fautifs))
+
+
 if __name__ == "__main__":
     unittest.main()

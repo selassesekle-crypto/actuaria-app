@@ -65,10 +65,12 @@ LAYOUT_BASE = dict(
 # mêmes données — et aucun agent ne les rapprochait.
 # La règle vit maintenant dans services/sp_ani.py, et les deux l'appellent.
 try:
-    from ...services.sp_ani import HORS_CHAMP, NON_MESURABLE, verifier_panier
+    from ...services.sp_ani import (
+        HORS_CHAMP, NATURE_NON_DECLAREE, NON_MESURABLE, verifier_panier,
+    )
 except ImportError:  # execution directe du module, hors paquet
     from direction_sante_prevoyance.services.sp_ani import (
-        HORS_CHAMP, NON_MESURABLE, verifier_panier,
+        HORS_CHAMP, NATURE_NON_DECLAREE, NON_MESURABLE, verifier_panier,
     )
 
 # 100% Santé — paniers RAC 0 (Décrets 2019-21)
@@ -113,7 +115,9 @@ class AgentSPReg3ANI100Sante:
     # ──────────────────────────────────────────────────────────────────────────
     def run(self,
             result_s1,
-            contrat:              str  = "collectif",
+            # ⚠️ CORRIGE LE 12/09/2026 — voir S1 : deux defauts opposes,
+            # deux verdicts opposes. Le contrat se declare.
+            contrat:              str  = None,
             inclure_100pct_sante: bool = True,
             inclure_contrat_resp: bool = True,
             generer_graphiques:   bool = True) -> Dict:
@@ -130,13 +134,29 @@ class AgentSPReg3ANI100Sante:
 
         try:
             src = self._extraire(result_s1)
+
+            # ⚠️ AJOUTÉ LE 12/09/2026 — LA NATURE DU CONTRAT VOYAGE AVEC LA
+            # DONNÉE, et n'est jamais inventée. Trois cas, dans cet ordre :
+            #   ① l'appelant la déclare ici          → elle fait foi ;
+            #   ② sinon, S1 l'a déclarée en amont    → on reprend la SIENNE,
+            #      parce que c'est celle qui a servi à tarifer ;
+            #   ③ sinon                              → NATURE NON DÉCLARÉE,
+            #      et aucun verdict n'est émis.
+            # Mesuré : sans ce relais, SP-REG3 rendait « NATURE NON DÉCLARÉE »
+            # sur un portefeuille que S1 avait explicitement tarifé en
+            # collectif — deux agents, deux réponses, à nouveau.
+            contrat_retenu = contrat or src.get("contrat")
+            origine_contrat = ("declare a SP-REG3" if contrat else
+                               "repris de S1" if src.get("contrat") else
+                               "non declare")
             self.logger.info(
-                f"[{aid}] SP-Reg3 ANI+100S | contrat={contrat} | "
+                f"[{aid}] SP-Reg3 ANI+100S | contrat={contrat_retenu} "
+                f"({origine_contrat}) | "
                 f"garantie={src['garantie_niveau']} | postes={len(src['postes'])}"
             )
 
             # ── 1. CONFORMITÉ ANI 2013 ────────────────────────────────────────
-            ani = self._verifier_ani(src, contrat)
+            ani = self._verifier_ani(src, contrat_retenu)
 
             # ── 2. CONFORMITÉ 100% SANTÉ (RAC 0) ─────────────────────────────
             sante_100 = None
@@ -149,11 +169,12 @@ class AgentSPReg3ANI100Sante:
                 contrat_resp = self._verifier_contrat_responsable(src)
 
             # ── 4. SYNTHÈSE + RAG ────────────────────────────────────────────
-            hyp = self._hypotheses(ani, sante_100, contrat_resp, contrat)
-            rag = self._rag(hyp, ani, contrat)
+            hyp = self._hypotheses(ani, sante_100, contrat_resp,
+                                    contrat_retenu)
+            rag = self._rag(hyp, ani, contrat_retenu)
 
             com = self._commentaire(
-                rag, contrat, src, ani, sante_100, contrat_resp, hyp
+                rag, contrat_retenu, src, ani, sante_100, contrat_resp, hyp
             )
 
             gph = {}
@@ -171,6 +192,14 @@ class AgentSPReg3ANI100Sante:
 
                 # ── Conformités ───────────────────────────────────────────────
                 "ani_conforme":        ani["conforme_global"],
+                # Le STATUT est toujours lisible, meme quand le booleen
+                # vaut None : c est lui que les lecteurs doivent lire.
+                "ani_statut":          ani.get("statut", ""),
+                "ani_complet":         ani.get("complet", False),
+                # La nature retenue ET D OU ELLE VIENT : sans la seconde, on
+                # ne peut pas distinguer une nature declaree d une supposee.
+                "contrat_retenu":      contrat_retenu,
+                "contrat_origine":     origine_contrat,
                 "ani_detail":          ani["detail"],
                 "ani_note":            ani["note_globale"],
                 "sante_100_conforme":  sante_100["conforme"] if sante_100 else None,
@@ -205,7 +234,8 @@ class AgentSPReg3ANI100Sante:
         return {
             "postes":         postes,
             "garantie_niveau":result_s1.get("garantie_niveau", "confort"),
-            "contrat":        result_s1.get("contrat", "individuel"),
+            # Ni defaut, ni supposition : ce que S1 a recu, ou rien.
+            "contrat":        result_s1.get("contrat"),
             "prime_pure":     float(result_s1.get("prime_pure", 0)),
             "nb_assures":     int(result_s1.get("nb_assures", 0)),
         }
@@ -336,7 +366,9 @@ class AgentSPReg3ANI100Sante:
         # ⚠️ Trois etats : hors champ n'est ni conforme ni non conforme, et
         # un verdict INCOMPLET (poste non mesurable) ne se declare pas VALIDE.
         statut_ani = ani.get("statut", "")
-        if statut_ani == HORS_CHAMP:
+        if statut_ani == NATURE_NON_DECLAREE:
+            h1_s = "NON MESURÉE"
+        elif statut_ani == HORS_CHAMP:
             h1_s = "NON MESURÉE"
         elif statut_ani == "NON CONFORME":
             h1_s = "NON VALIDÉE"
@@ -370,8 +402,12 @@ class AgentSPReg3ANI100Sante:
     def _rag(self, hyp, ani, contrat):
         # ⚠️ `not ani["conforme_global"]` valait True sur le None de HORS
         # CHAMP : un contrat non soumis serait passe ROUGE. Le statut se lit.
+        # ⚠️ Ni HORS CHAMP ni NATURE NON DECLAREE ne sont des non-conformites :
+        # le premier n est pas soumis, le second n a pas ete evalue.
         if ani.get("statut") == "NON CONFORME":
             return "ROUGE"
+        if ani.get("statut") == NATURE_NON_DECLAREE:
+            return "AMBRE"
         non_val = [h for h in hyp if h["statut"]=="NON VALIDÉE" and h["critique"]]
         if non_val:
             return "ROUGE"
@@ -383,7 +419,9 @@ class AgentSPReg3ANI100Sante:
         L = [
             "="*70,
             f"  RAPPORT RÉGLEMENTAIRE ANI 2013 + 100% SANTÉ — SP-REG3 v{self.VERSION}",
-            f"  {ic} STATUT : {rag} | Contrat : {contrat.upper()} | Garantie : {src['garantie_niveau']}",
+            f"  {ic} STATUT : {rag} | Contrat : "
+            f"{(contrat or 'NON DECLARE').upper()} | "
+            f"Garantie : {src['garantie_niveau']}",
             "="*70, "",
             "📋 ANI 2013 — ART. L911-7 CSS", "─"*50,
         ]
@@ -439,6 +477,8 @@ class AgentSPReg3ANI100Sante:
         return {
             "success":False,"agent":self.NOM,"version":self.VERSION,
             "audit_id":aid,"statut_rag":"ROUGE",
-            "ani_conforme":False,"hypotheses":[],"commentaire":"",
+            "ani_conforme":None,"ani_statut":"NON MESURABLE",
+            "contrat_retenu":None,"contrat_origine":"non declare",
+            "hypotheses":[],"commentaire":"",
             "graphiques":{},"duree_sec":0,"erreur":msg,
         }

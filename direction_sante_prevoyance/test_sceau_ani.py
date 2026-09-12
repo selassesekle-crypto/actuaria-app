@@ -286,5 +286,149 @@ class TestLaPartPatronaleNEstPlusUnLitteral(unittest.TestCase):
             "%d mention(s) distincte(s) pour 3 repartitions." % len(mentions))
 
 
+class TestAucunAgentNeSupposeLaNatureDuContrat(unittest.TestCase):
+    """⚠️ CE QUE LA PREMIÈRE VERSION DE CE SCEAU NE VOYAIT PAS.
+
+    `TestLesDeuxAgentsRendentLeMemeVerdict` transmet TOUJOURS `contrat` aux deux
+    agents : il éprouve la RÈGLE, jamais l'HYPOTHÈSE PAR DÉFAUT. Or le lot 16
+    avait unifié la règle en laissant deux défauts opposés —
+    `S1(contrat="individuel")` contre `SP-REG3(contrat="collectif")`. Mesuré le
+    12/09/2026, quand l'appelant se tait :
+
+        S1 -> HORS CHAMP          SP-REG3 -> CONFORME
+
+    Deux agents, même portefeuille, même exécution, deux verdicts
+    réglementaires opposés. **D34 n'était pas fermé, et mon propre garde-fou
+    passait au vert.** C'est l'assiette du contrôle qui était trop étroite,
+    pas la règle qui était fausse.
+
+    La nature d'un contrat est un FAIT CONTRACTUEL : elle se déclare, elle ne
+    se suppose pas. Ces tests éprouvent le silence, pas la parole.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import contextlib
+        import io as _io
+
+        from .reglementation.sp_reg3_ani_100sante.agent import (
+            AgentSPReg3ANI100Sante)
+        from .sante.s1_tarification.agent import AgentS1TarificationSante
+        cls.S1 = AgentS1TarificationSante
+        cls.REG3 = AgentSPReg3ANI100Sante
+        cls._silence = contextlib.redirect_stdout
+        cls._io = _io
+
+    def _couple(self, arg_s1, arg_r3):
+        with self._silence(self._io.StringIO()):
+            s1 = self.S1(verbose=False).run(
+                nb_assures=1000, age_moyen=40, garantie_niveau="premium",
+                generer_graphiques=False, **arg_s1)
+            r3 = self.REG3(verbose=False).run(
+                result_s1=s1, generer_graphiques=False, **arg_r3)
+        return s1, r3
+
+    def test_aucun_parametre_contrat_ne_porte_de_valeur_par_defaut(self):
+        """Un défaut est une supposition écrite une fois pour toutes."""
+        import ast
+        import io as _io
+        import os
+
+        racine = os.path.dirname(os.path.abspath(__file__))
+        cibles = [("sante", "s1_tarification", "agent.py"),
+                  ("reglementation", "sp_reg3_ani_100sante", "agent.py")]
+        for parties in cibles:
+            with self.subTest(agent=parties[-2]):
+                arbre = ast.parse(_io.open(os.path.join(racine, *parties),
+                                           encoding="utf-8").read())
+                for n in ast.walk(arbre):
+                    if not (isinstance(n, ast.FunctionDef) and n.name == "run"):
+                        continue
+                    noms = [a.arg for a in n.args.args]
+                    if "contrat" not in noms:
+                        continue
+                    # les defauts s alignent sur la FIN de la liste des args
+                    decalage = len(noms) - len(n.args.defaults)
+                    defaut = n.args.defaults[noms.index("contrat") - decalage]
+                    self.assertIsNone(
+                        getattr(defaut, "value", "pas None"),
+                        "%s.run(contrat=...) porte un defaut : c'est une "
+                        "supposition, et deux agents qui supposent l'inverse "
+                        "publient deux verdicts opposes." % parties[-2])
+
+    def test_le_service_lui_meme_ne_porte_aucun_defaut(self):
+        """⚠️ TROUVÉ PAR LE PLANT, PAS PAR MOI.
+
+        Remettre `verifier_panier(postes, contrat="collectif")` laissait les
+        42 tests VERTS : les deux agents transmettent toujours leur valeur, si
+        bien que le défaut du service n'était atteint par aucun test. Il
+        restait pourtant un piège — un futur appelant écrivant
+        `verifier_panier(postes)` aurait hérité d'un « collectif » supposé,
+        en silence. Ce test appelle le service SANS second argument.
+        """
+        v = sp_ani.verifier_panier({"medecine": {"cout_acte": 28.5}})
+        self.assertEqual(
+            sp_ani.NATURE_NON_DECLAREE, v["statut"],
+            "Appele sans nature, le service SUPPOSE une nature : c'est "
+            "exactement le defaut que les deux agents viennent de perdre.")
+        self.assertIsNone(v["conforme"])
+
+    def test_le_service_n_emet_aucun_verdict_sans_nature_declaree(self):
+        for nature in (None, "", "inconnu", "collectif_cadres"):
+            with self.subTest(nature=nature):
+                v = sp_ani.verifier_panier({"medecine": {}}, nature)
+                self.assertEqual(sp_ani.NATURE_NON_DECLAREE, v["statut"])
+                self.assertIsNone(v["conforme"])
+                self.assertEqual({}, v["detail"])
+
+    def test_les_deux_agents_concordent_QUAND_PERSONNE_NE_DECLARE(self):
+        s1, r3 = self._couple({}, {})
+        self.assertEqual("NATURE NON DECLAREE", s1["ani_statut"])
+        self.assertEqual("NATURE NON DECLAREE", r3["ani_statut"])
+        self.assertIsNone(s1["ani_conforme"])
+        self.assertIsNone(r3["ani_conforme"])
+
+    def test_la_nature_declaree_a_s1_atteint_sp_reg3(self):
+        """La nature VOYAGE avec la donnée, au lieu d'être redemandée.
+
+        Sans ce relais, SP-REG3 rendait « NATURE NON DÉCLARÉE » sur un
+        portefeuille que S1 avait explicitement tarifé en collectif.
+        """
+        s1, r3 = self._couple({"contrat": "collectif"}, {})
+        self.assertEqual(s1["ani_statut"], r3["ani_statut"])
+        self.assertEqual("repris de S1", r3.get("contrat_origine"))
+
+        s1, r3 = self._couple({"contrat": "individuel"}, {})
+        self.assertEqual("HORS CHAMP", r3["ani_statut"])
+
+    def test_la_nature_declaree_a_sp_reg3_prime_sur_celle_de_s1(self):
+        _, r3 = self._couple({"contrat": "individuel"}, {"contrat": "collectif"})
+        self.assertEqual("declare a SP-REG3", r3.get("contrat_origine"))
+        self.assertIn(r3["ani_statut"], ("CONFORME", "NON CONFORME"))
+
+    def test_une_nature_non_declaree_ne_fait_pas_rougir_le_rag(self):
+        """Ne pas savoir n'est pas être non conforme."""
+        _, r3 = self._couple({}, {})
+        self.assertNotEqual(
+            "ROUGE", r3["statut_rag"],
+            "Une nature non declaree est une ABSENCE DE MESURE, pas une "
+            "non-conformite : la faire rougir accuserait a tort.")
+
+    def test_les_quatre_combinaisons_concordent(self):
+        cas = [
+            ({"contrat": "collectif"}, {"contrat": "collectif"}),
+            ({"contrat": "individuel"}, {"contrat": "individuel"}),
+            ({}, {}),
+            ({"contrat": "collectif"}, {}),
+        ]
+        divergences = []
+        for a1, a3 in cas:
+            s1, r3 = self._couple(a1, a3)
+            if s1["ani_statut"] != r3["ani_statut"]:
+                divergences.append("S1%s/REG3%s : %s vs %s"
+                                   % (a1, a3, s1["ani_statut"], r3["ani_statut"]))
+        self.assertEqual([], divergences, "; ".join(divergences))
+
+
 if __name__ == "__main__":
     unittest.main()

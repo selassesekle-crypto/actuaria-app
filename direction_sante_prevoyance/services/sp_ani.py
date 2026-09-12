@@ -57,6 +57,7 @@ global INCOMPLET, et le document le dit.
 
 __all__ = [
     "CONFORME", "NON_CONFORME", "NON_MESURABLE", "HORS_CHAMP",
+    "NATURE_NON_DECLAREE", "NATURES_CONNUES",
     "OPTIQUE_FORFAIT_SIMPLE_EUR", "PANIER", "SEUIL_PATRONAL_SANTE",
     "part_patronale_conforme", "verifier_panier",
 ]
@@ -65,6 +66,12 @@ CONFORME = "CONFORME"
 NON_CONFORME = "NON CONFORME"
 NON_MESURABLE = "NON MESURABLE"
 HORS_CHAMP = "HORS CHAMP"
+#: La nature du contrat n a pas ete declaree. Ce n est NI collectif NI
+#: individuel : c est l aveu qu on ne sait pas, et aucun verdict n en sort.
+NATURE_NON_DECLAREE = "NATURE NON DECLAREE"
+
+#: Les seules natures qui autorisent un verdict.
+NATURES_CONNUES = frozenset({"collectif", "individuel"})
 
 #: Forfait optique minimal, correction simple, par equipement (periode de 2 ans).
 OPTIQUE_FORFAIT_SIMPLE_EUR = 100.0
@@ -154,7 +161,7 @@ def _seuil_du_poste(regle, infos):
     return seuil, True, explication
 
 
-def verifier_panier(postes, contrat="collectif"):
+def verifier_panier(postes, contrat=None):
     """Vérifie le panier minimal, poste par poste, dans la bonne unité.
 
     Rend un dictionnaire portant `statut`, `complet`, `detail` et `note`.
@@ -165,6 +172,28 @@ def verifier_panier(postes, contrat="collectif"):
     soumis. La nuance atteint le document.
     """
     postes = postes or {}
+
+    # ⚠️ AJOUTE LE 12/09/2026 — D34 N ETAIT PAS FERME. Le lot 16 avait unifie
+    # la REGLE ; les deux agents gardaient deux VALEURS PAR DEFAUT opposees
+    # (S1 « individuel », SP-REG3 « collectif »). Mesure : quand l appelant se
+    # tait, S1 rendait HORS CHAMP et SP-REG3 CONFORME -- deux verdicts
+    # reglementaires opposes, meme portefeuille, meme execution.
+    # La nature d un contrat est un FAIT CONTRACTUEL : elle se declare, elle
+    # ne se suppose pas. Sans elle, aucun verdict.
+    if contrat not in NATURES_CONNUES:
+        return {
+            "statut": NATURE_NON_DECLAREE,
+            "conforme": None,
+            "complet": False,
+            "contrat": contrat,
+            "detail": {},
+            "note": ("Nature du contrat non declaree (%r). Le panier minimal de "
+                     "l art. D911-1 CSS s applique au contrat COLLECTIF "
+                     "OBLIGATOIRE (art. L911-7 CSS) : sans cette information, "
+                     "aucun verdict de conformite ne peut etre emis. Natures "
+                     "reconnues : %s." % (contrat, ", ".join(sorted(NATURES_CONNUES)))),
+        }
+
     if contrat != "collectif":
         return {
             "statut": HORS_CHAMP,

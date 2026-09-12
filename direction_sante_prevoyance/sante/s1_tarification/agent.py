@@ -150,7 +150,12 @@ class AgentS1TarificationSante:
             result_a2        = None,
             nb_assures:  int = 1000,
             age_moyen:   float = 42.0,
-            contrat:     str = "individuel",
+            # ⚠️ CORRIGE LE 12/09/2026 — ce defaut valait "individuel"
+            # quand celui de SP-REG3 valait "collectif" : les deux agents
+            # rendaient deux verdicts reglementaires OPPOSES des que
+            # l appelant se taisait. La nature du contrat est un FAIT
+            # CONTRACTUEL : elle se declare. Sans elle, aucun verdict.
+            contrat:     str = None,
             garantie_niveau: str = "confort",
             chargement_pct:  float = 0.18,
             csp:         str = "employe",
