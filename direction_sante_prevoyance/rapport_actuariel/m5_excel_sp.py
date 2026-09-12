@@ -162,16 +162,30 @@ def _onglet_sinistralite(wb, data: Dict):
 
     charge_totale = sum(_charge(i) for i in postes.values())
 
+    def _taux_remboursement(infos):
+        """⚠️ CORRIGÉ LE 12/09/2026 — la colonne publiait 246 400 %.
+
+        S1 publie `remb_ss` = `cout_acte x tc_ss`, c'est-à-dire un MONTANT EN
+        EUROS. Le classeur le multipliait par 100 et l'intitulait « % » :
+        l'hospitalisation sortait à 246 400 %, le dentaire à 3 960 %. La
+        colonne annonçait un taux et affichait cent fois un montant.
+        Le taux est le rapport du remboursement au coût de l'acte.
+        """
+        cout = float(infos.get("cout_acte", infos.get("cout_moyen", 0)) or 0)
+        remb = float(infos.get("remb_ss", 0) or 0)
+        return (remb / cout) if cout > 0 else None
+
     for r, (poste, infos) in enumerate(postes.items(), 3):
         part = (_charge(infos) / charge_totale) if charge_totale > 0 else None
         cell_part = f"{part:.1%}" if part is not None else "—"
         if isinstance(infos, dict):
+            taux = _taux_remboursement(infos)
             _data_row(ws, r, [
                 poste.capitalize(),
                 f"{infos.get('frequence_an', 0):.2f}",
                 f"{infos.get('cout_acte', infos.get('cout_moyen',0)):,.2f}",
                 f"{infos.get('charge_mutuelle', 0):,.2f}",
-                f"{infos.get('remb_ss', 0)*100:.1f}%",
+                f"{taux:.1%}" if taux is not None else "—",
                 cell_part,
                 "DREES 2023",
             ])
