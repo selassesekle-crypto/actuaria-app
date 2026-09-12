@@ -43,15 +43,18 @@ def _fx_pipeline_complet():
     r_coord = AgentSPCoord(verbose=False).run(result_s3=r_s3, result_p4=r_p4, fonds_propres=15_000_000, generer_graphiques=False)
     r_reg2 = AgentSPReg2IFRS17(verbose=False).run(result_s3=r_s3, result_p4=r_p4, generer_graphiques=False)
     r_reg3 = AgentSPReg3ANI100Sante(verbose=False).run(result_s1=r_s1, contrat="collectif", generer_graphiques=False)
-    return r_s1, r_s2, r_s3, r_p4, r_coord, r_reg2, r_reg3
+    return r_s1, r_s2, r_s3, r_p3, r_p4, r_coord, r_reg2, r_reg3
 
 
 def _fx_r_coh(pipeline_complet):
-    r_s1,r_s2,r_s3,r_p4,r_coord,r_reg2,r_reg3 = pipeline_complet
+    r_s1,r_s2,r_s3,r_p3,r_p4,r_coord,r_reg2,r_reg3 = pipeline_complet
+    # `result_p3` porte les COMPOSANTES du BE prevoyance : sans lui, C3
+    # n a plus de second cote independant et se declarerait N/A. Voir
+    # services/sp_reconciliation.py.
     return AgentSPCoherence(verbose=False).run(
-        result_s1=r_s1, result_s2=r_s2, result_s3=r_s3, result_p4=r_p4,
-        result_coord=r_coord, result_reg2=r_reg2, result_reg3=r_reg3,
-        generer_graphiques=False)
+        result_s1=r_s1, result_s2=r_s2, result_s3=r_s3, result_p3=r_p3,
+        result_p4=r_p4, result_coord=r_coord, result_reg2=r_reg2,
+        result_reg3=r_reg3, generer_graphiques=False)
 
 
 # ── T1 : Succès et structure ───────────────────────────────────────────────────

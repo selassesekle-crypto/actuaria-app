@@ -17,14 +17,25 @@
 ║    C1 — LR tarification (S1) ↔ LR provisionnement (S2)                    ║
 ║         Cohérence fondamentale : tarif et provisions doivent être alignés   ║
 ║                                                                              ║
-║    C2 — BE santé (S3) ↔ BE IFRS17 santé (SP-REG2)                         ║
-║         Réconciliation réglementaire S2/IFRS17 — santé NSLT                ║
+║    C2 — BE santé publié (S3) ↔ BE santé RECOMPOSÉ chez S2                 ║
+║         PSAP dossiers + PSAP IBNR — chemin qui ne passe pas par S3        ║
 ║                                                                              ║
-║    C3 — BE prévoyance (P4) ↔ BE IFRS17 prévoyance (SP-REG2)               ║
-║         Réconciliation réglementaire S2/IFRS17 — invalidité SLT            ║
+║    C3 — BE prévoyance publié (P4) ↔ BE RECOMPOSÉ chez P3                  ║
+║         PSAP IP + PM rentes IP + BE ITT — ne passe pas par P4              ║
 ║                                                                              ║
-║    C4 — SCR SP-Coord ↔ SCR SP-REG1 (deux chemins de calcul)               ║
-║         Le SCR doit être identique quel que soit l'agent qui le calcule    ║
+║    C4 — SCR consolidé publié (SP-Coord) ↔ agrégation REFAITE (S3 + P4)    ║
+║         La formule d'agrégation de l'annexe IV est elle-même contrôlée     ║
+║                                                                              ║
+║  ⚠️ CORRIGÉ LE 12/09/2026 — C2, C3 ET C4 NE POUVAIENT PAS ÉCHOUER.        ║
+║  Ils comparaient deux LECTURES d'une même valeur : SP-REG2 lit le BE chez  ║
+║  S3 puis on le compare à S3 ; SP-REG1 lit le SCR chez SP-Coord puis on le  ║
+║  compare à SP-Coord. Mesuré en perturbant le producteur : BE santé ×3 →    ║
+║  LES DEUX CÔTÉS passent à 412 660 €, écart 0,0 %, statut « ✅ OK ».       ║
+║  Idem BE prévoyance (45 400 €) et SCR (338 213 €). SP-COHÉRENCE était le   ║
+║  SEUL agent VERT du pipeline, et c'était par ces contrôles-là.             ║
+║  ⛔ Ce que la correction ne donne PAS : une erreur interne au calcul de    ║
+║  S2 ou P3 touche encore les deux côtés. `nature_independance` le dit dans  ║
+║  le document. Une indépendance de MODÈLES est une décision d'architecture. ║
 ║                                                                              ║
 ║    C5 — Stress tests Naomie ↔ ORSA SP-REG1                                 ║
 ║         Les stress tests doivent alimenter le résumé ORSA de manière        ║
@@ -36,8 +47,9 @@
 ║  ENTRÉES (toutes optionnelles — dégradation gracieuse) :                   ║
 ║    result_s1   → S1 Léonie (LR tarification santé)                        ║
 ║    result_s2   → S2 Selma  (LR provisionnement santé)                     ║
-║    result_s3   → S3 Binta  (BE santé, SCR NSLT)                           ║
-║    result_p4   → P4 Valentin (BE prévoyance, SCR SLT)                     ║
+║    result_s3   → S3 Binta  (BE santé publié, SCR NSLT)                    ║
+║    result_p3   → P3 Élodie (composantes du BE prévoyance — C3)            ║
+║    result_p4   → P4 Valentin (BE prévoyance publié, SCR SLT)              ║
 ║    result_coord→ SP-Coord  (SCR consolidé, diversification)                ║
 ║    result_reg1 → SP-REG1   (SCR S2 narratif, ORSA)                        ║
 ║    result_reg2 → SP-REG2   (BE IFRS17 S+P)                                ║
@@ -70,6 +82,20 @@ try:
     PLOTLY_OK = True
 except ImportError:
     PLOTLY_OK = False
+
+# ── Reconciliation ────────────────────────────────────────────────────────
+# Un controle de coherence n atteste que si ses deux cotes peuvent DIVERGER.
+# Voir services/sp_reconciliation.py : la mesure, et ce qu elle ne prouve pas.
+try:
+    from ...services.sp_reconciliation import (
+        NON_INDEPENDANT, recomposer_be_prevoyance, recomposer_be_sante,
+        recomposer_scr_consolide, statut_reconciliation,
+    )
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_reconciliation import (
+        NON_INDEPENDANT, recomposer_be_prevoyance, recomposer_be_sante,
+        recomposer_scr_consolide, statut_reconciliation,
+    )
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 NAVY   = "#0F2E52"; NAVY_L = "#1B3A5C"; NAVY_LL = "#243F6A"; OR = "#C9A84C"
@@ -119,6 +145,7 @@ class AgentSPCoherence:
             result_s1    = None,
             result_s2    = None,
             result_s3    = None,
+            result_p3    = None,
             result_p4    = None,
             result_coord  = None,
             result_reg1   = None,
@@ -149,13 +176,13 @@ class AgentSPCoherence:
             c1 = self._c1_lr_tarif_vs_prov(result_s1, result_s2)
 
             # ── C2 : BE santé S3 ↔ BE IFRS17 REG2 ───────────────────────────
-            c2 = self._c2_be_sante_s2_vs_ifrs17(result_s3, result_reg2)
+            c2 = self._c2_be_sante_s2_vs_ifrs17(result_s3, result_s2)
 
             # ── C3 : BE prévoyance P4 ↔ BE IFRS17 REG2 ───────────────────────
-            c3 = self._c3_be_prev_s2_vs_ifrs17(result_p4, result_reg2)
+            c3 = self._c3_be_prev_s2_vs_ifrs17(result_p4, result_p3)
 
             # ── C4 : SCR SP-Coord ↔ SCR SP-REG1 ─────────────────────────────
-            c4 = self._c4_scr_coord_vs_reg1(result_coord, result_reg1)
+            c4 = self._c4_scr_coord_vs_reg1(result_coord, result_s3, result_p4)
 
             # ── C5 : Stress Naomie ↔ ORSA SP-REG1 ───────────────────────────
             c5 = self._c5_stress_vs_orsa(result_st, result_reg1)
@@ -297,45 +324,57 @@ class AgentSPCoherence:
     # =========================================================================
     # C2 — BE SANTÉ S2 ↔ BE SANTÉ IFRS17
     # =========================================================================
-    def _c2_be_sante_s2_vs_ifrs17(self, result_s3, result_reg2) -> Dict:
+    def _c2_be_sante_s2_vs_ifrs17(self, result_s3, result_s2) -> Dict:
         """
-        Contrôle C2 — Réconciliation BE santé S2 (S3 Binta) ↔ BE santé IFRS17 (SP-REG2).
+        Contrôle C2 — BE santé publié (S3) ↔ BE santé RECOMPOSÉ chez S2.
 
-        Dans l'architecture actuelle, SP-REG2 extrait le BE santé directement
-        de S3 (même source que S3). L'écart attendu est donc nul ou très faible.
-        Ce contrôle valide que les deux agents lisent bien les mêmes données
-        et qu'aucune transformation parasite n'a été appliquée.
+        ⚠️ CORRIGÉ LE 12/09/2026 — CE CONTRÔLE NE POUVAIT PAS ÉCHOUER.
+        Il comparait le BE santé de S3 à celui de SP-REG2, lequel le lit
+        chez S3. Mesure : en multipliant par 3 le BE publié par S3, LES DEUX
+        CÔTÉS passaient à 412 660 €, l'écart restait 0,0 % et le statut
+        restait « ✅ OK ». Le filet fonctionnait ; son assiette était vide.
 
-        En production avec des systèmes distincts (S2 vs IFRS17 séparés),
-        cet écart peut atteindre 2-5% selon les ajustements de valorisation.
+        Le second côté est désormais RECOMPOSÉ à partir des composantes que
+        S2 calcule séparément — PSAP dossiers et PSAP IBNR — par un chemin
+        arithmétique qui ne passe pas par S3.
+
+        ⛔ Ce que cela ne prouve pas : une erreur interne au calcul de S2
+        touche les deux côtés. `nature_independance` le dit dans le document.
         Seuil 5% : ACPR Q&A IFRS17 2023 — réconciliation S2/IFRS17.
         """
         if not (result_s3 and result_s3.get("success") and
-                result_reg2 and result_reg2.get("success")):
-            return self._na("C2", "S3 + SP-REG2")
+                result_s2 and result_s2.get("success")):
+            return self._na("C2", "S3 + S2")
 
-        be_s2    = float(result_s3.get("be_sante", 0))
-        be_ifrs  = float(result_reg2.get("be_sante", 0))
+        be_publie = float(result_s3.get("be_sante", 0))
+        be_recompose, detail_recomp, complete = recomposer_be_sante(result_s2)
 
-        if not be_s2 or not be_ifrs:
-            return self._na("C2", "BE santé non disponibles")
+        if not be_publie:
+            return self._na("C2", "BE santé publié non disponible")
 
-        ecart_pct = abs(be_s2 - be_ifrs) / max(be_s2, 1)
-        ok        = ecart_pct <= SEUIL_BE_ECART_PCT
+        ok, etat, ecart, mention = statut_reconciliation(
+            be_publie, be_recompose, SEUIL_BE_ECART_PCT,
+            independant=complete and be_recompose > 0,
+            motif_non_independance=(
+                "les composantes du BE sante sont absentes de S2 : le second "
+                "cote ne peut pas etre recompose, et une lecture de la meme "
+                "valeur ne serait pas un controle"))
 
         return {
             "id":      "C2",
-            "libelle": "BE Santé S2 (S3) ↔ BE Santé IFRS17 (SP-REG2)",
+            "libelle": "BE Santé publié (S3) ↔ BE Santé recomposé (S2)",
             "ok":      ok,
-            "statut":  "✅ OK" if ok else "❌ ÉCART",
-            "valeur_a":round(be_s2, 2),
-            "valeur_b":round(be_ifrs, 2),
-            "ecart":   round(ecart_pct, 4),
+            "statut":  ("✅ OK" if ok else
+                        "⚠️ NON INDÉPENDANT" if etat == NON_INDEPENDANT
+                        else "❌ ÉCART"),
+            "valeur_a":round(be_publie, 2),
+            "valeur_b":round(be_recompose, 2),
+            "ecart":   round(ecart, 4) if ecart is not None else None,
             "seuil":   SEUIL_BE_ECART_PCT,
+            "independant": bool(complete and be_recompose > 0),
+            "nature_independance": mention,
             "detail":  (
-                f"BE_S2={be_s2:,.0f}€ | BE_IFRS17={be_ifrs:,.0f}€ | "
-                f"Écart={ecart_pct:.1%} {'≤' if ok else '>'} {SEUIL_BE_ECART_PCT:.0%} "
-                f"{'✅ Réconciliation OK' if ok else '⚠️ Documenter ecart S2/IFRS17'}"
+                f"BE publié (S3)={be_publie:,.0f}€ | {detail_recomp} | {mention}"
             ),
             "source":  "ACPR Q&A IFRS17 2023 — seuil tolérance 5%",
         }
@@ -343,43 +382,50 @@ class AgentSPCoherence:
     # =========================================================================
     # C3 — BE PRÉVOYANCE S2 ↔ BE PRÉVOYANCE IFRS17
     # =========================================================================
-    def _c3_be_prev_s2_vs_ifrs17(self, result_p4, result_reg2) -> Dict:
+    def _c3_be_prev_s2_vs_ifrs17(self, result_p4, result_p3) -> Dict:
         """
-        Contrôle C3 — Réconciliation BE prévoyance S2 (P4) ↔ BE prévoyance IFRS17 (SP-REG2).
+        Contrôle C3 — BE prévoyance publié (P4) ↔ BE RECOMPOSÉ chez P3.
 
-        Même logique que C2 pour la prévoyance SLT.
-        SP-REG2 extrait le BE prévoyance de P4 (même source).
-        L'écart attendu est nul dans l'architecture actuelle.
-        En production (systèmes séparés), l'écart GMM vs PAA peut atteindre
-        3-8% selon les ajustements de valorisation prévoyance long terme.
+        ⚠️ CORRIGÉ LE 12/09/2026, même défaut que C2 et même mesure : en
+        multipliant par 3 le BE prévoyance publié par P4, LES DEUX CÔTÉS
+        passaient à 45 400 €, écart 0,0 %, statut « ✅ OK ».
+
+        Le second côté est recomposé chez P3, qui calcule séparément la PSAP
+        IP, la PM de rentes IP et le BE ITT. P4 ne fait que les relire agrégés.
         Seuil 5% — si > 5%, documenter la divergence PAA/GMM (§53 IFRS17).
         """
         if not (result_p4 and result_p4.get("success") and
-                result_reg2 and result_reg2.get("success")):
-            return self._na("C3", "P4 + SP-REG2")
+                result_p3 and result_p3.get("success")):
+            return self._na("C3", "P4 + P3")
 
-        be_s2   = float(result_p4.get("be_prevoyance", 0))
-        be_ifrs = float(result_reg2.get("be_prevoyance", 0))
+        be_publie = float(result_p4.get("be_prevoyance", 0))
+        be_recompose, detail_recomp, complete = recomposer_be_prevoyance(result_p3)
 
-        if not be_s2 or not be_ifrs:
-            return self._na("C3", "BE prévoyance non disponibles")
+        if not be_publie:
+            return self._na("C3", "BE prévoyance publié non disponible")
 
-        ecart_pct = abs(be_s2 - be_ifrs) / max(be_s2, 1)
-        ok        = ecart_pct <= SEUIL_BE_ECART_PCT
+        ok, etat, ecart, mention = statut_reconciliation(
+            be_publie, be_recompose, SEUIL_BE_ECART_PCT,
+            independant=complete and be_recompose > 0,
+            motif_non_independance=(
+                "les composantes du BE prevoyance sont absentes de P3 : le "
+                "second cote ne peut pas etre recompose"))
 
         return {
             "id":      "C3",
-            "libelle": "BE Prévoyance S2 (P4) ↔ BE Prévoyance IFRS17 (SP-REG2)",
+            "libelle": "BE Prévoyance publié (P4) ↔ BE recomposé (P3)",
             "ok":      ok,
-            "statut":  "✅ OK" if ok else "❌ ÉCART",
-            "valeur_a":round(be_s2, 2),
-            "valeur_b":round(be_ifrs, 2),
-            "ecart":   round(ecart_pct, 4),
+            "statut":  ("✅ OK" if ok else
+                        "⚠️ NON INDÉPENDANT" if etat == NON_INDEPENDANT
+                        else "❌ ÉCART"),
+            "valeur_a":round(be_publie, 2),
+            "valeur_b":round(be_recompose, 2),
+            "ecart":   round(ecart, 4) if ecart is not None else None,
             "seuil":   SEUIL_BE_ECART_PCT,
+            "independant": bool(complete and be_recompose > 0),
+            "nature_independance": mention,
             "detail":  (
-                f"BE_S2={be_s2:,.0f}€ | BE_IFRS17={be_ifrs:,.0f}€ | "
-                f"Écart={ecart_pct:.1%} {'≤' if ok else '>'} {SEUIL_BE_ECART_PCT:.0%} "
-                f"{'✅ OK' if ok else '⚠️ Vérifier GMM vs PAA — §53 IFRS17'}"
+                f"BE publié (P4)={be_publie:,.0f}€ | {detail_recomp} | {mention}"
             ),
             "source":  "IFRS17 §53 — PAA santé vs GMM prévoyance",
         }
@@ -387,41 +433,60 @@ class AgentSPCoherence:
     # =========================================================================
     # C4 — SCR SP-COORD ↔ SCR SP-REG1
     # =========================================================================
-    def _c4_scr_coord_vs_reg1(self, result_coord, result_reg1) -> Dict:
+    def _c4_scr_coord_vs_reg1(self, result_coord, result_s3, result_p4) -> Dict:
         """
-        Contrôle C4 — Cohérence SCR SP-Coord ↔ SCR SP-REG1.
+        Contrôle C4 — SCR consolidé publié (SP-Coord) ↔ agrégation REFAITE.
 
-        SP-Coord et SP-REG1 calculent tous les deux le SCR consolidé
-        avec la même formule (ρ=0.25 EIOPA Annexe IV).
-        Un écart > 2% signale une erreur de données ou de paramétrage.
+        SP-Coord agrège les SCR de branche par la formule de l'annexe IV
+        (ρ=0,25). Ce contrôle refait l'agrégation depuis `scr_sante` (S3) et
+        `scr_invalidite` (P4), et compare. Un écart > 2 % signale une erreur
+        de données ou de paramétrage DANS L'AGRÉGATION — ce qu'une seconde
+        lecture de la même valeur ne pouvait pas voir.
         Source : EIOPA — principe de cohérence interne des QRT.
         """
-        if not (result_coord and result_coord.get("success") and
-                result_reg1  and result_reg1.get("success")):
-            return self._na("C4", "SP-Coord + SP-REG1")
+        if not (result_coord and result_coord.get("success")):
+            return self._na("C4", "SP-Coord")
 
         scr_coord = float(result_coord.get("scr_consolide", 0))
-        scr_reg1  = float(result_reg1.get("scr_consolide", 0))
 
-        if not scr_coord or not scr_reg1:
+        if not scr_coord:
             return self._na("C4", "SCR consolidé non disponible")
 
-        ecart_pct = abs(scr_coord - scr_reg1) / max(scr_coord, 1)
-        ok        = ecart_pct <= SEUIL_SCR_ECART_PCT
+        # ⚠️ CORRIGÉ LE 12/09/2026 — le second côté lisait le SCR consolidé
+        # chez SP-REG1, qui le lit chez SP-Coord. Mesure : en multipliant par
+        # 3 le SCR de SP-Coord, LES DEUX CÔTÉS passaient à 338 213 €, écart
+        # 0,00 %, statut « ✅ OK ». Le libellé annonçait « deux chemins » ;
+        # il n'y en avait qu'un.
+        # L'agrégation est désormais REFAITE depuis les SCR de branche, ce
+        # qui met la formule de l'annexe IV elle-même sous contrôle.
+        scr_sante = float((result_s3 or {}).get("scr_sante", 0) or 0)
+        scr_prev = float((result_p4 or {}).get("scr_invalidite", 0) or 0)
+        scr_refait, detail_refait, complete = recomposer_scr_consolide(
+            scr_sante, scr_prev)
+
+        ok, etat, ecart, mention = statut_reconciliation(
+            scr_coord, scr_refait, SEUIL_SCR_ECART_PCT,
+            independant=complete,
+            motif_non_independance=(
+                "les SCR de branche (S3, P4) sont indisponibles : "
+                "l agregation ne peut pas etre refaite independamment"))
 
         return {
             "id":      "C4",
-            "libelle": "SCR Consolidé SP-Coord ↔ SCR SP-REG1 (deux chemins)",
+            "libelle": "SCR Consolidé publié (SP-Coord) ↔ agrégation refaite (S3 + P4)",
             "ok":      ok,
-            "statut":  "✅ OK" if ok else "❌ INCOHÉRENCE",
+            "statut":  ("✅ OK" if ok else
+                        "⚠️ NON INDÉPENDANT" if etat == NON_INDEPENDANT
+                        else "❌ INCOHÉRENCE"),
             "valeur_a":round(scr_coord, 2),
-            "valeur_b":round(scr_reg1, 2),
-            "ecart":   round(ecart_pct, 4),
+            "valeur_b":round(scr_refait, 2),
+            "ecart":   round(ecart, 4) if ecart is not None else None,
             "seuil":   SEUIL_SCR_ECART_PCT,
+            "independant": bool(complete),
+            "nature_independance": mention,
             "detail":  (
-                f"SCR_Coord={scr_coord:,.0f}€ | SCR_REG1={scr_reg1:,.0f}€ | "
-                f"Écart={ecart_pct:.2%} {'≤' if ok else '>'} {SEUIL_SCR_ECART_PCT:.0%} "
-                f"{'✅ Même formule EIOPA' if ok else '❌ Erreur paramétrage à corriger'}"
+                f"SCR publié (SP-Coord)={scr_coord:,.0f}€ | {detail_refait} | "
+                f"{mention}"
             ),
             "source":  "EIOPA Annexe IV RD 2015/35 — ρ=0.25 cohérence interne",
         }
