@@ -75,6 +75,16 @@ try:
 except ImportError:
     SCIPY_OK = False
 
+# ── Ratio sinistres sur primes ───────────────────────────────────────────────
+# S/P = charge de sinistres / cotisations, la charge incluant les
+# provisions. Definition et source dans services/sp_ratio.py.
+try:
+    from ...services.sp_ratio import loss_ratio, statut_loss_ratio
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_ratio import (
+        loss_ratio, statut_loss_ratio,
+    )
+
 # ── Trace console tolerante a l encodage ─────────────────────────────────────
 # `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
 # une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
@@ -201,7 +211,9 @@ class AgentP3ProvissionnementPrevoyance:
 
         try:
             # N1 — Extraction P1 + P2
-            src = self._extraire(result_p1, result_p2, taux_actualisation, primes_par_an)
+            src = self._extraire(
+                result_p1, result_p2, taux_actualisation, primes_par_an,
+                lr_manuel=lr_manuel)
             self.logger.info(
                 f"[{aid}] P3 v{self.VERSION} | "
                 f"PA={src['primes_acquises']:,.0f}€ | "
@@ -339,6 +351,8 @@ class AgentP3ProvissionnementPrevoyance:
                 "tp_prevoyance":        round(tp_prev, 2),
                 "provision_totale":     round(prov_tot, 2),
                 "loss_ratio":           round(lr, 4),
+                # La provenance voyage avec la valeur.
+                "source_lr":  src.get("source_lr", ""),
                 "taux_provisionnement": round(taux_prov, 4),
 
                 # SCR
@@ -356,6 +370,8 @@ class AgentP3ProvissionnementPrevoyance:
                     "prec":             round(prec, 2),
                     "provision_totale": round(prov_tot, 2),
                     "loss_ratio":       round(lr, 4),
+                    # La provenance voyage avec la valeur.
+                    "source_lr":  src.get("source_lr", ""),
                     "primes_acquises":  src['primes_acquises'],
                     "scr_invalidite":   scr['scr_provisions'],
                     "sigma_itt":        round(mack['sigma_total'], 2),
@@ -380,7 +396,10 @@ class AgentP3ProvissionnementPrevoyance:
     # =========================================================================
 
     def _extraire(self, result_p1, result_p2, taux_act: float,
-                  primes_par_an: Optional[np.ndarray] = None) -> Dict:
+                  primes_par_an: Optional[np.ndarray] = None,
+                  sinistres_payes: Optional[float] = None,
+                  provisions_exercice: Optional[float] = None,
+                  lr_manuel: Optional[float] = None) -> Dict:
         """Extrait et consolide les données de P1 Axel et P2 Rayan.
         Si primes_par_an est fourni, utilise leur somme comme primes_acquises
         du portefeuille (corrige le cas où result_p1 porte sur 1 assuré).
@@ -410,8 +429,25 @@ class AgentP3ProvissionnementPrevoyance:
         maint_12m = float(p3.get("prob_maintien_12m", 0.25))
         maint_24m = float(p3.get("prob_maintien_24m", 0.12))
 
-        taux_cot  = float(result_p1.get("taux_cotisation_pct", 2.0)) / 100
-        lr_att    = taux_cot * 0.80
+        # ⚠️ CORRIGÉ LE 12/09/2026 — le loss ratio était un TAUX DE COTISATION.
+        #     taux_cot = result_p1["taux_cotisation_pct"] / 100   # % du SALAIRE
+        #     lr_att   = taux_cot * 0.80
+        # Un taux de cotisation multiplié par 0,80 ne produit pas un rapport
+        # de sinistres à primes : c'est une grandeur d'une autre dimension.
+        # Mesuré : au taux nominal de 1,51 %, l'agent publiait un Loss Ratio
+        # de 1,21 %. Il aurait fallu un taux de cotisation de 125 % du salaire
+        # pour atteindre 100 % — ce n'était pas un cas limite, c'était le
+        # régime permanent.
+        #
+        # S/P = charge de sinistres / cotisations, la charge étant les
+        # prestations versées PLUS les provisions constituées (PAVARD, ENSAE
+        # 2023, p. 30). Voir services/sp_ratio.py.
+        lr_att, source_lr = loss_ratio(
+            prestations_versees=sinistres_payes,
+            cotisations=pa,
+            provisions_constituees=provisions_exercice,
+            lr_reference=lr_manuel,
+        )
         sin_tot   = pa * lr_att
         sin_itt   = sin_tot * 0.65
         sin_ip    = sin_tot * 0.35
@@ -431,6 +467,10 @@ class AgentP3ProvissionnementPrevoyance:
             "sinistres_payes_itt":   sin_itt,
             "sinistres_payes_ip":    sin_ip,
             "lr_attendu":            lr_att,
+            # La provenance voyage avec la valeur : un lecteur doit
+            # savoir si le S/P vient de sinistres observes ou d une
+            # reference de marche.
+            "source_lr":             source_lr,
         }
 
     # =========================================================================
@@ -1776,6 +1816,8 @@ class AgentP3ProvissionnementPrevoyance:
         self, h: Dict, be_itt: Dict, mack: Dict, bt: Dict, lr: float
     ) -> list:
         """Hypothèses H1-H7 pour le rapport — standard ActuarIA."""
+        _h5_statut, _h5_motif = statut_loss_ratio(lr)
+
         def _st(h):
             """Statut publié : l'absence de mesure est un état à part entière.
 
@@ -1802,9 +1844,12 @@ class AgentP3ProvissionnementPrevoyance:
              "valeur": h3["message"], "statut": _st(h3), "score": h3["score"], "critique": False},
             {"id": "H4", "hypothese": "Homoscédasticité Bootstrap ODP (England & Verrall 2002)",
              "valeur": h4["message"], "statut": _st(h4), "score": h4["score"], "critique": False},
-            {"id": "H5", "hypothese": "Loss Ratio Prévoyance ≤ 90%",
-             "valeur": f"LR={lr*100:.1f}% {'≤' if lr<=0.90 else '>'} 90%",
-             "statut": "VALIDÉE" if lr<=0.90 else ("À JUSTIFIER" if lr<=1.0 else "NON VALIDÉE"),
+            # ⚠️ H5 ne bornait QUE PAR LE HAUT : un LR de 1,21 % passait donc
+            # pour valide. La borne BASSE est le vrai correctif — un S/P de
+            # 1,2 % est aussi invraisemblable qu'un S/P de 120 %, et il
+            # signale une erreur d'assiette avant de signaler un resultat.
+            {"id": "H5", "hypothese": "Loss Ratio Prévoyance dans [30%, 90%]",
+             "valeur": _h5_motif, "statut": _h5_statut,
              "score": max(0, int((1.2-lr)*100)) if lr<=1.2 else 0, "critique": True},
             {"id": "H6", "hypothese": "Incertitude Mack (CV<20% = VERT EIOPA Guidelines TP)",
              "valeur": f"CV={mack['cv_pct']:.1f}% — {mack['statut']}",
@@ -2097,6 +2142,8 @@ class AgentP3ProvissionnementPrevoyance:
                 "version": self.VERSION, "statut_rag": rag,
                 "be_total": round(be_total, 2), "pm_rentes_ip": round(pm_rentes, 2),
                 "loss_ratio": round(lr, 4),
+                # La provenance voyage avec la valeur.
+                "source_lr":  src.get("source_lr", ""),
                 "sigma_itt": round(mack["sigma_total"], 2),
                 "cv_pct": round(mack["cv_pct"], 2),
                 "scr_prov": scr["scr_provisions"],

@@ -263,7 +263,16 @@ class AgentP1TarificationPrevoyance:
             duree_rente   = max(0, age_retraite - age_m)
             annuite_ip    = sum(v**k for k in range(int(duree_rente)))
             rente_ip_an   = salaire_m * taux_rente_ipp
-            prime_ip      = taux_ip * rente_ip_an * annuite_ip / max(duree_contrat, 1)
+            # ⚠️ CORRIGÉ LE 12/09/2026 — la prime IP était divisée par la
+            # durée du contrat, PAS la prime ITT, alors que les deux partent
+            # d'un taux d'entrée ANNUEL. `annuite_ip` porte déjà la durée de
+            # service de la rente ; rediviser par la durée du CONTRAT
+            # mélangeait une prime annuelle et une prime unique.
+            # Mesuré avant correction, même assuré, seule la durée variant :
+            #   1 an  1 937,60 EUR   |   20 ans  96,88 EUR   (rapport 20,0x)
+            # Le RAG ne discriminait pas : il était ROUGE dans les quatre cas,
+            # y compris à 1 an où la prime était juste.
+            prime_ip      = taux_ip * rente_ip_an * annuite_ip
 
             # ── 5. PRIME DÉCÈS ────────────────────────────────────────────────
             # Capital décès différencié par CSP — référence marché IP France (CTIP 2023)

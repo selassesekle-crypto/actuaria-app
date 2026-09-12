@@ -539,14 +539,21 @@ def _impl_test_t7_rag_rouge():
     """
     agent = _agent()
 
-    # Cas (a) : LR > 100% — primes très faibles, sinistres normaux
-    # PA = 1000€ alors que sin_tot = 1000 × 1% × 80% × 1 = ...
-    # Pour forcer LR > 100% : on met taux_cot élevé ET sinistres élevés
-    # Méthode simple : PA très faible mais nb_assures élevé → sin élevé vs PA
+    # Cas (a) : LR > 100%
+    #
+    # ⚠️ MÉTHODE CHANGÉE LE 12/09/2026, en même temps que le contrat.
+    # Ce test forçait le loss ratio par `taux_cot=200.0`, c'est-à-dire en
+    # exploitant la formule fautive `lr = taux_cotisation / 100 × 0,80` —
+    # laquelle confondait un pourcentage de SALAIRE avec un rapport de
+    # sinistres à primes, et publiait un S/P de 1,21 % au taux nominal.
+    # Le test dépendait donc du défaut : corriger l'un cassait l'autre.
+    # Le loss ratio se pilote désormais par `lr_manuel`, qui est le levier
+    # prévu pour cela et qui ne suppose aucune formule fausse.
     r_lr_eleve = agent.run(
-        result_p1=_result_p1(pa=100.0, nb_assures=500, taux_cot=200.0),
+        result_p1=_result_p1(pa=100.0, nb_assures=500),
         result_p2=_result_p2(pa=100.0, nb=500),
         triangle_itt=_triangle_realiste(),
+        lr_manuel=1.60,
         generer_graphiques=False,
     )
     assert r_lr_eleve["statut_rag"] == "ROUGE", (

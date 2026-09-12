@@ -41,6 +41,16 @@ try:
 except ImportError:
     PLOTLY_OK = False
 
+# ── Ratio sinistres sur primes ───────────────────────────────────────────────
+# La charge de sinistres inclut les PROVISIONS. Source en tete de
+# services/sp_ratio.py.
+try:
+    from ...services.sp_ratio import loss_ratio as loss_ratio_sp
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_ratio import (
+        loss_ratio as loss_ratio_sp,
+    )
+
 # ── Trace console tolerante a l encodage ─────────────────────────────────────
 # `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
 # une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
@@ -154,7 +164,22 @@ class AgentS2ProvissionnementSante:
 
             # ── 7. PROVISION TOTALE ───────────────────────────────────────────
             provision_totale = psap_total + prec
-            loss_ratio       = src['sinistres_payes'] / max(src['primes_acquises'], 1)
+
+            # ⚠️ CORRIGÉ LE 12/09/2026 — le S/P omettait les PROVISIONS.
+            # La definition de place rapporte la CHARGE DE SINISTRES aux
+            # cotisations, la charge etant « les prestations versees et les
+            # provisions constituees, rattachees a l'exercice » (V. PAVARD,
+            # memoire ENSAE / Institut des Actuaires, 13/03/2023, p. 30).
+            # N'y mettre que les prestations reglees revient a ne compter que
+            # la part deja payee, et sous-estime la sinistralite de l'exercice.
+            loss_ratio, source_lr = loss_ratio_sp(
+                prestations_versees=src['sinistres_payes'],
+                cotisations=src['primes_acquises'],
+                provisions_constituees=psap_total,
+            )
+            # Conserve pour comparaison et pour ne pas rompre les lecteurs
+            # qui suivaient l'ancienne grandeur.
+            loss_ratio_paye = src['sinistres_payes'] / max(src['primes_acquises'], 1)
             taux_prov        = provision_totale / max(src['primes_acquises'], 1)
 
             # ── 8. BE SANTÉ (pour S3 Binta) ───────────────────────────────────
@@ -217,6 +242,10 @@ class AgentS2ProvissionnementSante:
                 'prec':             round(prec, 2),
                 'provision_totale': round(provision_totale, 2),
                 'loss_ratio':       round(loss_ratio, 4),
+                # Les deux grandeurs cote a cote : l ecart mesure la part
+                # PROVISIONNEE de la sinistralite de l exercice.
+                "loss_ratio_prestations_seules": round(loss_ratio_paye, 4),
+                "source_loss_ratio": source_lr,
                 'taux_provisionnement': round(taux_prov, 4),
 
                 # ── Détail par poste ─────────────────────────────────────────
