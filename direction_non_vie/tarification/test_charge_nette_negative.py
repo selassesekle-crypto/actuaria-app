@@ -25,7 +25,7 @@ sur tiers la rendent negative, et c'est NORMAL.
 
 ═══ ET AUCUN INDICE NE PERMET DE TRANCHER ═══
 
-Arbitre par Selasse : erreurs de saisie ET vrais recours coexistent, le second
+Arbitre par la direction technique : erreurs de saisie ET vrais recours coexistent, le second
 cas est rare, ni l'un ni l'autre n'est la regle. Les deux discriminants mesures
 sur les 1 116 cas :
 
@@ -281,7 +281,7 @@ class TestLaQuestionATTEINT_LE_BLOCAGE(unittest.TestCase):
         from core.qualite_donnees import QualiteBloquante
         from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
         # ⚠️⚠️ LE VÉHICULE DU BLOCAGE A CHANGÉ LE 02/09, ET C'EST L'ARBITRAGE
-        # DE SELASSE. Une charge NETTE négative n'escalade plus : mesurée à
+        # DE LA DIRECTION TECHNIQUE. Une charge NETTE négative n'escalade plus : mesurée à
         # 8,82 % sur cette même donnée réelle, elle est légitime et bloquait un
         # vrai portefeuille. On co-plante donc une anomalie DISQUALIFIANTE pour
         # obtenir un blocage. *Ce que ce contrôle prouve est inchangé : quand

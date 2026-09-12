@@ -61,7 +61,7 @@ SEUIL_ESCALADE = 0.05
 
 
 #: Les trois grandeurs que ce lot couvre. ⚠️ Les FACTEURS tarifaires restent
-#: imputés comme avant : Selasse les a explicitement laissés hors de ce lot.
+#: imputés comme avant : la direction technique les a explicitement laissés hors de ce lot.
 ROLES_GRANDEURS = ('exposition', 'cible_frequence', 'cible_cout')
 
 #: ⚠️ Libellés lisibles — le message parle à l'actuaire, pas au code.
@@ -75,7 +75,7 @@ _LIBELLE_GRANDEUR = {
 class ValeurAbsenteNonDeclaree(RuntimeError):
     """⚠️⚠️ LE SYSTÈME N'INVENTE JAMAIS UNE VALEUR À LA PLACE DE L'ACTUAIRE.
 
-    Arbitré par Selasse le 02/09/2026. Mesuré avant l'arbitrage, sur 30
+    Arbitré par la direction technique le 02/09/2026. Mesuré avant l'arbitrage, sur 30
     expositions absentes parmi 1 000 :
 
         exposition totale AVANT : 970,0
@@ -156,7 +156,7 @@ def facteurs_valeurs_absentes(df, plan) -> dict:
     de facteurs par plan, environ cent soixante au total : arrêter sur chacun
     rendrait tout fichier client imparfait intarifable.*
 
-    Décision de Selasse : **la ligne est EXCLUE et le système le DIT.** Il
+    Décision de la direction technique : **la ligne est EXCLUE et le système le DIT.** Il
     n'invente toujours rien ; il refuse simplement de tarifer une ligne dont
     un facteur manque, plutôt que de deviner ce facteur.
 
@@ -767,7 +767,7 @@ def controler_qualite(
 
     # ── RÈGLE 1 : IMPOSSIBLE → exclure ───────────────────────────────────────
     if col_freq in df.columns:
-        # ⚠️⚠️ MESSAGE RÉÉCRIT POUR L'ACTUAIRE — arbitré par Selasse, 02/09.
+        # ⚠️⚠️ MESSAGE RÉÉCRIT POUR L'ACTUAIRE — arbitré par la direction technique, 02/09.
         # L'ancien disait : « cible_frequence ('nb_sinistres') < 0 — nombre de
         # sinistres negatif, impossible. » Il nommait une COLONNE TECHNIQUE, ne
         # disait NI combien de contrats, NI ce que ça coûte, NI quoi faire.
@@ -1091,7 +1091,7 @@ def controler_qualite(
     # critère ne peut donc qu'AJOUTER des escalades, jamais en retirer — c'est
     # la règle d'asymétrie : une liste qui accuse ne peut pas ouvrir de trou.
     # ⚠️⚠️ ET DEPUIS LE 02/09, SEULS QUATRE TYPES PEUVENT FAIRE ESCALADER —
-    # `CODES_DISQUALIFIANTS`, arbitré par Selasse sur les chiffres de l'étape 4.
+    # `CODES_DISQUALIFIANTS`, arbitré par la direction technique sur les chiffres de l'étape 4.
     # Le filtre porte sur LES DEUX critères : un type hors liste n'escalade pas
     # seul, ET n'entre pas dans l'union. *Le laisser dans l'union le rendrait
     # bloquant par la bande — un garde-fou qu'on croit désarmé et qui tire.*
@@ -1321,7 +1321,7 @@ def preambule_qualite(portefeuille, plan, qualite_validee_par=None,
     dataframe propre. **Aucun euro ne bouge.**
 
     ⚠️⚠️ ELLE EST BRANCHÉE AUX DEUX CHEMINS DEPUIS LE 02/09/2026 — étape 1-B,
-    arbitrée par Selasse, constat `qualite/C4` FERMÉ. `pipeline_agents`
+    arbitrée par la direction technique, constat `qualite/C4` FERMÉ. `pipeline_agents`
     l'appelle entre A1 et A2 : après A1 qui rend la donnée lisible sans retirer
     de ligne, avant A2 qui mute. *Un garde-fou placé après le geste qu'il
     surveille ne surveille plus rien.*
@@ -1349,7 +1349,7 @@ def preambule_qualite(portefeuille, plan, qualite_validee_par=None,
 def _phrase_effet_agrege(a: Anomalie) -> str | None:
     """Ce qu'une correction fait au TOTAL de sa colonne, en toutes lettres.
 
-    ⚠️⚠️ CONSTAT `qualite/C3` — EXIGENCE DE SELASSE, 30/08/2026. Un compte de
+    ⚠️⚠️ CONSTAT `qualite/C3` — EXIGENCE DE LA DIRECTION TECHNIQUE, 30/08/2026. Un compte de
     lignes ne dit pas l'enjeu : « 1000 ligne(s) CORRIGEE(S) » cachait une
     exposition totale divisée par dix. *L'actuaire doit lire CE QU'IL VALIDE.*
 
@@ -1400,7 +1400,7 @@ MARQUEUR_QUALITE_NON_EXECUTEE = 'NON EXECUTE'
 #: `MARQUEUR_QUALITE_NON_EXECUTEE_ETATS = 2`, que rien n'aurait lu : *commettre
 #: le défaut qu'on ferme, dans le commit qui le ferme.*
 
-#: ⚠️⚠️ LA LISTE DISQUALIFIANTE — arbitrée par Selasse le 02/09/2026 sur les
+#: ⚠️⚠️ LA LISTE DISQUALIFIANTE — arbitrée par la direction technique le 02/09/2026 sur les
 #: chiffres de l'étape 4. **Seuls ces quatre types peuvent faire escalader un
 #: run** ; les onze autres signalent et n'arrêtent jamais rien.
 #:
@@ -1520,7 +1520,7 @@ def phrase_ampleur_exclusion(part: float | None, *,
     **mesuré le 05/09/2026** :
 
         ⚠ AMPLEUR — ... Ces retraits-ci ne declenchent PAS cette exigence ...
-        ✔ Poursuite malgre anomalie(s) >= 5% VALIDEE par « Selasse Sekle ».
+        ✔ Poursuite malgre anomalie(s) >= 5% VALIDEE par « Direction Technique ».
 
     *Deux phrases contradictoires dans le document que l'actuaire lit avant
     de signer une assiette réduite de 67 %.*
@@ -1590,7 +1590,7 @@ def _entete_alerte(mask, total: int, titre: str, unite: str = 'contrat') -> str:
 
 
 #: ⚠️⚠️ CE QUE LE LIVRABLE DIT QUAND LA COUCHE N'A PAS TOURNÉ — constat de
-#: Selasse, 01/09/2026. Le patron est celui d'`avertissement_fuite_par_effet`
+#: la direction technique, 01/09/2026. Le patron est celui d'`avertissement_fuite_par_effet`
 #: (`conformite/C1`) : un contrôle qui n'a pas eu lieu le DIT, il ne se tait pas.
 PHRASE_QUALITE_NON_EXECUTEE = (
     f"⚠ CONTROLE QUALITE DES DONNEES — {MARQUEUR_QUALITE_NON_EXECUTEE}. Aucun "

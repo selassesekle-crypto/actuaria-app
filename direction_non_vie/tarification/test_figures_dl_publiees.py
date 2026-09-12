@@ -5,7 +5,7 @@ CE QUE CE FICHIER PROUVE, ET POURQUOI CHAQUE TEST EXISTE
 UNE SEULE PROPRIETE : *une figure qui entre au rapport signe doit y arriver
 REELLEMENT, dans les deux formats, et ne pas y arriver quand elle n'existe pas.*
 
-═══ CE QUE SELASSE A ARBITRE ═══
+═══ CE QUE LA DIRECTION TECHNIQUE A ARBITRE ═══
 
 `convergence_loss` (H1 DL) et `comparaison_dl_glm` (H3 DL) quittent
 `FIGURES_ECARTEES` pour le PLAN, chapitre 4. Elles n'y entrent qu'apres la
@@ -211,7 +211,7 @@ class TestLesDeuxFiguresDLSontPubliees(unittest.TestCase):
     def test_les_SIX_autres_figures_d_A5_restent_ecartees(self):
         """⚠️⚠️ ON N'OUVRE PAS LA PORTE A TOUT A5.
 
-        Selasse a arbitre DEUX figures, pas huit. Les six autres restent
+        La direction technique a arbitre DEUX figures, pas huit. Les six autres restent
         ecartees ; leur motif ne dit plus << A5 n'entre pas dans la chaine >>
         -- ambigu et faux si on le lit << A5 ne participe pas >>, alors que
         ses modeles concourent et qu'un DL a gagne une cible.

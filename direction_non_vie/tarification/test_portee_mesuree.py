@@ -1,6 +1,6 @@
 """⚠️⚠️ UNE PHRASE DE PORTÉE SE MESURE COMME UN CHIFFRE.
 
-Étape ① du chantier 1-B, décidée par Selasse le 01/09/2026.
+Étape ① du chantier 1-B, décidée par la direction technique le 01/09/2026.
 
 `core/qualite_donnees.py` a affirmé **« Aucun des 20 plans ne déclare
 d'unité »** de l'étape 2 du chantier `unite_exposition` jusqu'au 01/09. L'étape

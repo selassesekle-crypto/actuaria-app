@@ -223,7 +223,7 @@ fois.
 > ✅ **`charts/C4`** · **FERMÉ le 29/08/2026, ET PAS PAR OÙ IL ÉTAIT ÉCRIT.**
 > *Preuve : `test_repli_et_palette.py`, 5 contrôles.*
 >
-> **Selasse a arbitré : la couleur est mon choix, l'exigence est « pertinent et
+> **La direction technique a arbitré : la couleur est mon choix, l'exigence est « pertinent et
 > beau pour le client ».** J'ai donc mesuré avant de décider, et la mesure a
 > déplacé le constat.
 >
@@ -395,7 +395,7 @@ lieu d'importer la constante.
 > que ce que le code porte est aussi trompeuse qu'une qui affirme plus.**
 >
 > ⛔ **IL RESTE OUVERT, ET C'EST UN ARBITRAGE, PAS UN OUBLI.** Le correctif
-> vit dans `actuaria_app.py`, et Selasse a arbitré : **on ne touche pas à
+> vit dans `actuaria_app.py`, et la direction technique a arbitré : **on ne touche pas à
 > l'app Streamlit**. Ce qui est corrigé ici, c'est la DESCRIPTION — épinglée
 > par `test_charts_c8_mesure.py`, qui dérive le compte et la clé perdue des
 > fichiers eux-mêmes et tombera le jour où l'un des deux bougera.
@@ -419,7 +419,7 @@ lieu d'importer la constante.
 ### ⚠️⚠️ AJOUTÉ LE 24/08/2026 (SOIR) — DEUX CONSTATS DE LISIBILITÉ, MESURÉS AU RENDU
 
 *Trouvés en rendant les deux chartes côte à côte sur de vraies figures, à la
-demande de Selasse. Ce sont des défauts de **la V3 elle-même**, et je les ai
+demande de la direction technique. Ce sont des défauts de **la V3 elle-même**, et je les ai
 trouvés **en la défendant**.*
 
 **C9 — Le gradient n'est pas monotone en luminance : deux déciles différents se

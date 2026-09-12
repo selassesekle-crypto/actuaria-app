@@ -22,7 +22,7 @@ alphanumerique et tout historique de renouvellement.
 ═══ CE QUI EST ARBITRE, ET OU C'EST ECRIT ═══
 
 L'identite a dedoublonner n'est PAS « le contrat » partout : elle depend de
-l'unite assuree. Sept LoB ont ete arbitrees une par une par Selasse le
+l'unite assuree. Sept LoB ont ete arbitrees une par une par la direction technique le
 30/08/2026, et la decision est ecrite DANS LE PLAN SIGNE — c'est la qu'elle est
 opposable, pas dans un rapport de session.
 
@@ -307,7 +307,7 @@ class TestLeComportementSurUnVRAIFichier(unittest.TestCase):
               "en regle 1")
 
     def test_SANS_la_colonne_les_lignes_sont_CONSERVEES_et_signalees(self):
-        """⚠️⚠️ LE CAS QUE SELASSE A NOMME : certains fichiers clients portent
+        """⚠️⚠️ LE CAS QUE LA DIRECTION TECHNIQUE A NOMME : certains fichiers clients portent
         l'information de renouvellement, d'autres non. Le systeme doit gerer
         les deux proprement — jamais de rejet silencieux."""
         r = _controler(self._hist().drop(columns=['date_echeance']), self.plan,

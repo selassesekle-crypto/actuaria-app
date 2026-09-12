@@ -19,8 +19,9 @@ du contrat deplacerait le prix d'un facteur 2 sur tout contrat infra-annuel :
 change, c'est que le conflit est DIT et que la duree retenue est PUBLIEE.
 *On rend d'abord visible ; on decide ensuite.*
 
-Arbitrage de Selasse, 05/09/2026 : << valeur par defaut d'un an, toujours
-declaree explicitement dans le resultat, jamais en silence >>.
+Arbitrage de la direction technique, 05/09/2026 : << valeur par defaut
+d'un an, toujours declaree explicitement dans le resultat, jamais en
+silence >>.
 
 Ce que cette sentinelle exige :
   EX-1  le defaut du parametre est `None`, pas `1.0` -- sans quoi les deux
@@ -251,7 +252,7 @@ class TestTariferLaPublie(unittest.TestCase):
         self.assertIsNotNone(
             sans['exposition_hypothese'],
             "le cas (b) suppose une annee SANS le dire : c'est la garantie "
-            "que Selasse a explicitement demandee")
+            "que la direction technique a explicitement demandee")
         self.assertGreater(sans['prime_pure'], avec['prime_pure'])
 
     def test_EX3b_le_conflit_atteint_le_RESULTAT_de_tarifer(self):

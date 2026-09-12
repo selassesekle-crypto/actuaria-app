@@ -1,6 +1,6 @@
 """⚠️⚠️ « PAS VÉRIFIÉ » N'EST PAS « VÉRIFIÉ, RIEN À SIGNALER ».
 
-Décision de Selasse, 01/09/2026. `synthese_qualite_donnees` rendait `None` dans
+Décision de la direction technique, 01/09/2026. `synthese_qualite_donnees` rendait `None` dans
 DEUX états que rien ne distinguait :
 
     * `rapport is None`        -> la couche N'A PAS TOURNÉ ;
@@ -160,7 +160,7 @@ class TestQualiteNonExecutee(unittest.TestCase):
         print("    OK QNE-2 la phrase nie « rien a signaler » et dit INCONNU")
 
     def test_QNE_3_le_rapport_SIGNE_distingue_les_deux_cas(self):
-        """⚠️⚠️ LE CONTRÔLE DEMANDÉ PAR SELASSE — sur le document qui part au CAC.
+        """⚠️⚠️ LE CONTRÔLE DEMANDÉ PAR LA DIRECTION TECHNIQUE — sur le document qui part au CAC.
 
         Le Word et le HTML passent tous deux par `avertissement_qualite` puis
         par `_bloc_qualite_html` / le paragraphe Word : un texte vide fait
@@ -322,7 +322,7 @@ class TestQualiteNonExecutee(unittest.TestCase):
         regardait le chemin agent sans rien lui appliquer, le temps de MESURER
         les fréquences réelles sur lesquelles arbitrer la liste disqualifiante.
         L'arbitrage est pris, l'étape ⑤ a branché la couche, et l'outillage a
-        été supprimé le 02/09/2026 sur décision de Selasse.
+        été supprimé le 02/09/2026 sur décision de la direction technique.
 
         > *Garder un instrument après qu'il a rendu son verdict n'est pas de la
         > prudence, c'est de la dette.*

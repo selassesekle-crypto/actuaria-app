@@ -187,7 +187,7 @@ from core.sortie_console import afficher_sans_echouer
 #: toujours 1,0 — le contrat publié « ≈1,0000 = meilleur du profil » tient.
 #: ⚠️ **Le 3 est un ARBITRAGE, pas une démonstration** : il dit qu'un modèle
 #: dont le Gini d'entraînement vaut le TRIPLE de celui de test — ou l'inverse
-#: — perd toute sa note de stabilité. Arbitré par Selasse le 06/09/2026.
+#: — perd toute sa note de stabilité. Arbitré par la direction technique le 06/09/2026.
 STABILITE_RATIO_NUL = math.log(3)
 
 SPLIT_ALEATOIRE = 'aléatoire_80_20'
@@ -3994,7 +3994,7 @@ class AgentA6Comparaison:
             in_top3, score_retenu, rang = False, 0, 99
 
         # ⚠️⚠️ CE SEUIL N'A PAS ÉTÉ RECALIBRÉ APRÈS `A6-2`, ET C'EST UNE
-        # DÉCISION — arbitrée par Selasse le 06/09/2026, pas un oubli.
+        # DÉCISION — arbitrée par la direction technique le 06/09/2026, pas un oubli.
         #
         # La correction d'`A6-2` a fait BAISSER structurellement tous les
         # scores globaux : sous l'ancienne note de stabilité, le meilleur

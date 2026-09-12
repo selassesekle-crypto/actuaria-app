@@ -245,7 +245,7 @@ class TestHypotheseH2(unittest.TestCase):
         print('    DC-5b bandes VERT et AMBRE symetriques en ratio')
 
     def test_DC6_un_Gini_de_test_NEGATIF_reste_ROUGE(self):
-        """⚠️⚠️ ARBITRE PAR SELASSE. Le socle rendrait `None` ; ce serait une
+        """⚠️⚠️ ARBITRE PAR LA DIRECTION TECHNIQUE. Le socle rendrait `None` ; ce serait une
         regression : un Gini de test <= 0 dit que le modele ne discrimine pas
         sur son jeu d'evaluation. C'est une ALERTE, pas une absence."""
         for gte in (-0.02, -0.20, 0.0):

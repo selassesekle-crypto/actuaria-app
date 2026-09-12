@@ -3,9 +3,10 @@
 #  ActuarIA — LE MESSAGE DE COMMIT SE REFUSE, IL NE SE RAPPELLE PAS
 # =============================================================================
 #
-#  ⚠️ POURQUOI CE FICHIER EXISTE. Quatre règles permanentes de Selasse portent
-#  sur le message de commit : sujet sur UNE ligne d'au plus 76 caractères,
-#  aucune ligne du corps au-delà de 76, aucun caractère non-ASCII, et aucun
+#  ⚠️ POURQUOI CE FICHIER EXISTE. Quatre règles permanentes de la direction
+#  technique portent sur le message de commit : sujet sur UNE ligne d'au
+#  plus 76 caractères, aucune ligne du corps au-delà de 76, aucun
+#  caractère non-ASCII, et aucun
 #  trailer `Co-Authored-By`. Elles sont écrites, datées, motivées — et trois
 #  d'entre elles ont été enfreintes TROIS FOIS en cinq jours, avec le même
 #  dépassement d'un caractère :
@@ -36,7 +37,7 @@ import sys
 #: La limite, identique pour le sujet et pour toute ligne du corps.
 LARGEUR_MAX = 76
 
-#: Le trailer interdit — auteur = Selasse Sekle seul.
+#: Le trailer interdit — l'auteur du depot signe seul.
 #:
 #: ⚠️ CE MOTIF EST ÉTROIT, ET C'EST TOUT SON INTÉRÊT. Un simple
 #: `'Co-Authored' in ligne` refuserait ce message-ci, qui parle du contrôle :
@@ -79,11 +80,12 @@ def lignes_du_message(texte: str) -> list[str]:
 def verifier(texte: str) -> list[str]:
     """Les violations du message, en clair. Liste vide = conforme.
 
-    Quatre règles, et seulement quatre — celles que Selasse a nommées :
+    Quatre règles, et seulement quatre — celles que la direction technique
+    a nommées :
       1. le sujet tient sur UNE ligne d'au plus 76 caractères ;
       2. aucune ligne du corps ne dépasse 76 caractères ;
       3. aucun caractère non-ASCII, nulle part ;
-      4. aucun trailer `Co-Authored-By` — auteur = Selasse Sekle seul.
+      4. aucun trailer `Co-Authored-By` — l'auteur du depot signe seul.
     """
     lignes = lignes_du_message(texte)
     utiles = [l for l in lignes if l.strip()]
@@ -123,7 +125,7 @@ def verifier(texte: str) -> list[str]:
                 f'ligne {n} : caracteres non-ASCII {hors} -- {ligne[:46]}...')
 
     # ── 4. le trailer Co-Authored-By ─────────────────────────────────────────
-    # ⚠️ L'auteur est Selasse Sekle SEUL. Cette regle prime sur le defaut du
+    # ⚠️ L'auteur du depot signe SEUL. Cette regle prime sur le defaut du
     # harnais, qui ajoute le trailer de lui-meme si on le laisse faire.
     for n, ligne in enumerate(lignes, 1):
         if MOTIF_COAUTHOR.match(ligne):

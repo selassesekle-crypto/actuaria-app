@@ -1,6 +1,6 @@
 """⚠️⚠️ LE SYSTÈME N'INVENTE JAMAIS UNE VALEUR À LA PLACE DE L'ACTUAIRE.
 
-Étape ⑤-② du chantier 1-B, arbitrée par Selasse le 02/09/2026.
+Étape ⑤-② du chantier 1-B, arbitrée par la direction technique le 02/09/2026.
 
 ```
   30 expositions ABSENTES sur 1 000, AVANT l'arbitrage :
@@ -28,8 +28,8 @@ l'actuaire et porte **la position dans SON fichier**.
 même sur un dataframe indexé par des numéros de police, l'annexe rend des
 rangs. *Aucun identifiant client ne peut fuir par ce canal.*
 
-⚠️⚠️ PORTÉE ÉTENDUE AUX FACTEURS LE 02/09/2026, PAR ARBITRAGE DE SELASSE. Ce
-texte disait : « les FACTEURS tarifaires restent imputés comme avant — Selasse
+⚠️⚠️ PORTÉE ÉTENDUE AUX FACTEURS LE 02/09/2026, PAR ARBITRAGE DE LA DIRECTION TECHNIQUE. Ce
+texte disait : « les FACTEURS tarifaires restent imputés comme avant — la direction technique
 les a explicitement laissés hors de ce lot ». Il a ensuite ouvert les facteurs,
 avec un régime **délibérément différent** :
 
@@ -223,7 +223,7 @@ class TestValeursAbsentesDeclarees(unittest.TestCase):
               f"grandeurs couvertes")
 
     def test_VA_6_RGPD_aucun_identifiant_client_ne_fuit_dans_l_annexe(self):
-        """⚠️⚠️ LE PLANT RGPD EXIGÉ PAR SELASSE.
+        """⚠️⚠️ LE PLANT RGPD EXIGÉ PAR LA DIRECTION TECHNIQUE.
 
         On indexe le dataframe par des NUMÉROS DE POLICE et on ajoute une
         colonne d'identifiants. L'annexe doit rendre des RANGS, et ne porter
@@ -276,10 +276,10 @@ class TestValeursAbsentesDeclarees(unittest.TestCase):
 
     def test_VA_9_DEUX_PORTES_un_ARRET_et_une_EXCLUSION_jamais_fondues(self):
         """⚠️⚠️ CE CONTROLE A CHANGE DE SENS LE 02/09/2026, ET C'EST UN
-        ARBITRAGE DE SELASSE QUI L'A FAIT.
+        ARBITRAGE DE LA DIRECTION TECHNIQUE QUI L'A FAIT.
 
         Il s'appelait « la PORTEE est tenue, les facteurs restent hors lot » et
-        prouvait que Selasse avait limite le lot aux trois grandeurs. Il a
+        prouvait que la direction technique avait limite le lot aux trois grandeurs. Il a
         ensuite ouvert les FACTEURS, avec un regime DIFFERENT : un trou non
         declare y EXCLUT la ligne au lieu d'ARRETER le run.
 
@@ -435,7 +435,7 @@ class TestValeursAbsentesDeclarees(unittest.TestCase):
               f"cause est nommee ({len(msg)} car.)")
 
     def test_VA_17_le_COMPTE_publie_et_le_GESTE_viennent_du_MEME_masque(self):
-        """⛔⛔ LE DEFAUT QUE J'AI LIVRE, ET QUE SELASSE M'A FAIT CHERCHER.
+        """⛔⛔ LE DEFAUT QUE J'AI LIVRE, ET QUE LA DIRECTION TECHNIQUE M'A FAIT CHERCHER.
 
         A la question << est-ce que tout va bien avec certitude ? >>, la
         verification a trouve ceci : A2 excluait par `dropna`, qui ne voit que
@@ -496,7 +496,7 @@ class TestValeursAbsentesDeclarees(unittest.TestCase):
               f"{200 - len(df.dropna(subset=['age']))}), sans A1")
 
     def test_VA_16_la_modalite_inventee_INCONNU_a_disparu_du_CODE(self):
-        """⚠️⚠️ ARBITRE PAR SELASSE : le systeme n'invente plus de modalite.
+        """⚠️⚠️ ARBITRE PAR LA DIRECTION TECHNIQUE : le systeme n'invente plus de modalite.
 
         Assiette : le CODE d'A2 par AST, docstrings et commentaires exclus --
         *une citation n'est pas une affirmation*, et ce fichier EXPLIQUE le

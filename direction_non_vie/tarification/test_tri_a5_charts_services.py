@@ -42,7 +42,7 @@ rien -- il empeche le defaut latent de devenir actif sans qu'on le sache.*
 ═══ CE QUI RESTE OUVERT, ET POURQUOI ═══
 
 ⛔ **`charts/C8`** -- `CONFIG_PLOTLY` reecrite en dur dans `actuaria_app.py`.
-**L'app Streamlit est hors perimetre par arbitrage de Selasse du 25/08** : elle
+**L'app Streamlit est hors perimetre par arbitrage de la direction technique du 25/08** : elle
 disparait, on n'y touche pas, meme pour une phrase.
 ⚠️ **ET LE CONSTAT EST REFUTE SUR UN POINT** : il disait « Meme valeur
 aujourd'hui ». Mesure du 31/08 -- **deux** sites (l.4188 et l.4248), et la

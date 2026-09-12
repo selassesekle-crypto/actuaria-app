@@ -28,7 +28,7 @@ l'attente :
   chemin agent   : 1000 -> 970, il n'exclut que les 30 d'exposition
 ```
 
-**L'etape 1-B a ete arbitree par Selasse et faite** (commit `82a1584`,
+**L'etape 1-B a ete arbitree par la direction technique et faite** (commit `82a1584`,
 `qualite/C4` FERME) : `pipeline_agents` appelle desormais la porte entre A1 et
 A2. La phrase decrivait une absence qui n'existe plus, dans le fichier meme qui
 garde la porte. *Un texte qui explique une ABSENCE survit a la raison de
@@ -104,9 +104,9 @@ class TestLaPorteEstUNIQUE(unittest.TestCase):
         df = _portefeuille_auto(400, seed=3)
         df.loc[df.index[:60], 'nb_sinistres'] = -1.0
         r = _sans_bruit(preambule_qualite, df, _PLAN,
-                        qualite_validee_par='Selasse Sekle', horodatage='t')
+                        qualite_validee_par='Direction Technique', horodatage='t')
         self.assertFalse(r.bloque)
-        self.assertEqual(r.validee_par, 'Selasse Sekle')
+        self.assertEqual(r.validee_par, 'Direction Technique')
         print("    PQ-3 la confirmation nominative debloque, et elle est tracee")
 
 

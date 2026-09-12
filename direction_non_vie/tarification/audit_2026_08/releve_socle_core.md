@@ -25,7 +25,7 @@ sinistre** est dit GRAVE* ». Le code l.110 calcule
 `cout[cout > 0].quantile(0.995)` où `cout` est le **coût total du contrat**.
 Mesuré sur une flotte où **chaque sinistre coûte exactement 800 €** :
 
-> ✅ **`socle/C1`** · **FERMÉ le 01/09/2026 — ARBITRÉ PAR SELASSE, ET SON ARBITRAGE RENVERSE MA RECOMMANDATION DU 24/08** (« garder l'assiette, corriger la phrase »). Décision : **le seuil s'applique à CHAQUE SINISTRE individuellement, jamais au cumul d'un contrat sur l'année.**
+> ✅ **`socle/C1`** · **FERMÉ le 01/09/2026 — ARBITRÉ PAR LA DIRECTION TECHNIQUE, ET SON ARBITRAGE RENVERSE MA RECOMMANDATION DU 24/08** (« garder l'assiette, corriger la phrase »). Décision : **le seuil s'applique à CHAQUE SINISTRE individuellement, jamais au cumul d'un contrat sur l'année.**
 >
 > ⚠️⚠️ **ET LA MESURE DU 01/09 LUI DONNE RAISON PLUS FORT QUE MON RELEVÉ.** Sur `data/PG_2017_CLAIMS_YEAR0.csv` — **12 391 sinistres versionnés, une ligne = un sinistre** — sévérités réelles, fréquence balayée :
 >
@@ -67,7 +67,7 @@ qui le génèrent.
 
 ## ⚠️⚠️ INSTRUIT LE 24/08/2026 — ET LA MESURE M'A RÉFUTÉ
 
-**Selasse a demandé une recommandation motivée avant d'arbitrer. Elle est dans
+**la direction technique a demandé une recommandation motivée avant d'arbitrer. Elle est dans
 [CARTE.md](CARTE.md#️️-lassiette-de-lécrêtement--ma-recommandation-motivée).
 Ce qui suit corrige ce relevé.**
 
@@ -263,7 +263,7 @@ première ligne. Le motif du chantier, dans sa forme la plus bénigne : *le code
 importer `core.arrete` (233 l) en chargeait 4 429.**
 
 > ✅ **`socle/C6`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 03/09/2026 — premier
-> lot de l'audit des 1 170 lignes « jamais auditées », ouvert par Selasse.**
+> lot de l'audit des 1 170 lignes « jamais auditées », ouvert par la direction technique.**
 >
 > **Le constat.** `core/__init__.py` ré-exportait vingt symboles par des
 > `from .x import y` exécutés **à l'import du paquet**. Or importer n'importe
@@ -382,7 +382,7 @@ pour une obligation », et RIEN ne l'appliquait.**
 > ═══ CE QUE CE LOT A MESURÉ SANS TROUVER DE DÉFAUT ═══
 >
 > ⚠️⚠️ **ET J'AI DÛ ME CORRIGER SUR `_et`.** Je l'avais annoncée **morte** à
-> Selasse, sur une marche d'atteignabilité qui ne suivait que les corps de
+> la direction technique, sur une marche d'atteignabilité qui ne suivait que les corps de
 > fonctions. **Elle est appelée QUATRE FOIS au niveau module**, à la
 > construction d'`EXIGENCES`. *Une mesure qui ignore le code exécuté à
 > l'import déclare morte une fonction vivante.*

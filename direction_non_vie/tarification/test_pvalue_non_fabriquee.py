@@ -10,7 +10,7 @@ Sur echec d'ajustement, le stepwise d'A3 publiait TROIS affirmations fausses :
   ③ la variable retiree est `vars_actives[-1]`, la DERNIERE, pas celle qui a
     echoue. L'exception ne dit pas laquelle.
 
-CE QUI A ETE MESURE AVANT DE CORRIGER (demande de Selasse)
+CE QUI A ETE MESURE AVANT DE CORRIGER (demande de la direction technique)
   · frequence sur donnees propres : 0 sur 36 exclusions du portefeuille du
     banc -- le chemin n'est PAS atteint quand les donnees sont saines ;
   · atteignabilite : statsmodels ne leve NI sur colinearite parfaite, NI sur

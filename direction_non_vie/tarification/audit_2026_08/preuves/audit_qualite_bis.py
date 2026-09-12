@@ -62,7 +62,7 @@ for L in (Q.synthese_qualite_donnees(r) or '').split('\n'):
         print(f"      {L[k:k + 92]}")
 print()
 print("  APRES validation nominative (ce qui part dans les livrables) :")
-r2 = Q.controler_qualite(df, PLAN, qualite_validee_par='Selasse Sekle',
+r2 = Q.controler_qualite(df, PLAN, qualite_validee_par='Direction Technique',
                          horodatage='2026-08-24T10:00:00')
 for L in (Q.synthese_qualite_donnees(r2) or '').split('\n'):
     for k in range(0, len(L), 92):

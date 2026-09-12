@@ -13,7 +13,7 @@ MESURE DU 05/09/2026, sur un portefeuille reduit de 67,3 % :
 
     ⚠ AMPLEUR — cette part (67,3 %) vaut 13,5 fois le seuil de 5 % ...
       Ces retraits-ci ne declenchent PAS cette exigence ...
-    ✔ Poursuite malgre anomalie(s) >= 5% VALIDEE par « Selasse Sekle ».
+    ✔ Poursuite malgre anomalie(s) >= 5% VALIDEE par « Direction Technique ».
 
 *L'une dit que l'exigence ne s'est pas declenchee, l'autre qu'elle s'est
 declenchee et qu'un actuaire nomme l'a assumee -- dans le meme document, sous
@@ -90,7 +90,7 @@ class TestJamaisLesDeux(unittest.TestCase):
     def test_AC1_aucun_etat_ne_produit_les_DEUX_affirmations(self):
         """⚠️⚠️ LE COEUR. La synthese ne peut jamais nier et affirmer la meme
         escalade."""
-        for escalade, qui in ((False, None), (True, 'Selasse Sekle'),
+        for escalade, qui in ((False, None), (True, 'Direction Technique'),
                               (True, None)):
             with self.subTest(escalade=escalade, valide_par=qui):
                 texte = synthese_qualite_donnees(
@@ -111,10 +111,10 @@ class TestJamaisLesDeux(unittest.TestCase):
 
     def test_AC3_sous_escalade_elle_AFFIRME_et_NOMME(self):
         texte = synthese_qualite_donnees(
-            _rapport(escalade=True, valide_par='Selasse Sekle')) or ''
+            _rapport(escalade=True, valide_par='Direction Technique')) or ''
         self.assertIn(_AFFIRME, texte)
         self.assertNotIn(_NIE, texte)
-        self.assertIn('Selasse Sekle', texte,
+        self.assertIn('Direction Technique', texte,
                       "la phrase d'ampleur ne nomme pas qui a assume "
                       "l'escalade")
 
@@ -209,7 +209,7 @@ class TestLesSurfacesSignees(unittest.TestCase):
                                             (True, _AFFIRME, _NIE)):
             with self.subTest(escalade=escalade):
                 octets = export_excel_a6(self._resultat_a6(
-                    escalade=escalade, qui='Selasse Sekle'))
+                    escalade=escalade, qui='Direction Technique'))
                 self.assertTrue(octets, "l'export A6 n'a rien produit")
                 texte = self._texte_xlsx(octets)
                 self.assertIn('AMPLEUR', texte,
@@ -225,7 +225,8 @@ class TestLesSurfacesSignees(unittest.TestCase):
                                             (True, _AFFIRME, _NIE)):
             with self.subTest(escalade=escalade):
                 html = export_html_equipe(
-                    {'a6': self._resultat_a6(escalade=escalade, qui='S. S.')},
+                    {'a6': self._resultat_a6(escalade=escalade,
+                                             qui='Direction Technique')},
                     branche='auto', audit_id='TEST')
                 texte = html if isinstance(html, str) else html.decode(
                     'utf-8', 'replace')
@@ -241,7 +242,7 @@ class TestLesSurfacesSignees(unittest.TestCase):
             export_word_equipe,
         )
         octets = export_word_equipe(
-            {'a6': self._resultat_a6(escalade=True, qui='Selasse Sekle')},
+            {'a6': self._resultat_a6(escalade=True, qui='Direction Technique')},
             branche='auto', audit_id='TEST')
         with zipfile.ZipFile(io.BytesIO(octets)) as z:
             xml = z.read('word/document.xml').decode('utf-8', 'replace')

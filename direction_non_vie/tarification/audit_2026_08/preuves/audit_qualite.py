@@ -125,7 +125,7 @@ try:
     r = Q.controler_qualite(df, PLAN)
     print(f"  13 % d'expositions negatives -> bloque={r.bloque}  "
           f"dataframe_propre={'None' if r.dataframe_propre is None else 'fourni'}")
-    r2 = Q.controler_qualite(df, PLAN, qualite_validee_par='Selasse Sekle',
+    r2 = Q.controler_qualite(df, PLAN, qualite_validee_par='Direction Technique',
                              horodatage='2026-08-24T10:00:00')
     print(f"  la meme, VALIDEE nominativement -> bloque={r2.bloque}  "
           f"lignes 1000 -> {r2.lignes_retenues}  validee_par={r2.validee_par!r}")
@@ -192,7 +192,7 @@ df['expo'] = df['expo'] * 12.0          # le meme portefeuille, en MOIS
 r = Q.controler_qualite(df, PLAN)
 print(f"  exposition en mois (0,3 a 12) : bloque={r.bloque}  "
       f"escalade={r.escalade_declenchee}")
-r2 = Q.controler_qualite(df, PLAN, qualite_validee_par='Selasse Sekle',
+r2 = Q.controler_qualite(df, PLAN, qualite_validee_par='Direction Technique',
                          horodatage='2026-08-24T10:00:00')
 dfp = r2.dataframe_propre
 print(f"  une fois VALIDEE nominativement :")

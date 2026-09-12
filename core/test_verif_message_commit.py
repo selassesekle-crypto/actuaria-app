@@ -11,7 +11,7 @@
 #  parce qu'il donne la confiance sans la couverture.
 #
 #  Quatre choses sont vérifiées ici, et ce sont exactement les quatre que
-#  Selasse a exigées :
+#  la direction technique a exigées :
 #    · il REFUSE la violation plantée — un sujet à 77 caractères ;
 #    · il LAISSE PASSER un message conforme ;
 #    · il ne bloque AUCUN cas légitime — en particulier les lignes de

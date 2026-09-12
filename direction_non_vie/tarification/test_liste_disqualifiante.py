@@ -1,6 +1,6 @@
 """⚠️⚠️ QUATRE ALERTES PEUVENT ARRÊTER UN TARIF. LES ONZE AUTRES, JAMAIS.
 
-Étape ⑤-① du chantier 1-B, arbitrée par Selasse le 02/09/2026 sur les chiffres
+Étape ⑤-① du chantier 1-B, arbitrée par la direction technique le 02/09/2026 sur les chiffres
 de l'étape ④ — et le chiffre qui a tranché est celui-ci :
 
 ```
@@ -171,7 +171,7 @@ class TestListeDisqualifiante(unittest.TestCase):
 
     def test_LD_5_les_messages_parlent_a_un_ACTUAIRE_pas_a_un_developpeur(
             self):
-        """⚠️⚠️ CE QUE SELASSE A VALIDÉ, MOT POUR MOT.
+        """⚠️⚠️ CE QUE LA DIRECTION TECHNIQUE A VALIDÉ, MOT POUR MOT.
 
         Chaque message disqualifiant doit dire ce qui a été trouvé, sur combien
         de lignes, ce que ça signifie pour un vrai contrat, et **quoi faire**.
@@ -224,7 +224,7 @@ class TestListeDisqualifiante(unittest.TestCase):
         print("    OK LD-6 les 4 comptes publies == nb_lignes du masque")
 
     def test_LD_7_RGPD_aucun_message_ne_cite_de_ligne_ni_de_valeur(self):
-        """⚠️⚠️ LE PLANT RGPD DEMANDÉ PAR SELASSE.
+        """⚠️⚠️ LE PLANT RGPD DEMANDÉ PAR LA DIRECTION TECHNIQUE.
 
         Le rapport signé CIRCULE. Il porte un compte et un pourcentage, jamais
         la position d'une ligne ni la valeur d'un contrat. On plante l'anomalie
@@ -281,9 +281,9 @@ class TestListeDisqualifiante(unittest.TestCase):
         self.assertTrue(sans.bloque)
         self.assertIsNone(sans.dataframe_propre)
         avec = controler_qualite(df.copy(), _PLAN,
-                                 qualite_validee_par='Selasse Sekle')
+                                 qualite_validee_par='Direction Technique')
         self.assertFalse(avec.bloque)
-        self.assertEqual(avec.validee_par, 'Selasse Sekle')
+        self.assertEqual(avec.validee_par, 'Direction Technique')
         self.assertEqual(len(avec.dataframe_propre), len(df) - 400,
                          'les lignes impossibles ne sont pas retirees')
         print(f"    OK LD-9 blocage leve par signature nominative, "
@@ -606,11 +606,11 @@ class TestAmpleurDeLExclusion(unittest.TestCase):
     def test_AM_3b_sous_escalade_elle_NE_DIT_PLUS_l_inverse(self):
         """La contre-epreuve : escalade declenchee ET validee."""
         p = phrase_ampleur_exclusion(0.673, escalade_declenchee=True,
-                                     validee_par='Selasse Sekle') or ''
+                                     validee_par='Direction Technique') or ''
         self.assertNotIn('ne declenchent PAS', p,
                          "la phrase nie une escalade qui a EU LIEU, dans le "
                          "meme document qui la valide")
-        self.assertIn('Selasse Sekle', p,
+        self.assertIn('Direction Technique', p,
                       "la phrase ne nomme pas qui a assume l'escalade")
         self.assertIn('VERIFIEZ', p, "la question n'est plus rendue")
         print("    AM-3b sous escalade validee : la phrase dit l'inverse "

@@ -4,7 +4,7 @@
   QUAND AUCUN MODELE NE PEUT ETRE EVALUE -- on le DIT, on ne choisit pas
 =============================================================================
 
-ARBITRAGE DE SELASSE, 03/09/2026, sur les trois agents ensemble. Quand aucun
+ARBITRAGE DE LA DIRECTION TECHNIQUE, 03/09/2026, sur les trois agents ensemble. Quand aucun
 modele ne peut etre vraiment evalue, le systeme doit :
 
   1. le DIRE clairement, jamais produire un tarif silencieusement sur une
@@ -84,7 +84,7 @@ class T1_LeDiagnostic(unittest.TestCase):
 
         ⚠️ Un sinistre suffit : ce n'est pas un seuil de FIABILITE, c'est le
         seuil de la POSSIBILITE. Les confondre reviendrait a inventer le
-        seuil que Selasse a explicitement refuse d'inventer.
+        seuil que la direction technique a explicitement refuse d'inventer.
         """
         self.assertIsNone(_diag(sinistres_test=1.0))
         self.assertIsNone(_diag(sinistres_test=97.0))

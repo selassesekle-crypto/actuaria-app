@@ -4,7 +4,7 @@
   ANTI-SELECTION ET RESERVE DE GINI -- deux situations, deux traitements
 =============================================================================
 
-ARBITRAGE DE SELASSE, 03/09/2026, sur la suite laissee en suspens par
+ARBITRAGE DE LA DIRECTION TECHNIQUE, 03/09/2026, sur la suite laissee en suspens par
 `a3/C6` :
 
   Gini MESURE et NEGATIF  -> le modele discrimine A L'ENVERS. Ce n'est pas
@@ -37,7 +37,7 @@ CE QUI RESTE OUVERT, ET C'EST DIT
 (tableau vide, somme de sinistres nulle -- branche commentee << Gini
 incalculable >> --, et son propre `except`). La racine n'est PAS traitee ici :
 A6 arbitre le modele de production sur le Gini, et changer ces zeros
-deplacerait le modele retenu, donc le tarif. Selasse a demande le chiffre
+deplacerait le modele retenu, donc le tarif. La direction technique a demande le chiffre
 avant tout code dessus.
 =============================================================================
 """

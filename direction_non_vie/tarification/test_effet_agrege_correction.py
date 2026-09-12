@@ -123,7 +123,7 @@ class TestLeMessageQuiDECIDE(unittest.TestCase):
         """⚠️ Une reformulation entre les deux surfaces ferait diverger ce qui
         est validE de ce qui est tracE."""
         bloque = synthese_qualite_donnees(_controler(_en_mois()))
-        signe = synthese_qualite_donnees(_controler(_en_mois(), 'Selasse Sekle'))
+        signe = synthese_qualite_donnees(_controler(_en_mois(), 'Direction Technique'))
         commun = ("EFFET SUR LE TOTAL de « exposition » : 10 083 -> 1 000 "
                   "(-90.1 %).")
         self.assertIn(commun, bloque)
@@ -134,7 +134,7 @@ class TestLeMessageQuiDECIDE(unittest.TestCase):
 
     def test_l_audit_trail_retrouve_l_effet(self):
         """⚠️ Ce qui est publie doit etre retrouvable dans la trace."""
-        res = _controler(_en_mois(), 'Selasse Sekle').resume()
+        res = _controler(_en_mois(), 'Direction Technique').resume()
         eff = res['corrections'][0]['effet_agrege']
         self.assertEqual(eff['colonne'], 'exposition')
         self.assertAlmostEqual(eff['total_apres'], 1000.0, places=2)
@@ -197,7 +197,7 @@ class TestAucunEuroDeplace(unittest.TestCase):
 
     def test_le_plafond_garde_sa_valeur_et_sa_forme_publiee(self):
         self.assertEqual(PLAFOND_EXPOSITION, 1.0)
-        r = _controler(_en_mois(), 'Selasse Sekle')
+        r = _controler(_en_mois(), 'Direction Technique')
         self.assertEqual(r.corrections[0].correction, 'plafond a 1.0',
                          "le libelle publie a change de FORME : `:g` rendait "
                          "« plafond a 1 »")
@@ -207,7 +207,7 @@ class TestAucunEuroDeplace(unittest.TestCase):
     def test_le_dataframe_propre_est_IDENTIQUE_a_avant_le_lot(self):
         """⚠️ Le seuil, les lignes touchees et la valeur appliquee sont les
         memes : le plafond ramene TOUTE ligne > 1 a exactement 1.0."""
-        r = _controler(_en_mois(), 'Selasse Sekle')
+        r = _controler(_en_mois(), 'Direction Technique')
         dfp = r.dataframe_propre
         self.assertEqual(len(dfp), 1000)
         self.assertEqual(float(dfp['exposition'].max()), 1.0)
@@ -224,7 +224,7 @@ class TestRGPD(unittest.TestCase):
         df = _en_mois()
         sentinelle = 'P2024-SECRET-0001'
         df['id_contrat'] = [f'{sentinelle}-{i}' for i in range(len(df))]
-        r = _controler(df, 'Selasse Sekle')
+        r = _controler(df, 'Direction Technique')
         texte = synthese_qualite_donnees(r)
         self.assertNotIn(sentinelle, texte, 'un identifiant client sort')
         self.assertNotIn('[0,', texte, 'des index de lignes sortent')

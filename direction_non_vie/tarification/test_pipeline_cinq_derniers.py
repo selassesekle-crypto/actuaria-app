@@ -89,7 +89,7 @@ def _tarif(df=None):
     return _sans_bruit(
         pipeline_complet,
         _portefeuille_auto(800, seed=3) if df is None else df,
-        _PLAN_AUTO, qualite_validee_par='Selasse Sekle')
+        _PLAN_AUTO, qualite_validee_par='Direction Technique')
 
 
 class TestC2LesDeuxImpossibilites(unittest.TestCase):

@@ -207,7 +207,7 @@ d'être portés en constats à part entière.*
 **Preuve** : `preuves/passage_libelles.py`, relançable seul.
 
 > ⚠️⚠️ **CORRECTION DU 25/08/2026 — « 3/12 » COMPTAIT DES CHAMPS, PAS DE
-> L'INFORMATION.** Deux questions de Selasse ont borné le banc, et la mesure
+> L'INFORMATION.** Deux questions de la direction technique ont borné le banc, et la mesure
 > m'a corrigé **dans les deux sens** :
 >
 > **① L'ÉCRAN EST UN AUTRE CHEMIN QUE LE DOCUMENT.** Le banc ne testait que les
@@ -354,7 +354,7 @@ Côté agent : **le commentaire actuaire ne publie jamais** le nombre de fenêtr
 > un pas de 0,1 vaut **0,0100** quand la plus petite marge #1-#2 mesurée sur
 > cet agent valait **0,008**.
 >
-> **Le correctif — arbitré par Selasse le 30/08 : lever, pas retomber.** Une
+> **Le correctif — arbitré par la direction technique le 30/08 : lever, pas retomber.** Une
 > porte unique `interpretabilite_de(nom)` pour les trois agents, **sans aucun
 > défaut** ; `xgboost_tweedie` déclaré à **0.60**. ⚠️ **AUCUN EURO DÉPLACÉ, et
 > c'est un contrôle** : `0.60` est exactement ce que le défaut d'A4 rendait —

@@ -4,7 +4,7 @@
 data/PG_2017_CLAIMS_YEAR0.csv : 14 243 lignes, UNE LIGNE = UN SINISTRE, avec
 son montant propre. On peut donc calculer les DEUX ecretements et les comparer.
 
-Trois questions de Selasse :
+Trois questions de la direction technique :
   1. que couterait un ecretement AU SINISTRE ? sur quels plans est-ce possible ?
   2. si la donnee est au contrat partout, quelle est la moins mauvaise option ?
   3. 727,27 au lieu de 800 : est-ce que ca deplace un TARIF, ou une STATISTIQUE ?
@@ -131,7 +131,7 @@ for k in sorted(set(nb_m)):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-titre("E4 -- EST-CE QUE CA DEPLACE UN TARIF ? (la question de Selasse)")
+titre("E4 -- EST-CE QUE CA DEPLACE UN TARIF ? (la question de la direction technique)")
 # ══════════════════════════════════════════════════════════════════════════════
 # La prime pure = E[N] x E[C|N>0] + prime_grave_unitaire.
 # On compare les DEUX regimes, contrat par contrat, sur la meme frequence.

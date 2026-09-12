@@ -87,7 +87,7 @@ FamilleSeverite = Literal["gamma", "lognormal", "inverse_gaussienne"]
 # DIT — le patron déjà validé pour la référence A3 absente d'`a4/C11`.
 UniteExposition = Literal["annee", "mois", "jour"]
 
-#: ⚠️⚠️ CE QUE L'ACTUAIRE DÉCIDE D'UNE VALEUR ABSENTE — arbitré par Selasse le
+#: ⚠️⚠️ CE QUE L'ACTUAIRE DÉCIDE D'UNE VALEUR ABSENTE — arbitré par la direction technique le
 #: 02/09/2026. **Le système n'invente jamais.** Mesuré avant l'arbitrage : une
 #: exposition absente était remplacée en silence par la MOYENNE, et 30 lignes
 #: vides devenaient 30 années de couverture au dénominateur du tarif — sans un
@@ -688,7 +688,7 @@ class PlanTarifaire:
     # ⚠️ PORTÉE DE CE LOT : les trois grandeurs seulement. Les FACTEURS
     # tarifaires restent imputés comme avant — une modalité inventée change
     # aussi une relativité, mais le rayon de souffle n'est pas le même et
-    # Selasse l'a explicitement laissé hors de ce lot. *Nommer ce qu'un lot ne
+    # la direction technique l'a explicitement laissé hors de ce lot. *Nommer ce qu'un lot ne
     # couvre pas vaut mieux que de laisser croire qu'il a tout pris.*
     valeurs_absentes: ValeursAbsentes | None = None
     # ⚠️⚠️ LES CHARGEMENTS — constats `pipeline/C4` + `C5`, LA MEME question.

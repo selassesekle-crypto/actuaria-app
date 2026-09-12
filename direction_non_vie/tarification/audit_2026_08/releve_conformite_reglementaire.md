@@ -15,7 +15,7 @@ quatre « sources uniques » de texte pour les livrables.
 établie par instruction.**
 
 ⚠️ **MIS À JOUR LE 24/08/2026** : le point que j'avais laissé à l'arbitrage en
-§③ a été tranché par Selasse — **la direction Vie est hors périmètre**, mais
+§③ a été tranché par la direction technique — **la direction Vie est hors périmètre**, mais
 **un constat en sort et il est du périmètre** : c'est `C14`, ci-dessous.
 
 ## ② Le classement
@@ -82,7 +82,7 @@ arguments, pas l'exécution du contrôle.
 > le motif qu'il porte.** Corrigé, et verrouillé par un contrôle.
 >
 > ⚠️⚠️ **RÉOUVERT PUIS REFERMÉ LE MÊME JOUR — LE CORRECTIF PORTAIT LE DÉFAUT
-> QU'IL CORRIGEAIT.** Une question de Selasse sur l'interaction avec la couche
+> QU'IL CORRIGEAIT.** Une question de la direction technique sur l'interaction avec la couche
 > qualité l'a trouvé : mon garde testait `float(serie.std()) == 0.0`, et sur
 > une colonne **entièrement vide** `std()` vaut **NaN** — or **`NaN == 0.0` est
 > FAUX**. Aucun motif n'était produit, `controle_effet_execute` valait `True`,
@@ -108,7 +108,7 @@ arguments, pas l'exécution du contrôle.
 > Contrôles positifs : `test_controle_effet.py`, **20 tests**, dont
 > `POS_Effet_LeCouplageEstVerrouille` qui **lit le classeur produit**.
 >
-> ⚠️⚠️ **DEUX QUESTIONS DE SELASSE ONT TROUVÉ CE QUI MANQUAIT — le rapport
+> ⚠️⚠️ **DEUX QUESTIONS DE LA DIRECTION TECHNIQUE ONT TROUVÉ CE QUI MANQUAIT — le rapport
 > AFFIRMAIT deux choses qu'aucun test nommé n'appuyait.**
 >
 > **① « A6 agrège par le pire » n'était pas mesuré.** Le verdict tient — A3 en
@@ -392,7 +392,7 @@ elle n'est ni dans le log (il n'y a pas de WARNING quand la propriété ment,
 cf. C1), ni dans le rapport.
 
 **C14 — « POUR TOUTE BRANCHE » : le module énonce une règle universelle et n'en
-surveille qu'une.** *(Inscrit le 24/08/2026 sur arbitrage de Selasse.)*
+surveille qu'une.** *(Inscrit le 24/08/2026 sur arbitrage de la direction technique.)*
 
 Trois phrases de l'en-tête portent une **portée universelle**, à l'impératif :
 
@@ -519,7 +519,7 @@ qui fait `continue`. Mesuré, avec la cible binarisée en texte :
 > autres colonnes — le défaut V6 que le `except` global raconte. *Ce qui change
 > n'est pas le comportement, c'est le silence.*
 >
-> ⚠️⚠️ **L'AMPLEUR RÉELLE, MESURÉE À LA DEMANDE DE SELASSE ET NON GONFLÉE.**
+> ⚠️⚠️ **L'AMPLEUR RÉELLE, MESURÉE À LA DEMANDE DE LA DIRECTION TECHNIQUE ET NON GONFLÉE.**
 > Instrumentation du détecteur sur des runs réels :
 >
 > ```
@@ -623,7 +623,7 @@ estimateur statistique : leurs agents sont bien paramétriques.
 
 ## ③ TRANCHÉ LE 24/08/2026 — HORS PÉRIMÈTRE, ET NOTÉ
 
-> **Arbitrage de Selasse** : *« Les agents de tarification sont A1 à A6 ; A7 est
+> **Arbitrage de la direction technique** : *« Les agents de tarification sont A1 à A6 ; A7 est
 > le provisionnement. La direction Vie n'a rien à faire dans cet audit — tu l'as
 > trouvée en vérifiant qui respecte une règle, pas en auditant ton périmètre.
 > À NOTER dans l'archive, pas à traiter. »*
@@ -771,7 +771,7 @@ publier l'écart comme une exclusion nommée. ⚠️ **Cela touche les trois age
 A3/A4/A5 et une surface signée** : c'est un lot à part entière, de la famille de
 l'étape 4 d'`unite_exposition`. **Rien ne bougera sans arbitrage.**
 
-> ✅ **`conformite/C15`** · **FERMÉ le 31/08/2026 — arbitré par Selasse.**
+> ✅ **`conformite/C15`** · **FERMÉ le 31/08/2026 — arbitré par la direction technique.**
 > *Preuve : `test_colonnes_plan_ecartees.py`, 10 contrôles, **9 violations
 > plantées**, une par contrôle.*
 >
@@ -853,7 +853,7 @@ l'étape 4 d'`unite_exposition`. **Rien ne bougera sans arbitrage.**
 disparaît en entier sur le cas le plus ordinaire.**
 
 > ✅ **`conformite/C16`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
-> point ② des quatre restants, arbitré par Selasse.**
+> point ② des quatre restants, arbitré par la direction technique.**
 >
 > **Le constat.** A3, A4 et A5 rendent chacun une table `{colonne: motif}`
 > (`MatriceX.ecartees_amont`) — *une sentinelle l'exige déjà d'A3* (`CPE-7`).

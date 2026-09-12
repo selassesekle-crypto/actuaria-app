@@ -2498,7 +2498,7 @@ class AgentA5DeepLearning:
         # `ratio_sur_apprentissage` est la SOURCE UNIQUE de ce ratio, et c'est
         # elle que la ligne 1581 publie au classement : H2 lit désormais le
         # même nombre, dans le même sens.
-        # ⚠️ UN GINI DE TEST <= 0 RESTE UN ROUGE — arbitré par Selasse le
+        # ⚠️ UN GINI DE TEST <= 0 RESTE UN ROUGE — arbitré par la direction technique le
         # 06/09/2026. Le socle refuse de diviser par lui et rendrait `None` ;
         # ici ce serait une régression : *un Gini de test négatif ou nul dit
         # que le modèle ne discrimine pas sur son jeu d'évaluation, c'est un

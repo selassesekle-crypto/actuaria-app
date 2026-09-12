@@ -237,7 +237,7 @@ class POS_Effet_LeCouplageEstVerrouille(unittest.TestCase):
 
 
 class POS_Effet_L_AgregationD_A6_NeMasqueRien(unittest.TestCase):
-    """⚠️⚠️ CETTE CLASSE N'EXISTAIT PAS, ET C'EST SELASSE QUI L'A DEMANDÉE.
+    """⚠️⚠️ CETTE CLASSE N'EXISTAIT PAS, ET C'EST LA DIRECTION TECHNIQUE QUI L'A DEMANDÉE.
 
     J'affirmais dans mon rapport « A6 agrège par le pire » — **sans aucun test
     nommé pour l'appuyer**, contrairement au reste du lot. *Une affirmation sans
@@ -302,7 +302,7 @@ class POS_Effet_L_AgregationD_A6_NeMasqueRien(unittest.TestCase):
 
 
 class POS_Effet_LeCouplageTientDANS_LES_DEUX_SENS(unittest.TestCase):
-    """⚠️⚠️ MESURÉ SUR DEMANDE DE SELASSE — je n'avais montré qu'un sens.
+    """⚠️⚠️ MESURÉ SUR DEMANDE DE LA DIRECTION TECHNIQUE — je n'avais montré qu'un sens.
 
     Le couplage doit tenir que l'on annule `C1` (la propriété redevient `True`
     à tort) OU que l'on débranche `C7` (l'avertissement n'est plus publié).
@@ -344,7 +344,7 @@ class POS_Effet_LeCouplageTientDANS_LES_DEUX_SENS(unittest.TestCase):
 
 
 class POS_Effet_UneCibleVIDE_NeSAttestePas(unittest.TestCase):
-    """⚠️⚠️ LE TROU QUE SELASSE A TROUVÉ, ET QUI M'A ÉCHAPPÉ TROIS FOIS.
+    """⚠️⚠️ LE TROU QUE LA DIRECTION TECHNIQUE A TROUVÉ, ET QUI M'A ÉCHAPPÉ TROIS FOIS.
 
     Le garde testait `float(serie.std()) == 0.0`. Sur une colonne entièrement
     vide, `std()` vaut **NaN**, et **`NaN == 0.0` est FAUX** : aucun motif,

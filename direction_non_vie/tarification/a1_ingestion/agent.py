@@ -255,7 +255,7 @@ SEUILS_QUALITE = {
     'doublons_rouge':    5.0,
     'doublons_ambre':    1.0,
     # ⚠️⚠️ `aberrants_taux_rouge` A ÉTÉ RETIRÉ LE 02/09/2026 — arbitré par
-    # Selasse. Il avait été AJOUTÉ (audit V4 point #9) pour qu'un fichier à
+    # la direction technique. Il avait été AJOUTÉ (audit V4 point #9) pour qu'un fichier à
     # sinistres négatifs ne puisse plus obtenir VERT : à l'époque, personne
     # d'autre ne jugeait cette question. La couche qualité le fait désormais,
     # avec une liste disqualifiante arbitrée — et A1 mettait un vrai
@@ -1041,7 +1041,7 @@ class AgentA1Ingestion:
         #   écrit vingt lignes plus haut dans ce même fichier.
         #     Ce qui bascule est un STATUT SIGNÉ : ROUGE → VERT, 66,67 % de
         #     faux doublons → 0, score 76,19 → 100,0, sur un historique de
-        #     renouvellement. Arbitré par Selasse, pas subi.
+        #     renouvellement. Arbitré par la direction technique, pas subi.
         #   ⛔ ET LE CÂBLAGE N'EST FAIT QUE POUR UN DES DEUX APPELANTS.
         #   `actuaria_app.py:3545` ne transmet toujours pas le plan, et l'app
         #   est FERMÉE par décision : sur ce chemin-là, A1 continue de deviner.
@@ -1259,7 +1259,7 @@ class AgentA1Ingestion:
         """QUALITÉ DU FICHIER : lisibilité, complétude, identité. RIEN D'AUTRE.
 
         ⚠️⚠️ A1 A CESSÉ DE JUGER LES ABERRANTS ACTUARIELS LE 02/09/2026 —
-        arbitré par Selasse, étape ⑤-③ du chantier 1-B. Il les DÉTECTE et les
+        arbitré par la direction technique, étape ⑤-③ du chantier 1-B. Il les DÉTECTE et les
         PUBLIE toujours ; il ne rend plus de verdict dessus.
 
         Mesuré sur la seule donnée réelle du dépôt (12 654 contrats) :

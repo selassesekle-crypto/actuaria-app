@@ -79,7 +79,7 @@ _MODULES_DECIDEURS = tuple(
 #: une categorie, qui laisserait entrer le prochain sans un mot :
 #:
 #:   `actuaria_app.py` (5 sites : l. 1962, 1964, 3457, 3681, 3683) --
-#:   l'application est DEFINITIVEMENT FERMEE, decision actee par Selasse. Les
+#:   l'application est DEFINITIVEMENT FERMEE, decision actee par la direction technique. Les
 #:   cinq defauts sont REELS et comptes ; ils ne sont pas corriges ici.
 #:
 #:   `direction_sante_prevoyance/.../sp_reg1_solvabilite2/agent.py:691` --

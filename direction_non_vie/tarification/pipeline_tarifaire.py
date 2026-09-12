@@ -1070,7 +1070,7 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
     #   apporter la sélection ici retirerait `sinistres_3ans_anterieurs` en
     #   décennale (effet réel +0,40) et `statut_occupation` en MRH (+0,30),
     #   faute de puissance — en retenant `etage`, qui est du bruit.
-    #   *Arbitré par Selasse le 05/09/2026 : on unifie le code, pas la
+    #   *Arbitré par la direction technique le 05/09/2026 : on unifie le code, pas la
     #   méthode.* Aucun euro ne bouge : l'ajustement est le même, mot pour mot.
     glm_freq = ajuster_glm_frequence(
         pd.concat([Xc, y_freq.rename(col_freq)], axis=1),

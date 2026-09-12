@@ -1292,7 +1292,7 @@ FIGURES_ECARTEES: Dict[str, str] = {
     # ⚠️ CE QUI RESTE VRAI : le dépôt n'a toujours pas d'historique de
     # production, et cette figure compare TRAIN → TEST, pas M-12 → M. Elle
     # le dit désormais elle-même, en annotation.
-    # ⚠️⚠️ POURQUOI ELLE RESTE ÉCARTÉE : la décision EST prise (Selasse,
+    # ⚠️⚠️ POURQUOI ELLE RESTE ÉCARTÉE : la décision EST prise (la direction technique,
     # EXIGENCES_MIGRATION §M4) — hors du rapport signé destiné au client, la
     # figure sert à celui qui construit et vérifie le modèle. Le motif
     # ci-dessous énonce donc une DÉCISION, plus une attente — et écarter sur
@@ -1375,7 +1375,7 @@ FIGURES_ECARTEES: Dict[str, str] = {
     # chaîne des FIGURES, et faux si on le lisait « A5 ne participe pas » :
     # mesuré par exécution, les modèles d'A5 concourent au choix du modèle de
     # production et l'un d'eux l'a emporté sur la cible coût.
-    # ⚠️ DEUX FIGURES SONT SORTIES D'ICI, arbitrées par Selasse après mesure :
+    # ⚠️ DEUX FIGURES SONT SORTIES D'ICI, arbitrées par la direction technique après mesure :
     # `convergence_loss` (H1 DL) et `comparaison_dl_glm` (H3 DL) sont
     # désormais AU PLAN, chapitre 4. Elles n'y sont entrées qu'une fois leurs
     # constats fermés — `a5/C4` (courbe simulée), `a5/C5` (barres à zéro),

@@ -234,7 +234,7 @@ logger = logging.getLogger('actuaria.a4')
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ⚠️⚠️ CE MESSAGE EST LU PAR UN ACTUAIRE, PAS PAR UN DÉVELOPPEUR — exigence
-# explicite de Selasse, 30/08/2026, constat `a4/C11` (rang 1). Il doit dire
+# explicite de la direction technique, 30/08/2026, constat `a4/C11` (rang 1). Il doit dire
 # TROIS choses, et il est relu ici parce qu'une seule manquante le rend
 # trompeur :
 #   ① le modèle A BIEN ÉTÉ jugé sur tous ses autres critères ;
@@ -3514,7 +3514,7 @@ class AgentA4ML:
                               "(découpage temporel avec exposition suffisante) avant de "
                               "conclure sur le sur-apprentissage")
             elif gini_test <= 0:
-                # ⚠️ MÊME ARBITRAGE QU'EN A5-H2 (Selasse, 06/09) : le socle
+                # ⚠️ MÊME ARBITRAGE QU'EN A5-H2 (la direction technique, 06/09) : le socle
                 # refuserait de diviser et rendrait « non mesurable » ; ici ce
                 # serait une régression. Un Gini de test ≤ 0 dit que le modèle
                 # ne discrimine pas sur son jeu d'évaluation — c'est un signal

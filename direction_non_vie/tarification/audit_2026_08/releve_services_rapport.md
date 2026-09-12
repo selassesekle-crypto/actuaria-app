@@ -84,7 +84,7 @@ C'est le fait du lot ①, retrouvé par l'autre bout : `HYPOTHESES` énumère H1
 **C12 — La synthèse QUALITÉ n'atteint le rapport signé que par le prompt du LLM.**
 
 ⚠️⚠️ **CONSTAT NEUF, ouvert le 30/08/2026 en vérifiant autre chose** — la
-question de Selasse sur l'indépendance vis-à-vis de l'IA — **et fermé dans le
+question de la direction technique sur l'indépendance vis-à-vis de l'IA — **et fermé dans le
 même lot**. *C'est `services/C10` mot pour mot, sur une autre fonction.*
 
 `synthese_qualite_donnees` a **trois** points de sortie de production, mesurés
@@ -246,7 +246,7 @@ troisième, la signée**.
 > Relevé par AST : les **six** synthèses du rapport (`mapping`, `exclusions`,
 > `alertes_experience`, `modele_dl`, `qualite_donnees`,
 > `colonnes_plan_manquantes`) vivaient TOUTES dans ce seul prompt. Ce lot n'en
-> câble **qu'une**, celle que Selasse a autorisée. **Les cinq autres restent
+> câble **qu'une**, celle que la direction technique a autorisée. **Les cinq autres restent
 > invisibles hors narration** — dont `exclusions` (colonnes écartées pour
 > conformité) et `alertes_experience` (sinistralité passée conservée), qui
 > portent le même type d'obligation. Un test FIGE ce compte de 1 sur 6, pour
@@ -339,7 +339,7 @@ exportateurs rendent `b''` sur un `logger.error`, et le verdict n'en dit
 rien.**
 
 > ✅ **`services/C13`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
-> ouvert par Selasse après la question « est-ce qu'à ce stade tout va bien
+> ouvert par la direction technique après la question « est-ce qu'à ce stade tout va bien
 > avec certitude ? ».**
 >
 > **Le constat.** Les **neuf** exportateurs du module partagent une seule et

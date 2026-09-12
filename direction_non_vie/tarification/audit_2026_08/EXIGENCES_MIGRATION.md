@@ -1,6 +1,6 @@
 # EXIGENCES DE MIGRATION — ce que la nouvelle application doit respecter dès sa conception
 
-**Arbitré par Selasse Sekle le 25/08/2026.** Ce document n'ordonne aucun lot et
+**Arbitré par la direction technique le 25/08/2026.** Ce document n'ordonne aucun lot et
 ne décrit aucun correctif à appliquer à l'application actuelle.
 
 ⚠️⚠️ **CE DOCUMENT NE S'EXÉCUTE PAS, IL CONTRAINT.** La feuille de route
@@ -10,7 +10,7 @@ qui existe. Celui-ci fixe ce que le code qui n'existe pas encore devra tenir.
 audit poursuit.*
 
 ⚠️⚠️ **NE PAS TOUCHER À L'APPLICATION STREAMLIT ACTUELLE SUR CES SUJETS.**
-Arbitrage explicite de Selasse : elle disparaît à la migration, et y écrire
+Arbitrage explicite de la direction technique : elle disparaît à la migration, et y écrire
 même une phrase courte n'est pas utile. **Ma recommandation d'y afficher un
 avertissement a été écartée, et c'est la bonne décision** : investir dans une
 interface condamnée, c'est payer deux fois pour une exigence qui doit vivre
@@ -60,7 +60,7 @@ lu cette étiquette au lieu de mesurer qui écrit dedans.*
 
 ### ⚠️⚠️ M1-bis — L'ASSIETTE DE L'AVERTISSEMENT EST L'OBJET RÉSULTAT, PAS L'ÉCRAN
 
-**Arbitré par Selasse le 25/08/2026, retenu sans réserve** : *« un contrôleur
+**Arbitré par la direction technique le 25/08/2026, retenu sans réserve** : *« un contrôleur
 lit le document, pas l'écran »*.
 
 **Un message d'écran n'est pas une propriété du résultat.** La question que cet
@@ -154,7 +154,7 @@ Si ces ordres de grandeur se confirment, **le chemin critique est
 A1→A2→A3→A5, et A5 le domine seul.** Paralléliser A4 avec A5 économise au
 mieux la durée d'A4 — **environ 45 s sur 4 à 6 minutes**.
 
-> **CONTESTATION RETENUE PAR SELASSE LE 25/08/2026 :** ① est la piste la plus
+> **CONTESTATION RETENUE PAR LA DIRECTION TECHNIQUE LE 25/08/2026 :** ① est la piste la plus
 > sûre, mais probablement **la moins rentable des trois ici**, parce que le
 > temps n'est pas réparti — il est concentré dans A5.
 > ⚠️⚠️ **L'ORDRE DE PRÉFÉRENCE ①②③ SE RE-ARBITRE APRÈS LA MESURE, PAS AVANT —

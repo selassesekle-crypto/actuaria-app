@@ -378,7 +378,7 @@ def pipeline_agents(
         plan=plan)
 
     # ── 1-B : LA COUCHE QUALITÉ, LA MÊME QUE LE CHEMIN DÉCLARATIF ───────────
-    # ⚠️⚠️ ÉTAPE ⑤ DU CHANTIER 1-B, arbitrée par Selasse le 02/09/2026. Elle
+    # ⚠️⚠️ ÉTAPE ⑤ DU CHANTIER 1-B, arbitrée par la direction technique le 02/09/2026. Elle
     # FERME `qualite/C4` : `controler_qualite` n'avait qu'UN appelant de
     # production, et les deux chemins ont pu diverger toute une journée sur la
     # même grandeur. *Une porte unique rend la divergence IMPOSSIBLE au lieu
@@ -426,7 +426,7 @@ def pipeline_agents(
     # l'arbitrage se prenne sur des frequences reelles. L'arbitrage est pris,
     # et son outillage (`observer_qualite`, le canal `observation_qualite` a
     # travers A6 et les quatre surfaces) a ete SUPPRIME le jour meme, sur
-    # arbitrage de Selasse : *garder un instrument apres qu'il a rendu son
+    # arbitrage de la direction technique : *garder un instrument apres qu'il a rendu son
     # verdict n'est pas de la prudence, c'est de la dette.* `QNE-9` tient le
     # retrait complet. Le vrai rapport de la couche dit ce qui a ETE fait.
 

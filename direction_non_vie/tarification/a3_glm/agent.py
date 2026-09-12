@@ -643,7 +643,7 @@ class AgentA3GLM:
             statut_rag = plafonner_statut_si_ampute(statut_rag, _ampute)
 
             # ── ANTI-SÉLECTION → ROUGE, MÊME HORS PRODUCTION ──────────────────
-            # ⚠️⚠️ ARBITRAGE DE SELASSE, 03/09/2026, et il ferme un trou mesuré.
+            # ⚠️⚠️ ARBITRAGE DE LA DIRECTION TECHNIQUE, 03/09/2026, et il ferme un trou mesuré.
             # A6 force déjà ROUGE sur un Gini négatif — mais SEULEMENT pour le
             # modèle de PRODUCTION. Un GLM anti-sélectif qui ne gagne pas
             # l'arbitrage était journalisé par `_calculer_gini` et publié dans

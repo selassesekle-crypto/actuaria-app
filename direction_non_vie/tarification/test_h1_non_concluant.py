@@ -1,6 +1,6 @@
 """H1 PUBLIE SON INCERTITUDE ET REFUSE DE CONCLURE SUR DU BRUIT.
 
-Decision de Selasse du 07/09/2026, prise sur mesure. `H1` tranchait VERT /
+Decision de la direction technique du 07/09/2026, prise sur mesure. `H1` tranchait VERT /
 AMBRE / ROUGE sur `r = Gini(train)/Gini(test)` calcule sur UN decoupage. Sur
 360 tirages -- portefeuille STRICTEMENT inchange, seul l'ordre des lignes
 change -- ce statut bascule sur **37 %** des tirages, et la borne du vert

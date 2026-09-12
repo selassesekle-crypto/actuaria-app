@@ -353,7 +353,7 @@ class TestLeMessageNePeutPasSePERDRE(unittest.TestCase):
     """⚠️⚠️ LA GARANTIE EXIGEE POUR LE CAS (b), ET POURQUOI ELLE PREND CETTE
     FORME-LA.
 
-    Selasse a demande trois choses : un vrai consommateur qui publie le
+    La direction technique a demande trois choses : un vrai consommateur qui publie le
     message dans un document produit, une sentinelle qui lit les OCTETS de ce
     document, et un plant qui le fasse rougir.
 

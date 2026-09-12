@@ -174,7 +174,7 @@ en années, en mois ou en jours. Mesuré sur le même portefeuille exprimé en m
 
   une fois VALIDEE nominativement :
     ✔ 1000 ligne(s) CORRIGEE(S) : 1000x exposition_sup_1 (plafond a 1.0).
-    ✔ Poursuite malgre anomalie(s) >= 5% VALIDEE par « Selasse Sekle » le 24/08/2026.
+    ✔ Poursuite malgre anomalie(s) >= 5% VALIDEE par « Direction Technique » le 24/08/2026.
 
   exposition totale : 7 777 -> 1 000        (87 % perdue)
 ```
@@ -258,7 +258,7 @@ implémentations coexistent**, et A1 n'importe pas ce module.
 ### C — Imprécis (2)
 
 > ✅ **`qualite/C4`** · **FERMÉ le 02/09/2026 — chantier 1-B, arbitré et
-> conduit en CINQ étapes par Selasse.** *C'est le constat le plus ancien
+> conduit en CINQ étapes par la direction technique.** *C'est le constat le plus ancien
 > encore ouvert du module, et il a fallu cinq lots pour l'atteindre sans
 > déplacer un prix par surprise.*
 >
@@ -308,7 +308,7 @@ implémentations coexistent**, et A1 n'importe pas ce module.
 > l'arbitrage — est consommé.
 >
 > ⛔⛔ **CE LOT AVAIT LAISSÉ UNE MACHINERIE SANS APPELANT — ELLE A ÉTÉ RETIRÉE
-> LE JOUR MÊME, SUR ARBITRAGE DE SELASSE.** Relevé par AST : `observer_qualite`
+> LE JOUR MÊME, SUR ARBITRAGE DE LA DIRECTION TECHNIQUE.** Relevé par AST : `observer_qualite`
 > = **0 appelant de production**, et le canal `observation_qualite` traversait
 > A6 et les quatre surfaces sans que rien ne le remplisse. *C'était la forme de
 > `socle/C2`, commise par le lot même qui poursuit ce motif.* Voir le bloc de
@@ -372,7 +372,7 @@ un sauvetage, une subrogation la rendent négative — et c'est **normal**.
 ```
 
 ⚠️⚠️ **ET AUCUN INDICE NE PERMET DE TRANCHER AUTOMATIQUEMENT.** Arbitré par
-Selasse : *erreurs de saisie ET vrais recours coexistent, le second cas est
+la direction technique : *erreurs de saisie ET vrais recours coexistent, le second cas est
 rare, ni l'un ni l'autre n'est la règle par défaut.* Mesure des deux
 discriminants sur les 1 116 cas :
 
@@ -392,7 +392,7 @@ discriminants sur les 1 116 cas :
 année, vérifié**. Les paiements auxquels ces recours se rapportent peuvent être
 **hors de l'extrait**. Une seule LoB, un seul fichier : **je ne généralise pas.**
 
-> ✅ **`qualite/C8`** · **FERMÉ le 31/08/2026 — RANG 1, arbitré par Selasse.**
+> ✅ **`qualite/C8`** · **FERMÉ le 31/08/2026 — RANG 1, arbitré par la direction technique.**
 > *Preuve : `test_charge_nette_negative.py`, 15 contrôles, 4 violations
 > plantées.*
 >
@@ -450,7 +450,7 @@ année, vérifié**. Les paiements auxquels ces recours se rapportent peuvent ê
 | **R3** — doublon de ligne SANS identifiant : ambigu | 20 signalés, **1020 → 1020** — aucune ligne retirée |
 | **R3** — incohérences, **les deux sens** | coût sans sinistre **15** · sinistre sans coût **10** |
 | **R4** — le seuil est exactement `>= 5 %` | 49/1000 = 4,9 % → passe · **50/1000 = 5,0 % → bloque** · 51 → bloque |
-| **R4** — l'échappatoire nominative est tracée | 13 % → bloqué ; validée → `bloque=False`, **1000 → 870**, `validee_par='Selasse Sekle'`, date **24/08/2026** |
+| **R4** — l'échappatoire nominative est tracée | 13 % → bloqué ; validée → `bloque=False`, **1000 → 870**, `validee_par='Direction Technique'`, date **24/08/2026** |
 | `df` n'est **jamais muté en place** | `df.equals(avant)` = **True** après appel ; l'exposition d'entrée reste à 3,0, celle de sortie est à 1,0 |
 | **aucun nom de colonne codé en dur** | AST sur `controler_qualite` : **0 littéral** de colonne ; rôles lus = `cible_cout`, `cible_frequence`, `exposition`, + `getattr(plan,'identifiant_contrat')` |
 | `synthese_qualite_donnees` atteint les livrables | **3 appelants** : `rapport_equipe_tarif`, `rapport_modeles_tarif`, `tarif_excel` |
@@ -472,8 +472,8 @@ TOURNÉ comme quand elle a tourné SANS RIEN TROUVER : le livrable ne distingue
 pas << pas vérifié >> de << vérifié, rien à signaler >>.**
 
 > ✅ **`qualite/C9`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 01/09/2026 —
-> arbitré par Selasse.** Il ne vient d'aucune relecture : il vient de la
-> **vérification chiffrée** que Selasse a demandée sur son propre résumé du
+> arbitré par la direction technique.** Il ne vient d'aucune relecture : il vient de la
+> **vérification chiffrée** que la direction technique a demandée sur son propre résumé du
 > sujet.
 >
 > ```
@@ -526,7 +526,7 @@ pas << pas vérifié >> de << vérifié, rien à signaler >>.**
 > cellule sans effet sur le statut RAG. **2 000 lignes avant, 2 000 après.**
 >
 > Épinglé par `QNE-1` à `QNE-8`, dont **`QNE-3` sur le rapport SIGNÉ** (exigé
-> par Selasse : bloc présent et nommant l'absence de contrôle quand la couche
+> par la direction technique : bloc présent et nommant l'absence de contrôle quand la couche
 > n'a pas tourné, bloc ABSENT sur un portefeuille sain) et **`QNE-7`, le second
 > sens** — *un correctif qui ferait parler la couche dans les DEUX cas serait
 > aussi faux que le silence.*
@@ -536,7 +536,7 @@ déclare d'unité » pour justifier « aucun euro » : c'est faux depuis l'étap
 du même chantier, et rien ne le mesurait.**
 
 > ✅ **`qualite/C10`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 01/09/2026 —
-> étape ① du chantier 1-B, décidée par Selasse.** Je l'avais signalé moi-même
+> étape ① du chantier 1-B, décidée par la direction technique.** Je l'avais signalé moi-même
 > en vérifiant son résumé ; il a demandé de le refermer avant d'avancer.
 >
 > ```
@@ -606,7 +606,7 @@ du même chantier, et rien ne le mesurait.**
 100 % et BLOQUE le fichier entier.**
 
 > ✅ **`qualite/C11`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 01/09/2026 —
-> étape ② du chantier 1-B, décidée par Selasse.**
+> étape ② du chantier 1-B, décidée par la direction technique.**
 >
 > ```
 >   20 000 contrats, UNE SEULE ligne a 1,02 an  =  0,0050 %
@@ -661,7 +661,7 @@ geste qui existe sur le chemin déclaratif (`qualite_validee_par`) n'a pas de
 jumeau, et rien ne dit pourquoi.**
 
 > ✅ **`qualite/C12`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 01/09/2026 —
-> étape ③ du chantier 1-B, décidée par Selasse.**
+> étape ③ du chantier 1-B, décidée par la direction technique.**
 >
 > `pipeline_agents` portait déjà **deux** canaux de signature nominative
 > (`profil_valide_par`, `valide_par_actuaire_dl`) : la convention existait,
@@ -712,7 +712,7 @@ la décision de la brancher (1-B) se prendrait sans chiffre, et le troisième
 état — PARTIELLEMENT exécuté — se lit comme un contrôle complet.**
 
 > ✅ **`qualite/C13`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
-> étape ④ du chantier 1-B (1-B-observation), décidée par Selasse.**
+> étape ④ du chantier 1-B (1-B-observation), décidée par la direction technique.**
 >
 > *Une décision qui déplace un prix se prend sur des fréquences réelles, pas
 > sur une intuition.* La couche applique désormais ses règles **pour voir**, et
@@ -748,7 +748,7 @@ la décision de la brancher (1-B) se prendrait sans chiffre, et le troisième
 > ⚠️ **CE QUE LE TEXTE PUBLIE, ET POURQUOI** : par anomalie, le code, la
 > règle, le nombre de lignes, la proportion, **et si elle aurait déclenché
 > l'escalade**. *La liste des alertes qui doivent bloquer se décide sur des
-> fréquences réelles* — c'est la matière de l'arbitrage de Selasse.
+> fréquences réelles* — c'est la matière de l'arbitrage de la direction technique.
 >
 > ⚠️ **UN JETON, PAS UN NOM** : `controler_qualite` refuse un rapport complet
 > sans signature dès que l'escalade se déclenche. L'observation fournit un
@@ -770,7 +770,7 @@ la décision de la brancher (1-B) se prendrait sans chiffre, et le troisième
 > ═══════════════════════════════════════════════════════════════════════════
 >
 > ⚠️⚠️ **L'INSTRUMENT A ÉTÉ SUPPRIMÉ LE 02/09/2026, ET LE CONSTAT RESTE FERMÉ.**
-> Selasse a arbitré son retrait le jour même de sa naissance. *Son travail est
+> La direction technique a arbitré son retrait le jour même de sa naissance. *Son travail est
 > fait, son chiffre a servi à trancher, et garder un mécanisme sans usage réel
 > serait exactement la dette qu'on a traquée toute la session.*
 >
@@ -821,7 +821,7 @@ la décision de la brancher (1-B) se prendrait sans chiffre, et le troisième
 qu'elle publie sont écrits pour un développeur, pas pour celui qui signe.**
 
 > ✅ **`qualite/C14`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
-> étape ⑤-① du chantier 1-B, arbitrée par Selasse sur les chiffres de
+> étape ⑤-① du chantier 1-B, arbitrée par la direction technique sur les chiffres de
 > l'étape ④.**
 >
 > ```
@@ -893,7 +893,7 @@ qu'elle publie sont écrits pour un développeur, pas pour celui qui signe.**
 > régime laisse l'autre sans garde.* Refait sur les DEUX.
 >
 > Épinglé par `LD-1` à `LD-11`, dont `LD-7` — **le plant RGPD exigé par
-> Selasse** : l'anomalie est plantée à la position 777 avec la valeur
+> la direction technique** : l'anomalie est plantée à la position 777 avec la valeur
 > − 424 242, et aucun message ne les cite.
 
 **C15 — Une valeur ABSENTE sur une des trois grandeurs est remplacée
@@ -901,7 +901,7 @@ en SILENCE par la moyenne, et la valeur inventée entre au dénominateur du
 tarif sans qu'aucun livrable ne le dise.**
 
 > ✅ **`qualite/C15`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
-> étape ⑤-② du chantier 1-B, arbitrée par Selasse.**
+> étape ⑤-② du chantier 1-B, arbitrée par la direction technique.**
 >
 > ```
 >   30 expositions ABSENTES sur 1 000, AVANT l'arbitrage :
@@ -953,7 +953,7 @@ tarif sans qu'aucun livrable ne le dise.**
 > COMPTE (`VA-7`) ; l'ANNEXE ne quitte pas le poste de l'actuaire et porte les
 > positions (`VA-5`).
 >
-> ⚠️⚠️ **LE PLANT RGPD EXIGÉ PAR SELASSE** (`VA-6`) : le dataframe est indexé
+> ⚠️⚠️ **LE PLANT RGPD EXIGÉ PAR LA DIRECTION TECHNIQUE** (`VA-6`) : le dataframe est indexé
 > par des **numéros de police** et porte une colonne d'identifiants ; l'annexe
 > rend des **rangs**, et aucun de ces libellés n'y apparaît. Le sceau plante la
 > fuite : publier `df.index[pos]` au lieu du rang fait tomber le contrôle.
@@ -972,7 +972,7 @@ tarif sans qu'aucun livrable ne le dise.**
 > ⛔ **PORTÉE TENUE, ET C'EST `VA-9` QUI LA GARDE** : les trois grandeurs
 > seulement. Les **facteurs tarifaires** restent imputés comme avant — une
 > modalité inventée change aussi une relativité, mais le rayon de souffle
-> diffère et Selasse les a explicitement laissés hors de ce lot.
+> diffère et la direction technique les a explicitement laissés hors de ce lot.
 >
 > ⚠️ **IMPACT MESURÉ DU REFUS** : **0 %** de valeurs illisibles sur la seule
 > donnée réelle du dépôt (12 654 contrats), **0** parmi 35 artefacts A2
@@ -988,7 +988,7 @@ tarif sans qu'aucun livrable ne le dise.**
 QUESTION, et ils se contredisent dans les deux sens.**
 
 > ✅ **`qualite/C16`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
-> étape ⑤-③ du chantier 1-B, arbitrée par Selasse.**
+> étape ⑤-③ du chantier 1-B, arbitrée par la direction technique.**
 >
 > ```
 >   DONNEE REELLE, 12 654 contrats -- AVANT
@@ -1010,7 +1010,7 @@ QUESTION, et ils se contredisent dans les deux sens.**
 > > *La contradiction ne venait pas de deux mécanismes qui coexistent, mais
 > > d'un mécanisme qui répondait à la question de l'autre.*
 >
-> ⚠️⚠️ **NI RÉPARER NI SUPPRIMER — RENDRE À CHACUN SA QUESTION.** Selasse a
+> ⚠️⚠️ **NI RÉPARER NI SUPPRIMER — RENDRE À CHACUN SA QUESTION.** La direction technique a
 > écarté ma première recommandation (faire dériver le statut d'A1 de la même
 > liste) : *elle réparait la contradiction en pérennisant la dualité*, alors
 > que la décision antérieure était de FUSIONNER les deux chemins. A1 garde ce
@@ -1120,7 +1120,7 @@ fichiers et TROIS chaînes mortes : quatre affirmations chiffrées vivent
 hors de sa vue.**
 
 > ✅ **`qualite/C17`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
-> point ③ des quatre restants, arbitré par Selasse.**
+> point ③ des quatre restants, arbitré par la direction technique.**
 >
 > **Le constat.** `PM-4` (né de `qualite/C10`) interdit **trois phrases
 > nommément mortes**, dans **deux cibles** : `core/qualite_donnees.py` et les
@@ -1246,7 +1246,7 @@ portefeuille disparaît.**
 > l'exclusion **biaise** le tarif au lieu de seulement le rendre moins précis.
 > *Cette limite est réelle et n'est pas mesurable ici.*
 >
-> ⛔⛔ **QUESTION DE MÉTHODE ACTUARIELLE, RENDUE À SELASSE, NON TRANCHÉE** :
+> ⛔⛔ **QUESTION DE MÉTHODE ACTUARIELLE, RENDUE À LA DIRECTION TECHNIQUE, NON TRANCHÉE** :
 > **à partir de quelle perte un portefeuille cesse-t-il d'être tarifable ?**
 > L'arbitrage disait « exclure et le dire, ne pas arrêter » — il portait sur
 > un facteur, pas sur une perte cumulée de 40 ou 67 %. *Le système publie
@@ -1260,7 +1260,7 @@ portefeuille disparaît.**
 part exclue, mais rien ne la hiérarchise.**
 
 > ✅ **`qualite/C19`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02-03/09/2026 —
-> ouvert par Selasse : « plus question de laisser du travail en suspens ».**
+> ouvert par la direction technique : « plus question de laisser du travail en suspens ».**
 >
 > **Le constat.** `qualite/C18` a fait publier la part du portefeuille exclue.
 > Mais le badge des deux Excel se déclenche sur le mot « EXCLUE », **jamais

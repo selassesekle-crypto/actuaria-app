@@ -149,7 +149,7 @@ tri.*
 
 | lot | constats | ce que ça ferme |
 |---|---|---|
-| **1.1 Les branches de l'app + les fuites d'A5** | ✅ `a5/C6` `a5/C7` **FERMÉS** · ✅ `app/prime_ml` `app/prime_dl` **ARBITRÉS — REPORTÉS À LA MIGRATION** | A5 : trois jeux **68/12/20**, jeu de validation **exigé** (`raise`, aucun repli) ; `seed` déclaré et **inscrit au rapport**. **⚠️ L'optimisme mesuré : TabNet −13,2 %** (0,2269 → 0,1970) ; l'irreproductibilité valait **11 % d'étendue** sur le Gini **qui sert à A6 pour arbitrer**. POS-A5d + POS-A5e (6 contrôles, 2 violations plantées). **⚠️⚠️ LES BRANCHES DE L'APP NE SERONT PAS CORRIGÉES : arbitrage de Selasse du 25/08 — l'app Streamlit disparaît, on n'y touche pas, même pour une phrase.** L'exigence est écrite pour la suivante : [`EXIGENCES_MIGRATION.md`](EXIGENCES_MIGRATION.md) — **deux modes, et l'absence de comparaison jamais silencieuse** |
+| **1.1 Les branches de l'app + les fuites d'A5** | ✅ `a5/C6` `a5/C7` **FERMÉS** · ✅ `app/prime_ml` `app/prime_dl` **ARBITRÉS — REPORTÉS À LA MIGRATION** | A5 : trois jeux **68/12/20**, jeu de validation **exigé** (`raise`, aucun repli) ; `seed` déclaré et **inscrit au rapport**. **⚠️ L'optimisme mesuré : TabNet −13,2 %** (0,2269 → 0,1970) ; l'irreproductibilité valait **11 % d'étendue** sur le Gini **qui sert à A6 pour arbitrer**. POS-A5d + POS-A5e (6 contrôles, 2 violations plantées). **⚠️⚠️ LES BRANCHES DE L'APP NE SERONT PAS CORRIGÉES : arbitrage de la direction technique du 25/08 — l'app Streamlit disparaît, on n'y touche pas, même pour une phrase.** L'exigence est écrite pour la suivante : [`EXIGENCES_MIGRATION.md`](EXIGENCES_MIGRATION.md) — **deux modes, et l'absence de comparaison jamais silencieuse** |
 | **1.2 Le plan ne laisse plus déclarer ce qu'il interdit** | ✅ **FERMÉS** `plan/C1` `plan/C2` `plan/C3` — **et `plan/C9` en prime** | la garde B9 contournée par les **interactions** → **prime non proportionnelle à l'exposition (1,8339 au lieu de 2,0000)** · la **cible** déclarable en facteur · un `type` mal orthographié **détruit un facteur en silence**, `ampute=False`. **Regroupement franc** : même geste — valider l'**appartenance**, pas la combinaison. ✅ **Fermé au lot 1.2** : contrôle sur **trois surfaces** (nom source · opérandes d'interaction · colonnes produites), valeurs admises **dérivées des `Literal`** et jamais recopiées, et un **filet** — *un facteur qui ne produit aucune colonne est refusé*. ⚠️⚠️ **LA RACINE ÉTAIT DANS LA SPEC, PAS DANS LE CODE** : `plan_execution_6_actions.md` l.294 demandait le contrôle **sur `colonnes_produites()`** — le code le faisait exactement. **11 contrôles positifs**, 20/20 plans intacts |
 | **1.3 Les exclusions qui détruisent un facteur légitime** | ✅ **FERMÉS** `conformite/C3` `C5` · ✅ **`C2` ET `C6` FERMÉS le 29/08** — code déjà correct, **jamais épinglé** (voir l'encadré) | la variable de **TAILLE** écartée comme « la cible déguisée » · les **6 variables de B5** toujours détruites · **6 modalités légitimes** tuées par les mots métriques. *Un facteur détruit ampute le tarif — B5 l'a chiffré à −17,4 % de Gini*. ✅ **Fermé au lot 1.3** : le test des mots métriques passe de la **sous-chaîne au MOT ENTIER** (`imprimerie` ⊅ `prime`) → **3 modalités récupérées**, et **B6 reste bloqué** (le second sens, vérifié). ⚠️⚠️ **RECADRAGE MESURÉ : sur le chemin déclaratif — celui des 6 appelants de production — RIEN n'est détruit** (`exclusions = {}`) ; C3 et C5 ne vivent que sur le chemin rétrocompat. Le reste est corrigé **par le motif** (leçon B7) : plus de « aucune action » quand une action existe, et plus d'instruction impossible à suivre. **9 contrôles positifs** |
 
@@ -208,7 +208,7 @@ la **validité**. **11 latents nommés, en attente.**
 > `a5/C4` `pipeline/C1`), et cette méthode **sur-compte** (un simple renvoi
 > suffit) **et sous-compte** (un latent décrit sans le mot).
 >
-> ⚠️ **AU MOINS UN DES ONZE EST FERMÉ DEPUIS** : `a5/C4`, rouvert par Selasse
+> ⚠️ **AU MOINS UN DES ONZE EST FERMÉ DEPUIS** : `a5/C4`, rouvert par la direction technique
 > et clos le 29/08 (`462841a`). Le chiffre est donc **périmé d'au moins un**,
 > mais *je ne publie pas « 10 » à la place : je ne peux pas le prouver.*
 > **Ne pas publier un chiffre incertain à la place d'un autre.**
@@ -325,12 +325,12 @@ des chaînes — *un marqueur posé sur un nombre est détruit par l'arrondi*, e
 
 ✅ **LOT 4.4 CLOS le 29/08/2026** (`9c0a278`) — **`charts/C4`**, et le défaut n'était **pas l'esthétique** : les listes décoratives d'A4 et A6 contenaient `couleur_rag('VERT'/'AMBRE'/'ROUGE')` — **les couleurs de STATUT** — consommées en cycle POSITIONNEL. *Le modèle n° 5 était peint en rouge RAG parce qu'il était cinquième.* Refus motivé de migrer vers la charte : la prémisse du constat est périmée (les quatre partagent UNE palette) et l'or des agents est à **1,09** de contraste de celui de la charte. ⚠️ **Deux de mes accusations retirées par la mesure** — les trois navies sont des FONDS, et 0 paire sur 15 fusionne en deuteranopie.
 
-✅ **LOT 4.5 CLOS le 29/08/2026** (`462841a`) — **`a5/C4`**, l'un des latents, **ROUVERT PAR SELASSE**. La courbe de convergence trace les **vraies pertes** au lieu d'une exponentielle bruitée sur 50 époques codées en dur. ⚠️ **Le remède évident était le mauvais** : semer le bruit aurait rendu une courbe FABRIQUÉE reproductible, donc crédible.
+✅ **LOT 4.5 CLOS le 29/08/2026** (`462841a`) — **`a5/C4`**, l'un des latents, **ROUVERT PAR LA DIRECTION TECHNIQUE**. La courbe de convergence trace les **vraies pertes** au lieu d'une exponentielle bruitée sur 50 époques codées en dur. ⚠️ **Le remède évident était le mauvais** : semer le bruit aurait rendu une courbe FABRIQUÉE reproductible, donc crédible.
 
 ## ✅ LE RANG 4 EST CLOS — LES TROIS GELÉS FERMÉS **PAR SUPPRESSION** (4.8)
 
 ✅ **LOT 4.8 CLOS le 29/08/2026** — `a3/C5`, `a4/C5`, `a6/C3`. Arbitrage de
-Selasse : **plutôt que de les garder gelés indéfiniment, supprimer le code qui
+la direction technique : **plutôt que de les garder gelés indéfiniment, supprimer le code qui
 produisait ces figures.** Ce n'étaient pas des doublons inoffensifs :
 
 | constat | figure | ce qu'elle publiait |
@@ -364,7 +364,7 @@ motif écrit dans `FIGURES_ECARTEES`, et le motif a été vérifié PAR EXÉCUTI
 publiée, lit `score_global` — **la formule qui décide**, sans la recalculer.
 
 ⚠️⚠️ **ET LE GEL SE LÈVE — IL S'EST DÉJÀ LEVÉ UNE FOIS.** `a5/C4` était le
-quatrième latent ; Selasse l'a rouvert le 29/08 et il est CLOS. *Un latent
+quatrième latent ; la direction technique l'a rouvert le 29/08 et il est CLOS. *Un latent
 n'est pas une catégorie définitive, c'est une décision de ne pas ouvrir
 aujourd'hui.*
 
@@ -396,7 +396,7 @@ différents se lisent pareil*) · ⚠️ **`C10` l'ambre du RAG EST l'or des axe
 
 ## RANG 6 — LE CÂBLAGE · ❄️ **GELÉ PAR ARBITRAGE le 29/08/2026 — PAS OUBLIÉ**
 
-> ### ❄️ **ARBITRÉ PAR SELASSE : le branchement de l'orchestrateur attend la VRAIE migration d'interface, pas un point d'entrée temporaire.**
+> ### ❄️ **ARBITRÉ PAR LA DIRECTION TECHNIQUE : le branchement de l'orchestrateur attend la VRAIE migration d'interface, pas un point d'entrée temporaire.**
 >
 > **LA RAISON, TELLE QU'ELLE A ÉTÉ DONNÉE** : finir toute la direction Non-Vie,
 > puis **attaquer l'interface prochainement, avant les autres directions**.
@@ -408,7 +408,7 @@ différents se lisent pareil*) · ⚠️ **`C10` l'ambre du RAG EST l'or des axe
 >
 > ### ⚠️⚠️ CE QUE CE GEL COUVRE, ET CE QU'IL N'A JAMAIS COUVERT — clarifié le 30/08/2026
 >
-> **Selasse a demandé pourquoi la FUSION des deux orchestrateurs attendrait la
+> **La direction technique a demandé pourquoi la FUSION des deux orchestrateurs attendrait la
 > migration. La mesure répond : elle ne l'attend pas, et elle ne l'a jamais
 > attendue.**
 >
@@ -446,7 +446,7 @@ différents se lisent pareil*) · ⚠️ **`C10` l'ambre du RAG EST l'or des axe
 > sur trois cas d'exposition, et fusionner avant de trancher choisirait par
 > accident laquelle des deux doctrines survit.*
 >
-> **Ordre arbitré par Selasse le 30/08** : ① étape 1 (doctrine) → ② **la
+> **Ordre arbitré par la direction technique le 30/08** : ① étape 1 (doctrine) → ② **la
 > fusion** → ③ étapes 2 à 5 de `unite_exposition` → ④ le câblage, **qui reste
 > gelé**. *L'étape 3 exige de toucher les deux chemins simultanément ; sur un
 > chemin unique, le jumeau devient impossible au lieu d'être seulement évité.*
@@ -870,7 +870,7 @@ serait une capacité affichée et absente.*
 ⚠️ **Les 20 déclarent l'échéance — il n'y a AUCUN plan sans**, contrairement à
 ce que mon rapport laissait entendre en évoquant « le seul plan restant ».
 
-**Plan validé par Selasse le 30/08**, dans l'ordre mesuré : chaque état
+**Plan validé par la direction technique le 30/08**, dans l'ordre mesuré : chaque état
 intermédiaire est **strictement meilleur** que le précédent.
 
 | # | étape | état |
@@ -963,7 +963,7 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 | **`a6/C1`** | ✅ **FERMÉ — corrigé et épinglé de longue date, nommé ce jour.** `ae` vaut `somme_obs / somme_att` où l'attendu est `pred x exposition` (l.1549-1555), et l'unité est **mesurée, pas supposée** (`Σy/Σ(pred×expo) = 1,0000` contre `Σy/Σpred = 0,5533`). Le chemin sans colonne temporelle rend `ae_ratio = None` et publie le rapport de stationnarité **sous son propre nom**. ⚠️ **Violation plantée** (`ae = m_te / m_tr`) : **2 contrôles tombent** | ✅ **FERMÉ** |
 | **`a6/C2`** | ✅ **FERMÉ — corrigé et épinglé de longue date, nommé ce jour.** La prédiction de la fenêtre est **conservée** (`preds_par_annee`, l.1584) ; chaque segment se compare à ce que **le modèle prédit POUR LUI** (l.1617-1621). Les quintiles sont découpés sur le risque **prédit**, plus sur la cible observée. ⚠️ **Violation plantée** (attendu = moyenne du train) : **1 contrôle tombe** | ✅ **FERMÉ** |
 | **`a6/C4`** | ✅ **FERMÉ — corrigé et épinglé de longue date, nommé ce jour.** Barres `gini_test` (l.3234), radar sur `score_stabilite` / `score_rmse` (l.3299-3301). ⚠️ **Deux violations plantées séparément** — `gini_test`→`gini`, puis `score_*`→`stabilite`/`rmse_norm` : **un contrôle tombe à chaque fois** | ✅ **FERMÉ** |
-| **`a6/C9`** | ✅ **FERMÉ le 30/08 — arbitrage de Selasse : LEVER, pas retomber.** Les 3 entrées mortes étaient exactes ; **la moitié qui décide** ne l'était pas : `xgboost_tweedie`, calibré à **chaque** run (59 occ. dans une gate réelle), classé, et **absent de la table**. Trois défauts nus `0.5`/`0.6`/`0.7` remplacés par **une porte unique sans défaut**, `interpretabilite_de`. ⚠️ **Aucun euro déplacé, et c'est un contrôle** : `0.60` reproduit exactement l'ancien défaut d'A4. **2 violations plantées** (4 contrôles tombent, puis 1) | ✅ **FERMÉ** |
+| **`a6/C9`** | ✅ **FERMÉ le 30/08 — arbitrage de la direction technique : LEVER, pas retomber.** Les 3 entrées mortes étaient exactes ; **la moitié qui décide** ne l'était pas : `xgboost_tweedie`, calibré à **chaque** run (59 occ. dans une gate réelle), classé, et **absent de la table**. Trois défauts nus `0.5`/`0.6`/`0.7` remplacés par **une porte unique sans défaut**, `interpretabilite_de`. ⚠️ **Aucun euro déplacé, et c'est un contrôle** : `0.60` reproduit exactement l'ancien défaut d'A4. **2 violations plantées** (4 contrôles tombent, puis 1) | ✅ **FERMÉ** |
 | **`a6/C7`** | ⛔ **VRAI, borné.** `top_modeles` est reçu (l.1848) et **jamais lu** : 0 usage dans les 47 lignes du corps, mesuré par AST. La docstring annonce « les 3 meilleurs modèles ». ⚠️ **Aucun livrable n'est touché** : `courbes` n'a **aucun consommateur de production** hors A6 (AST, chemins réels), et `chart_lorenz_gini` reçoit **les deux** Gini avec le commentaire qui dit lequel est le plafond | **7** |
 | **`a6/C10`** | ⛔ **VRAI, et l'écart a DOUBLÉ depuis le relevé** : **7** annoncés, **30** réels (24 au relevé). ⚠️ **Ce n'est pas un défaut d'A6 — c'est un gabarit** : la ligne `N tests ·` existe dans **7** fichiers du dépôt, **6 sont faux**, et les 6 sont les six agents de tarification, **tous à « 7 »**. Le seul juste annonce « 1 test » et en a 1 | **7** |
 
@@ -1032,7 +1032,7 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 
 | constat | mesuré au site le 30/08 | rang |
 |---|---|---|
-| **`a4/C11`** | ✅ **FERMÉ le 30/08 — RANG 1 acté par Selasse, corrigé et scellé le jour même** (`None` + AMBRE, test asymétrique, 14 contrôles, 4 plants). **LE RELEVÉ SE TROMPAIT DEUX FOIS — et le vrai défaut était PLUS GRAVE.** ① *Pas 9 sites mais **5** (AST, dédoublonné)* : **4 lisent `result_a3['metriques']['poisson']['gini']`, où `gini` EST la bonne clé** — A3 la pose bien (l.1073, 1345, 1575). **Homonyme** : la même clé nomme deux objets différents. ② *Le consommateur n'est pas `_optimisation_tarifaire`* mais **`_monitoring_derive`** (AST : `gini_reference_a3` n'a qu'**un** usage, l.995). ⚠️⚠️ **MAIS CE QUI EST DESSOUS EST UN RANG 1** — voir l'encadré | ✅ **FERMÉ** |
+| **`a4/C11`** | ✅ **FERMÉ le 30/08 — RANG 1 acté par la direction technique, corrigé et scellé le jour même** (`None` + AMBRE, test asymétrique, 14 contrôles, 4 plants). **LE RELEVÉ SE TROMPAIT DEUX FOIS — et le vrai défaut était PLUS GRAVE.** ① *Pas 9 sites mais **5** (AST, dédoublonné)* : **4 lisent `result_a3['metriques']['poisson']['gini']`, où `gini` EST la bonne clé** — A3 la pose bien (l.1073, 1345, 1575). **Homonyme** : la même clé nomme deux objets différents. ② *Le consommateur n'est pas `_optimisation_tarifaire`* mais **`_monitoring_derive`** (AST : `gini_reference_a3` n'a qu'**un** usage, l.995). ⚠️⚠️ **MAIS CE QUI EST DESSOUS EST UN RANG 1** — voir l'encadré | ✅ **FERMÉ** |
 | **`a4/C7`** | ⛔ **VRAI, ET PLUS LARGE.** **10 sites** du module annoncent « 8 » pour **6** modèles calibrés (liste `modeles_a_calibrer` dérivée par AST). L'en-tête nomme **RandomForest, GAM, RégQuantile** comme calibrés : les deux premiers ne sont dans aucune boucle, et **`GAM` n'existe NULLE PART comme code**. ⚠️⚠️ **Et le fantôme a QUITTÉ le module** : `deploy_actuaria.py:95` le publie dans une `description`, écrite (`json.dump`) **dans l'en-tête markdown d'un notebook généré**. ⚠️ *Borne : ce chemin n'atteint PAS le livrable signé, et je n'ai pas vérifié que ce script est encore lancé* | **5** |
 | **`a4/C3`** | ✅ **CORRIGÉ, ÉPINGLÉ, JAMAIS REPORTÉ — le QUATRIÈME ÉTAT, et c'est le JUMEAU d'`a6/C4`.** La figure G1 lit `gini_test`/`gini_train` (l.2876-2877) avec le commentaire qui cite la mesure. `test_le_graphique_d_overfitting_porte_les_Gini_REELS` la tient. ⚠️ **Sceau** : `gini_test`→`gini` replanté, **le contrôle tombe**. **Aucun test ne nomme `a4/C3`** | **4e état** |
 | **`a4/C13`** | ⛔ **VRAI, et l'écart a grandi** : **7** annoncés, **18** réels (11 au relevé). Même **gabarit** qu'`a6/C10` — 6 des 7 fichiers qui portent la ligne `N tests ·` sont faux, et ce sont les six agents de tarification | **7** |
@@ -1152,7 +1152,7 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 
 ## ⛔⛔ CHANTIER `unite_exposition` — CONCEPTION, ARBITRÉ LE 30/08/2026
 
-> **Selasse tranche : OUI, le plan doit déclarer l'unité de l'exposition.**
+> **la direction technique tranche : OUI, le plan doit déclarer l'unité de l'exposition.**
 > Chantier complet, pas une correction rapide. **Aucun code sur cette partie
 > avant validation du plan ci-dessous.**
 
@@ -1317,7 +1317,7 @@ index, aucun identifiant. **La conversion n'ajoute aucun champ client.**
 > **classes** et réécrivait le **nombre**. *Le code contredisait son propre
 > texte — le même défaut qu'à l'étape 1c.*
 >
-> **Arbitré par Selasse le 31/08 : 1d d'abord, sans euro, puis l'étape 2
+> **Arbitré par la direction technique le 31/08 : 1d d'abord, sans euro, puis l'étape 2
 > réduite à sa vraie portée.**
 >
 > ⚠️ **Borne du contrôle `BEX-5`, déclarée** : A2 fait `from … import
@@ -1728,7 +1728,7 @@ Et par lot, le livrable est invariable : **① propreté · ② diff indexé vé
 
 > ### **Un garde-fou qui exclut la seule chose qui compte n'en est pas un.**
 
-**Arbitré par Selasse le 26/08/2026, à porter à chaque lot.** Un contrôle peut
+**Arbitré par la direction technique le 26/08/2026, à porter à chaque lot.** Un contrôle peut
 être présent, correct, motivé et testé — et ne rien surveiller, parce que son
 **assiette** exclut le cas qui survient. Trois instances mesurées dans ce
 module, toutes trouvées en cherchant l'assiette et non le contrôle :

@@ -2659,7 +2659,7 @@ def synthese_alertes_experience(alertes: Optional[dict]) -> Optional[str]:
 # =============================================================================
 #
 # ⚠️⚠️ DEUX SITUATIONS QUI N'ONT RIEN À VOIR, ET QU'IL NE FAUT SURTOUT PAS
-# TRAITER PAREIL. C'est l'arbitrage de Selasse du 03/09/2026, et il prolonge
+# TRAITER PAREIL. C'est l'arbitrage de la direction technique du 03/09/2026, et il prolonge
 # le constat `a3/C6` :
 #
 #   Gini MESURÉ et NÉGATIF  → le modèle discrimine À L'ENVERS. Ce n'est pas
@@ -2920,7 +2920,7 @@ EXPO_DE_L_APPELANT = 'appelant'
 EXPO_SUPPOSEE = 'supposee'
 
 #: La durée supposée quand AUCUNE source ne la donne : un an.
-#: ⚠️ Arbitrée par Selasse le 05/09/2026 — « valeur par défaut d'un an,
+#: ⚠️ Arbitrée par la direction technique le 05/09/2026 — « valeur par défaut d'un an,
 #: toujours déclarée explicitement dans le résultat, jamais en silence ».
 EXPO_ANNUELLE = 1.0
 

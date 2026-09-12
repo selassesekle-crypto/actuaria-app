@@ -1281,7 +1281,7 @@ class AgentA2Preprocessing:
             return df, stats
 
         # ── LE SYSTÈME N'INVENTE JAMAIS SUR LES TROIS GRANDEURS ─────────────
-        # ⚠️⚠️ ÉTAPE ⑤-② DU CHANTIER 1-B, arbitrée par Selasse le 02/09/2026.
+        # ⚠️⚠️ ÉTAPE ⑤-② DU CHANTIER 1-B, arbitrée par la direction technique le 02/09/2026.
         # Mesuré avant l'arbitrage, sur 30 expositions absentes parmi 1 000 :
         # l'exposition totale passait de **970 à 1 000** — trente années de
         # couverture INVENTÉES au dénominateur du tarif — et le rapport signé
@@ -1295,7 +1295,7 @@ class AgentA2Preprocessing:
         # ⚠️ PORTÉE : les trois grandeurs seulement. Les FACTEURS ont leur
         # propre porte, plus bas — ARRÊT ici, EXCLUSION là-bas, et cette
         # asymétrie est arbitrée, pas subie. (Ce commentaire disait « les
-        # FACTEURS restent imputés comme avant, Selasse les a laissés hors de
+        # FACTEURS restent imputés comme avant, la direction technique les a laissés hors de
         # ce lot » : vrai jusqu'au 02/09/2026, faux depuis. *Le texte qui
         # accompagne un comportement se relit quand il change.*)
         _n0 = len(df)
@@ -1348,7 +1348,7 @@ class AgentA2Preprocessing:
 
         # ══════════════════════════════════════════════════════════════════
         # ⚠️⚠️ LES FACTEURS : LA LIGNE EST EXCLUE, ET LE SYSTEME LE DIT.
-        # Arbitre par Selasse le 02/09/2026, apres la mesure de l'ecart entre
+        # Arbitre par la direction technique le 02/09/2026, apres la mesure de l'ecart entre
         # les deux regimes : sur les TROIS grandeurs un trou non declare
         # ARRETE le run ; sur les ~160 facteurs des 20 plans, il etait comble
         # en SILENCE par une valeur derivee du NOM DE LA COLONNE.
@@ -1363,7 +1363,7 @@ class AgentA2Preprocessing:
         # manque -- et l'exclusion est PUBLIEE aux quatre surfaces.
         #
         # ⚠️ QUAND LE PLAN DECLARE, LE PLAN GAGNE. La declaration est GLOBALE
-        # (decision (a) de Selasse) : elle gouverne les grandeurs ET les
+        # (decision (a) de la direction technique) : elle gouverne les grandeurs ET les
         # facteurs. *Il a declare, on obeit* -- c'est deja la doctrine des
         # trois grandeurs, et deux doctrines pour un meme mot seraient pires
         # que pas de doctrine du tout.
@@ -1523,7 +1523,7 @@ class AgentA2Preprocessing:
                 valeur    = _CALCUL_IMPUTATION[strategie](df[col])
 
                 # ⚠️⚠️ LA MODALITE INVENTEE 'INCONNU' A ETE SUPPRIMEE LE
-                # 02/09/2026, SUR ARBITRAGE DE SELASSE. Le code disait :
+                # 02/09/2026, SUR ARBITRAGE DE LA DIRECTION TECHNIQUE. Le code disait :
                 # << une categorielle sans mode calculable recoit une modalite
                 # explicite plutot que de rester vide >>. C'est-a-dire que le
                 # systeme FABRIQUAIT une modalite qu'aucun contrat ne porte, et
@@ -1695,7 +1695,7 @@ class AgentA2Preprocessing:
                 "Vérifiez vos données — l'exposition est indispensable "
                 "pour le GLM Poisson."
             )
-            # ⚠️⚠️ ÉTAPE 1c — ON N'INVENTE PLUS. Arbitré par Selasse le
+            # ⚠️⚠️ ÉTAPE 1c — ON N'INVENTE PLUS. Arbitré par la direction technique le
             # 30/08/2026 : *lire le plan plutôt qu'inventer 1.0.* Créer une
             # exposition pleine pour tout le monde SOUS-ESTIME le risque des
             # contrats partiels — exactement le biais que la docstring de cette
@@ -1739,7 +1739,7 @@ class AgentA2Preprocessing:
         nb_negatifs = int(_masque_neg.sum())
         if nb_negatifs > 0:
             # ⚠️⚠️ ÉTAPE 1b — EXCLURE, PLUS REMPLACER PAR LA MÉDIANE. Arbitré
-            # par Selasse le 30/08/2026, et ce n'est pas une doctrine neuve :
+            # par la direction technique le 30/08/2026, et ce n'est pas une doctrine neuve :
             # c'est celle que la couche qualité applique depuis toujours sur la
             # même grandeur — « IMPOSSIBLE MATHÉMATIQUEMENT (… exposition ≤ 0)
             # → règle 1, exclure ». *Les deux chemins tarifaient différemment

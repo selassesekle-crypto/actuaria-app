@@ -216,7 +216,7 @@ obtient une gamma**. Un actuaire qui déclare `echeances` obtient le
 comportement de doublon que le commentaire l.214-218 décrit comme refusant le
 fichier à 67 %.
 
-> ✅ **`plan/C5`** · **FERMÉ le 30/08/2026 — RANG 1 acté par Selasse.**
+> ✅ **`plan/C5`** · **FERMÉ le 30/08/2026 — RANG 1 acté par la direction technique.**
 > *Preuve : `test_plan_cles_inconnues.py`, 8 contrôles et 52 sous-cas,
 > 3 violations plantées.*
 >

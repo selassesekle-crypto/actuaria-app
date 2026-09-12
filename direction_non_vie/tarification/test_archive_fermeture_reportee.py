@@ -62,7 +62,7 @@ _ENTETE = re.compile(r'^\*\*(C\d+)\*\*\s*—|^\*\*(C\d+)\s*—')
 _HORS_ASSIETTE: dict[tuple[str, str], str] = {
     ('charts/C8', 'test_charts_c8_mesure.py'):
         "Le fichier mesure la DESCRIPTION du constat, il ne corrige pas le "
-        "defaut : celui-ci vit dans `actuaria_app.py`, et Selasse a arbitre "
+        "defaut : celui-ci vit dans `actuaria_app.py`, et la direction technique a arbitre "
         "qu'on ne touche pas a l'app Streamlit. Ses cinq controles derivent "
         "des fichiers eux-memes le nombre de sites litteraux et la cle "
         "`responsive` perdue, puis verifient que le releve les publie -- le "
@@ -81,7 +81,7 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
     ('a2/C9', 'test_a2_neuf_constats.py'):
         "Cite dans la section << CE QUI RESTE OUVERT >> de l'en-tete, avec sa "
         "raison, jamais epingle. `a2/C9` -- une moyenne rangee sous la cle "
-        "`medianes` -- est RANG 5, arbitre par Selasse : renommer la cle change "
+        "`medianes` -- est RANG 5, arbitre par la direction technique : renommer la cle change "
         "le format d'un JSON persiste. *Un lot qui ferme neuf "
         "constats doit dire lesquels il ne ferme pas, et pourquoi.*",
     ('a2/C16', 'test_a2_neuf_constats.py'):
@@ -139,7 +139,7 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "Cite par la passe de tri, avec sa raison, "
         "et un controle qui en garde le SECOND SENS -- jamais epingle. "
         "`charts/C8` vit dans `actuaria_app.py`, et **l'app Streamlit est hors "
-        "perimetre par arbitrage de Selasse du 25/08** : elle disparait, on n'y "
+        "perimetre par arbitrage de la direction technique du 25/08** : elle disparait, on n'y "
         "touche pas, meme pour une phrase. ⚠️ Le constat est par ailleurs "
         "REFUTE sur un point : il disait << Meme valeur aujourd'hui >>, or "
         "`CONFIG_PLOTLY` porte `responsive: True` que le litteral de l'app n'a "
@@ -182,7 +182,7 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
     # exactement ce que ce fichier existe pour empecher.*
     # ⚠️ L'EXEMPTION `('socle/C1', 'test_socle_quatre_constats.py')` A ETE
     # RETIREE LE 01/09/2026. Elle disait << il attend son arbitrage >> --
-    # devenu FAUX le jour ou Selasse a tranche et ou le constat a ete ferme
+    # devenu FAUX le jour ou la direction technique a tranche et ou le constat a ete ferme
     # par `test_socle_c1_assiette_ecretement`. La mention subsiste chez le
     # voisin, mais elle n'a plus besoin d'etre exemptee : la cle porte son
     # bloc de fermeture. *Seconde fois de la session, meme mecanisme.*

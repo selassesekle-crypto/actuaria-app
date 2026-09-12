@@ -57,7 +57,7 @@ muette la ferait passer pour une colonne vivante.*
 ═══ CE QUI RESTE OUVERT, ET POURQUOI ═══
 
 ⛔ **`a2/C9`** -- une moyenne rangee sous la cle `medianes`. **Rang 5, arbitre**
-par Selasse : renommer la cle change le format d'un JSON persiste.
+par la direction technique : renommer la cle change le format d'un JSON persiste.
 
 ⛔ **`a2/C16`** -- `__init__` cree `/tmp/actuaria`. **Il a un JUMEAU OUVERT chez
 le voisin : `a1/C7`, meme mecanisme.** Le corriger d'un seul cote recreerait

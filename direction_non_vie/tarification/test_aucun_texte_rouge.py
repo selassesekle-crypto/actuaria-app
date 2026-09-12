@@ -2,7 +2,7 @@
 
 CE QUE CE FICHIER PROUVE, ET POURQUOI CHAQUE TEST EXISTE
 ────────────────────────────────────────────────────────
-Arbitre par Selasse le 27/08/2026, sans exception ni cas par cas.
+Arbitre par la direction technique le 27/08/2026, sans exception ni cas par cas.
 
 LA MESURE QUI A PRECEDE LA DECISION
   · 38 sites utilisaient une couleur RAG comme couleur de TEXTE ;

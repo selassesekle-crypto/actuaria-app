@@ -283,7 +283,7 @@ class TestOrientationUnique(unittest.TestCase):
               f'{len(commun)}')
 
     def test_OS7_un_Gini_de_TEST_negatif_reste_ROUGE(self):
-        """⚠️ ARBITRAGE DEJA PRIS (Selasse, lot 4, point 4) : le socle rendrait
+        """⚠️ ARBITRAGE DEJA PRIS (la direction technique, lot 4, point 4) : le socle rendrait
         << non mesurable >> ; ici ce serait une regression. Un Gini de test
         <= 0 dit que le modele ne discrimine pas sur son jeu d'evaluation."""
         for gte in (-0.05, 0.0):

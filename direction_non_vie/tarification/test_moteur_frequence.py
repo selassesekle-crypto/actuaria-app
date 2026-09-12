@@ -24,7 +24,7 @@ pur par construction du generateur. *Ce n'est pas le seuil qui decide, c'est le
 nombre de SINISTRES* : les plans a plus de 900 sinistres retrouvent tout leur
 signal, ceux a moins de 600 le perdent.
 
-**Arbitrage de Selasse, 05/09/2026 : le tarif signe garde les facteurs que
+**Arbitrage de la direction technique, 05/09/2026 : le tarif signe garde les facteurs que
 l'actuaire y a inscrits.** `selection=False` n'est pas un repli, c'est la
 doctrine du chemin declaratif.
 

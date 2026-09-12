@@ -338,7 +338,7 @@ class TestLaDonneeQuiContreditLUnite(unittest.TestCase):
         self.assertEqual(a.regle, 3, 'la contradiction se SIGNALE, jamais ne '
                                      'se corrige')
         # ⚠️ Le message a été réécrit pour l'actuaire le 02/09 (arbitré par
-        # Selasse) : les unités sont désormais entre guillemets français. *Ce
+        # la direction technique) : les unités sont désormais entre guillemets français. *Ce
         # que ce contrôle prouve est inchangé — la description nomme l'unité
         # DÉCLARÉE et celle à laquelle la donnée RESSEMBLE.*
         self.assertIn('« mois »', a.description)
@@ -362,7 +362,7 @@ class TestLaDonneeQuiContreditLUnite(unittest.TestCase):
         df = _portefeuille_auto(400, seed=3)
         avant = float(df['exposition'].sum())
         rq = _sans_bruit(controler_qualite, df.copy(), plan, horodatage='t',
-                         qualite_validee_par='Selasse Sekle')
+                         qualite_validee_par='Direction Technique')
         self.assertAlmostEqual(float(rq.dataframe_propre['exposition'].sum()),
                                avant, places=6)
         # ⚠️⚠️ ET LE LIBELLE DOIT LE DIRE. Trouve par le sceau du lot 17c :

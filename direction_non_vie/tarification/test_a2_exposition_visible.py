@@ -95,7 +95,7 @@ class TestLesTroisMutationsSontDITES(unittest.TestCase):
         print(f"    E1-1 plafond : {[l.strip()[:56] for l in t.splitlines() if 'EFFET' in l]}")
 
     def test_l_exposition_NON_POSITIVE_est_EXCLUE_et_non_remplacee(self):
-        """ETAPE 1b — arbitree par Selasse le 30/08/2026.
+        """ETAPE 1b — arbitree par la direction technique le 30/08/2026.
 
         ⚠️⚠️ CE CONTROLE A CHANGE DE CONTENU, ET C'EST DELIBERE. A l'etape 1 il
         epinglait que la MEDIANE etait DITE ; l'etape 1b a tranche la doctrine

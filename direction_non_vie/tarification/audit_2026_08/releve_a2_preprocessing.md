@@ -105,7 +105,7 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
 **C8 — La stratégie `'binaire' → 'mode'` n'est appliquée à rien.** Mesuré sur une colonne 0/1 (mode = 1.0) : imputée par la **moyenne, 0.789**.
 
 > ⛔ **`a2/C8` — RE-MESURÉ LE 29/08/2026 SUR UNE VRAIE FIXTURE D'IMPUTATION.**
-> **RANG 2**, classement accepté par Selasse. *Sur données propres, `_imputer`
+> **RANG 2**, classement accepté par la direction technique. *Sur données propres, `_imputer`
 > sort avant toute imputation : le constat ne s'y reproduit pas — c'est
 > pourquoi la première re-mesure ne concluait rien.*
 >
@@ -167,7 +167,7 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
 
 **C9 — Une moyenne rangée sous la clé `medianes`.** `parametres['medianes']['age'] = 45.83` — la médiane réelle vaut 45.0. Ce dict est le paramètre de reproductibilité invoqué au titre de l'exigence S2.
 
-> ✅ **`a2/C9`** · **FERMÉ le 01/09/2026 — version complète arbitrée par Selasse (renommage + format auto-descriptif + mécanisme de version).**
+> ✅ **`a2/C9`** · **FERMÉ le 01/09/2026 — version complète arbitrée par la direction technique (renommage + format auto-descriptif + mécanisme de version).**
 >
 > **La cause** : `cle = 'modes' if strategie == 'mode' else 'medianes'` — toute stratégie non-mode, donc la MOYENNE, atterrissait sous une étiquette qui dit médiane. Mesuré en déclenchant l'imputation : `medianes = {'age': 50,6468}` pour une médiane RÉELLE de **50,0**. La clé DÉRIVE désormais de la stratégie (`_CLE_PARAMETRE`), comme `_LIBELLE_IMPUTATION` juste à côté.
 >
@@ -183,7 +183,7 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
 > Épinglé par `AC-1` à `AC-7`, dont `AC-5` (rien n'est deviné) et `AC-7` (un fichier déjà au schéma courant passe INTACT — *migrer ce qui n'en a pas besoin serait pire*).
 
 > ⚠️ **`a2/C9` — RE-MESURÉ LE 29/08/2026. RANG 5**, classement accepté par
-> Selasse. Sur la fixture d'imputation : `age = 49,926` pour une médiane réelle
+> la direction technique. Sur la fixture d'imputation : `age = 49,926` pour une médiane réelle
 > de **50,0**, `alarme = 0,8152` pour une médiane de **1,0** — **2 entrées sur
 > 3 mal nommées**, seul `valeur_venale` est une vraie médiane.
 >
@@ -394,7 +394,7 @@ SOIXANTE : la valeur d'un facteur tarifaire absent est comblée en silence,
 par une stratégie déduite du NOM de la colonne.**
 
 > ✅ **`a2/C18`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 — point ①
-> des quatre restants, arbitré par Selasse sur trois questions posées avant
+> des quatre restants, arbitré par la direction technique sur trois questions posées avant
 > tout code.**
 >
 > **Le constat.** `a2/C17` (`valeurs_absentes`) a fermé l'invention silencieuse
@@ -411,7 +411,7 @@ par une stratégie déduite du NOM de la colonne.**
 > valeur catégorielle est le même geste qu'inventer une valeur numérique ; il
 > est simplement plus difficile à voir, parce qu'il porte un nom.*
 >
-> **LES TROIS ARBITRAGES DE SELASSE, POSÉS AVANT TOUT CODE :**
+> **LES TROIS ARBITRAGES DE LA DIRECTION TECHNIQUE, POSÉS AVANT TOUT CODE :**
 >
 > | question | décision |
 > |---|---|

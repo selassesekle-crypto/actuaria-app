@@ -286,7 +286,7 @@ class TestLaTraceNeRemplacePasLaMesure(unittest.TestCase):
     def test_gouvernance_validee_ne_verifie_QU_UN_NOM(self):
         """⚠️⚠️ LA PREUVE QUE LA TRACE NE COUVRE PAS LE BESOIN.
 
-        Selasse a demandé si `profil_valide_par` suffisait à répondre à
+        La direction technique a demandé si `profil_valide_par` suffisait à répondre à
         « le classement changerait-il ? ». Mesuré : la fonction ne regarde
         QUE la présence d'un nom non vide. Elle dit QUI a assumé, jamais CE
         QUE le choix a changé. *Ce test existe pour que l'équivalence ne soit

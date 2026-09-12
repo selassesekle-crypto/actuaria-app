@@ -57,7 +57,7 @@ class TestQualite_ReglesDeBase(unittest.TestCase):
 
     def test_regle1_impossible_exclut_la_ligne(self):
         """⚠️⚠️ CE CONTRÔLE A CHANGE DE CONTENU LE 31/08/2026, ET C'EST DÉLIBÉRÉ
-        — constat `qualite/C8`, rang 1, arbitré par Selasse.
+        — constat `qualite/C8`, rang 1, arbitré par la direction technique.
 
         Il épinglait `cout_negatif` en **règle 1**, donc EXCLU. La mesure sur la
         seule donnée réelle versionnée a montré que c'était faux : un COÛT est
@@ -136,13 +136,13 @@ class TestQualite_Escalade(unittest.TestCase):
         df = _df(20)
         df['nb_sinistres'] = df['nb_sinistres'].astype(object)
         df.loc[[0, 1], 'nb_sinistres'] = -1.
-        r = controler_qualite(df, _plan(), qualite_validee_par='Marie Durand',
+        r = controler_qualite(df, _plan(), qualite_validee_par='Actuaire Test',
                               horodatage='2026-07-16T09:00:00')
         self.assertFalse(r.bloque)
-        self.assertEqual(r.validee_par, 'Marie Durand')
+        self.assertEqual(r.validee_par, 'Actuaire Test')
         self.assertEqual(r.lignes_retenues, 18)     # 2 exclues, poursuit
         s = synthese_qualite_donnees(r)
-        self.assertIn('Marie Durand', s)
+        self.assertIn('Actuaire Test', s)
         self.assertIn('16/07/2026', s)              # date réutilisée, reformatée
         print("    QD-6 Escalade ≥5% confirmée → poursuit + trace nominative datée ✅")
 
@@ -244,7 +244,7 @@ class TestQualite_PiloteParLePlan(unittest.TestCase):
             'exposition': rng.uniform(0.6, 1.0, n), 'nb_sinistres': nb,
             'cout_total_sinistres': np.where(nb > 0, rng.gamma(2, 12000, n), 0.).astype(object)})
         # ⚠️⚠️ LE DÉCLENCHEUR A CHANGÉ LE 02/09, ET C'EST LA DÉCISION DE
-        # SELASSE, PAS UNE RÉGRESSION. Ce test bloquait sur `cout < 0` à 10 %.
+        # LA DIRECTION TECHNIQUE, PAS UNE RÉGRESSION. Ce test bloquait sur `cout < 0` à 10 %.
         # Depuis l'arbitrage de la liste disqualifiante, une charge NETTE
         # négative n'escalade plus : mesuré à **8,82 % sur la donnée réelle**,
         # elle est légitime (recours, sauvetage, subrogation) et bloquait un

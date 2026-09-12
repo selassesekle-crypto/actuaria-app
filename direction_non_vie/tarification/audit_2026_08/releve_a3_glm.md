@@ -62,7 +62,7 @@ Les vraies bornes existent (`ic95_low`/`ic95_high`) et ne sont pas passées.
 
 **C5 — La courbe de Lorenz publiée n'est pas mesurée, elle est tracée.** [l.2161](direction_non_vie/tarification/a3_glm/agent.py:2161) : `lorenz = t ** (1 / (1 + gini * 2))`. C'est une fonction analytique du seul scalaire Gini — **deux portefeuilles différents de même Gini donnent la même courbe au pixel près**. Le graphique s'intitule « Courbe de Lorenz » et son infobulle annonce « % contrats / % sinistres cumulés ». Les vrais cumuls sont calculés dans `_calculer_gini` et jetés.
 
-> ✅ **`a3/C5`** · **FERMÉ le 29/08/2026 PAR SUPPRESSION — arbitrage de Selasse.**
+> ✅ **`a3/C5`** · **FERMÉ le 29/08/2026 PAR SUPPRESSION — arbitrage de la direction technique.**
 > *Preuve : `test_sensibilite_profils.py`, 4 contrôles.*>
 > ⚠️⚠️ **CE N'ÉTAIT PAS UN DOUBLON INOFFENSIF, C'ÉTAIT UN DOUBLON FAUX.** La
 > courbe n'était pas mesurée mais **reconstruite du seul scalaire Gini**

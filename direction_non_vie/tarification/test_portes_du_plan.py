@@ -148,7 +148,7 @@ def _sans_bruit(fn, *a, **kw):
 def _tarif(plan=_PLAN_AUTO, n=800, seed=3, df=None):
     portefeuille = _portefeuille_auto(n, seed=seed) if df is None else df
     return _sans_bruit(pipeline_complet, portefeuille, plan,
-                       qualite_validee_par='Selasse Sekle')
+                       qualite_validee_par='Direction Technique')
 
 
 def _avec_bornes(nom, bornes, plan=_PLAN_AUTO):

@@ -126,7 +126,7 @@ Publié avec la légende « 💡 La loss doit diminuer régulièrement (courbe d
 > et serait pourtant une courbe fabriquée — les deux ensemble disent « ni
 > fabriqué, ni aléatoire ».
 > ⚠️ **CE CONSTAT ÉTAIT L'UN DES QUATRE LATENTS**, fermés à toute ouverture.
-> Selasse l'a rouvert explicitement le 29/08. Il en reste **trois**.
+> La direction technique l'a rouvert explicitement le 29/08. Il en reste **trois**.
 
 **C5 — Le graphique « DL vs GLM » met les deux modèles DL à zéro.**
 ```

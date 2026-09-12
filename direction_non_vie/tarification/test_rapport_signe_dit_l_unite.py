@@ -75,7 +75,7 @@ from direction_non_vie.tarification.test_pipeline_agents import (
     _portefeuille_auto,
 )
 
-_SIGNATAIRE = 'Selasse Sekle'
+_SIGNATAIRE = 'Direction Technique'
 
 #: ⚠️⚠️ CONSTRUIT, JAMAIS EMPRUNTE AU DEPOT. Depuis l'etape 5, les 20 plans
 #: declarent `annee` : la branche << unite non declaree >> n'est plus
@@ -171,9 +171,10 @@ class TestLeRapportSigneDitLUnite(unittest.TestCase):
         texte = _signe(_portefeuille_auto(400, seed=3), plan)
         self.assertIn('unite_exposition_contredite', texte)
         # ⚠️ LE MESSAGE A ÉTÉ RÉÉCRIT POUR L'ACTUAIRE LE 02/09 (arbitré par
-        # Selasse) : plus de jargon, un compte, et ce qu'il faut faire. *Ce
-        # que ce contrôle prouve est INCHANGÉ — le rapport signé dit ce que la
-        # contradiction SIGNIFIE, pas seulement son code.* Seule la phrase
+        # la direction technique) : plus de jargon, un compte, et ce qu'il
+        # faut faire. *Ce que ce contrôle prouve est INCHANGÉ — le rapport
+        # signé dit ce que la contradiction SIGNIFIE, pas seulement son
+        # code.* Seule la phrase
         # cherchée suit la nouvelle formulation.
         self.assertIn('ressemblent à des « annee »', texte)
         self.assertIn('LE DÉNOMINATEUR DU TARIF', texte)

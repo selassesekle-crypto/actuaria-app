@@ -926,7 +926,7 @@ class TestLAssietteDuLot(unittest.TestCase):
     #: qui ne nomme pas ce qu'il laisse dehors laisse croire qu'il a tout pris.*
     NON_ETIQUETES: ClassVar[dict[str, str]] = {
         'mrh': "MIXTE (incendie 30 % / reste 9 %) -- la methode de repartition "
-               "attend l'arbitrage de Selasse",
+               "attend l'arbitrage de la direction technique",
         'multirisque_professionnelle': "MIXTE (incendie pro 12 % / reste 9 %)",
         'multirisque_immeuble': "MIXTE (incendie pro 12 % / reste 9 %)",
         'perte_exploitation': "MIXTE (pertes consecutives a incendie 12 % / "

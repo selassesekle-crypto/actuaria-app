@@ -36,7 +36,7 @@ ne portait pas. Mesure par execution, avec A3 absent :
 que la reference fantome sortait ROUGE exactement comme un modele degrade.**
 *Un bon modele pouvait etre refuse par un nombre que personne n'avait mesure.*
 
-═══ CE QUE LE CORRECTIF FAIT — DEUX ARBITRAGES DE SELASSE, 30/08/2026 ═══
+═══ CE QUE LE CORRECTIF FAIT — DEUX ARBITRAGES DE LA DIRECTION TECHNIQUE, 30/08/2026 ═══
 
 ① **Reference absente -> `None` + AMBRE**, sur le modele DEJA valide pour l'A/E
 non calculable d'A6. C'est la regle que la docstring de `_monitoring_derive`
@@ -163,7 +163,7 @@ class TestAucuneReferenceFabriquee(unittest.TestCase):
 
 
 class TestLeMessageQueLitLActuaire(unittest.TestCase):
-    """⚠️⚠️ EXIGENCE EXPLICITE DE SELASSE : clair et parlant, pas du jargon.
+    """⚠️⚠️ EXIGENCE EXPLICITE DE LA DIRECTION TECHNIQUE : clair et parlant, pas du jargon.
 
     Le message doit dire TROIS choses, et une seule manquante le rend
     trompeur. Chacune est verifiee separement : *un controle qui n'exigerait

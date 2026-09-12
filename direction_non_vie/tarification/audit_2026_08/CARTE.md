@@ -3,12 +3,12 @@
 > ## ⚠️⚠️ L'ORDRE VIT DANS [**FEUILLE_DE_ROUTE.md**](FEUILLE_DE_ROUTE.md)
 > Reconstruite depuis zéro le 24/08 au soir, elle **remplace l'ordre de ce
 > document** — avec un **rang 0 (les prérequis)**, les **8 révisions nommées**,
-> la répartition **Selasse / moi**, et la **recommandation sur la charte**.
+> la répartition **La direction technique / moi**, et la **recommandation sur la charte**.
 > **Ce document reste l'INVENTAIRE** : les constats, leurs mesures, les preuves.
 > *Deux documents qui ordonnent la même chose seraient exactement le défaut
 > que cet audit poursuit.*
 
-**Établie le 24/08/2026**, sur demande de Selasse : *« Donne-moi l'ORDRE
+**Établie le 24/08/2026**, sur demande de la direction technique : *« Donne-moi l'ORDRE
 COMPLET de ce qui reste, tous constats confondus — les 67 de la première vague
 et les 58 de la seconde MÉLANGÉS. Un constat trouvé hier et un trouvé
 aujourd'hui se valent s'ils publient le même faux. »*
@@ -32,7 +32,7 @@ La vague 1 compte donc **66 ouverts, pas 67**. *Le total que vous citiez —
 
 # ⚠️⚠️ RÉVISION DU 24/08/2026 (SOIR) — J'AVAIS MESURÉ TROP ÉTROIT
 
-**Selasse a demandé : « la roadmap complète et l'architecture d'abord — ou bien
+**la direction technique a demandé : « la roadmap complète et l'architecture d'abord — ou bien
 il y a encore autre chose ? »** Il y avait autre chose, **et cela déplace deux
 rangs de cette carte.**
 
@@ -88,7 +88,7 @@ arbitrage faux »* — **ne s'appliquait pas ici** : il y avait les deux.
 
 > ✅⏭️ **ARBITRÉ LE 25/08/2026 — LE PRIX FAUX EST FERMÉ, L'ARBITRAGE MANQUANT
 > EST REPORTÉ.** `a5/C6` et `a5/C7` sont **corrigés** (`59059c3`) : il n'y a
-> plus de prix faux. Reste l'arbitrage facultatif — et **Selasse a tranché de
+> plus de prix faux. Reste l'arbitrage facultatif — et **La direction technique a tranché de
 > NE PAS y toucher** : l'application Streamlit disparaît à la migration, y
 > écrire même une phrase courte n'est pas utile.
 > ⚠️⚠️ **NE PAS CORRIGER `prime_ml` / `prime_dl` DANS L'APP ACTUELLE.**
@@ -262,7 +262,7 @@ des HOMONYMES.**
 # ⚠️⚠️ L'ASSIETTE DE L'ÉCRÊTEMENT — MA RECOMMANDATION, MOTIVÉE
 
 **`socle/C1` ne figure dans AUCUN rang de cette carte, et voici pourquoi.**
-Selasse a demandé une recommandation motivée avant d'arbitrer. Trois questions,
+La direction technique a demandé une recommandation motivée avant d'arbitrer. Trois questions,
 trois réponses **mesurées**.
 
 ## ① La donnée au sinistre existe-t-elle ? — OUI, et ce n'est pas ce qui bloque
@@ -477,7 +477,7 @@ d'entrée du prix, et rien ne la garde.
 |---|---|
 | ferme | `a3/C5` `a4/C5` `a5/C4` `a6/C3` `charts/C1` `charts/C2` `charts/C3` `charts/C5` |
 | ce que ça ferme | la **Lorenz tracée et non mesurée** (deux agents, même formule `t**(1/(1+2g))`) · « Convergence » = une **exponentielle analytique bruitée** · « Score par profil » qui **n'affiche pas le score** · le badge « % du discriminable » **sans borne** (mesuré à **125 %**, **−5 %**, **18 000 000 %**) · la **bande verte plus large que le gate** (0,85–1,15 contre 0,90–1,10) · une **figure vide indiscernable** d'une figure pleine, **7 fonctions sur 7** · **4 troncatures silencieuses** (23→15, 4→2, 1 000→500, 30→15) |
-| raccourcit ? | **OUI, franchement.** Huit constats, deux vagues mélangées, **un seul lot** — et c'est exactement ce que Selasse demandait : *un constat d'hier et un d'aujourd'hui se valent s'ils publient le même faux.* |
+| raccourcit ? | **OUI, franchement.** Huit constats, deux vagues mélangées, **un seul lot** — et c'est exactement ce que la direction technique demandait : *un constat d'hier et un d'aujourd'hui se valent s'ils publient le même faux.* |
 
 ---
 

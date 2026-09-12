@@ -1,6 +1,6 @@
 """⚠️⚠️ UN SIGNAL QUI DÉSIGNE TOUT LE MONDE NE DÉSIGNE PERSONNE.
 
-Étape ② du chantier 1-B, décidée par Selasse le 01/09/2026.
+Étape ② du chantier 1-B, décidée par la direction technique le 01/09/2026.
 
 `unite_exposition_contredite` sortait avec `np.ones(len(df))` : **toutes** les
 lignes. Mesuré sur 20 000 contrats dont **une seule** à 1,02 an — 0,0050 % :
@@ -83,7 +83,7 @@ def _bloc_regle_3():
 class TestMasquePreuveUnite(unittest.TestCase):
 
     def test_MP_1_une_ligne_ne_bloque_plus_vingt_mille_contrats(self):
-        """⚠️⚠️ LE CONSTAT LUI-MÊME, DANS LES CHIFFRES DE SELASSE."""
+        """⚠️⚠️ LE CONSTAT LUI-MÊME, DANS LES CHIFFRES DE LA DIRECTION TECHNIQUE."""
         n = 20_000
         df = _cadre(n, 7)
         df.loc[0, _E] = 1.02

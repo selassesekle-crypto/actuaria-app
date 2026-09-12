@@ -1,6 +1,6 @@
 """⚠️⚠️ UNE SIGNATURE QUI NE VALIDE RIEN EST PIRE QUE PAS DE SIGNATURE.
 
-Étape ③ du chantier 1-B, décidée par Selasse le 01/09/2026 : porter le canal
+Étape ③ du chantier 1-B, décidée par la direction technique le 01/09/2026 : porter le canal
 `qualite_validee_par` sur le chemin agent — `pipeline_agents` et `A1.run`.
 
 ⚠️⚠️ ET C'EST LÀ QUE LA CONCEPTION SE JOUE. Un paramètre accepté que **rien ne
@@ -100,9 +100,9 @@ class TestCanalSignatureAgent(unittest.TestCase):
         with self.assertRaises(SignatureSansObjet) as ctx2:
             _muet(AgentA1Ingestion().run, sous_branche='auto',
                   dataframe=df.copy(), plan=_PLAN,
-                  qualite_validee_par='Selasse Sekle')
+                  qualite_validee_par='Direction Technique')
         self.assertEqual(ctx2.exception.appelant, 'A1.run')
-        self.assertEqual(ctx2.exception.nom, 'Selasse Sekle')
+        self.assertEqual(ctx2.exception.nom, 'Direction Technique')
         print("    OK SG-2 A1.run LEVE SignatureSansObjet et nomme son "
               "appelant ; pipeline_agents a desormais un objet")
 
@@ -246,11 +246,11 @@ class TestCanalSignatureAgent(unittest.TestCase):
         self.assertTrue(bloque.bloque, 'le temoin ne bloque plus : la mesure '
                                        'ne prouverait rien')
         signe = controler_qualite(df.copy(), _PLAN,
-                                  qualite_validee_par='Selasse Sekle')
+                                  qualite_validee_par='Direction Technique')
         self.assertFalse(signe.bloque,
                          'la signature ne leve plus le blocage la ou elle a '
                          'un objet')
-        self.assertEqual(signe.validee_par, 'Selasse Sekle')
+        self.assertEqual(signe.validee_par, 'Direction Technique')
         print("    OK SG-7 second sens : la signature garde son objet sur le "
               "chemin declaratif")
 

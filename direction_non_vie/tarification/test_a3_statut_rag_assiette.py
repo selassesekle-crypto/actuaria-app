@@ -34,7 +34,7 @@ est verrouillee par AST.
 ⛔⛔ ET CE FICHIER A DEJA MONTRE SON PROPRE TROU -- LE 03/09/2026, MEME JOUR
 -----------------------------------------------------------------------------
 `AC6-1` promettait : << le jour ou quelqu'un fait entrer le Tweedie, il
-tombe >>. Selasse a arbitre le soir meme qu'un Tweedie ANTI-SELECTIF force
+tombe >>. La direction technique a arbitre le soir meme qu'un Tweedie ANTI-SELECTIF force
 ROUGE. Le Tweedie est donc entre dans le statut d'A3 -- et **`AC6-1` est
 reste VERT**.
 
@@ -183,7 +183,7 @@ class T1bis_LePipelineDuStatut(unittest.TestCase):
     #:   `_calculer_statut_rag`      -- le calcul de base (Gini Poisson)
     #:   `plafonner_statut_si_ampute` -- plafond AMBRE si le plan est ampute
     #:   `statut_anti_selection`      -- ROUGE si un Gini mesure est negatif
-    #:                                   (arbitrage Selasse du 03/09/2026)
+    #:                                   (arbitre le 03/09/2026)
     _CHAINE_ARBITREE = (
         '_calculer_statut_rag',
         'plafonner_statut_si_ampute',

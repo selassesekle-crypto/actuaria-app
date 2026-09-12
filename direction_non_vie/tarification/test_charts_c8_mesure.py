@@ -7,8 +7,8 @@
 ⚠️⚠️ CE FICHIER NE FERME PAS LE CONSTAT -- IL EPINGLE SA DESCRIPTION.
 
 `charts/C8` reste OUVERT : son correctif vit dans `actuaria_app.py`, et
-Selasse a arbitre qu'on ne touche pas a l'app Streamlit. Une exemption
-declaree dans `test_archive_fermeture_reportee.py` dit exactement cela --
+la direction technique a arbitre qu'on ne touche pas a l'app Streamlit.
+Une exemption declaree dans `test_archive_fermeture_reportee.py` le dit --
 sans elle, `ARCH-1` accuserait ce fichier d'epingler un constat sans bloc
 de fermeture, et il aurait raison de le faire.
 

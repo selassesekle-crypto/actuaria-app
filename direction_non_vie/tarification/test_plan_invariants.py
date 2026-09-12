@@ -42,7 +42,7 @@ TMP = tempfile.mkdtemp(prefix='actuaria_plan_inv_')
 #  PLANS DE RÉFÉRENCE — reproduits depuis exemple_plans_auto_et_decennale.py
 # ═══════════════════════════════════════════════════════════════════════════════
 AUTO = PlanTarifaire.depuis_dict({
-    "lob": "auto", "version": "1.0", "auteur": "S. Sekle, IA",
+    "lob": "auto", "version": "1.0", "auteur": "Direction Technique, IA",
     "exposition": "exposition",
     "cible_frequence": "nb_sinistres",
     "cible_cout": "cout_total_sinistres",
@@ -80,7 +80,7 @@ AUTO = PlanTarifaire.depuis_dict({
 })
 
 DECENNALE = PlanTarifaire.depuis_dict({
-    "lob": "decennale", "version": "1.0", "auteur": "S. Sekle, IA",
+    "lob": "decennale", "version": "1.0", "auteur": "Direction Technique, IA",
     "exposition": "exposition",
     "cible_frequence": "nb_sinistres",
     "cible_cout": "cout_total_sinistres",
@@ -100,7 +100,7 @@ DECENNALE = PlanTarifaire.depuis_dict({
 
 # MRH — sur-ensemble strict de l'ancien VARS_GLM['mrh'] (miroir de plans/mrh.yaml).
 MRH = PlanTarifaire.depuis_dict({
-    "lob": "mrh", "version": "1.0", "auteur": "S. Sekle, IA",
+    "lob": "mrh", "version": "1.0", "auteur": "Direction Technique, IA",
     "exposition": "exposition",
     "cible_frequence": "nb_sinistres", "cible_cout": "cout_total_sinistres",
     "facteurs": [
@@ -126,7 +126,7 @@ MRH = PlanTarifaire.depuis_dict({
 # en AJOUTS DE MODÉLISATION (facteurs jamais consommés par l'ancien VARS_GLM).
 # Miroir de rcpro.yaml.
 RCPRO = PlanTarifaire.depuis_dict({
-    "lob": "rcpro", "version": "1.0", "auteur": "S. Sekle, IA",
+    "lob": "rcpro", "version": "1.0", "auteur": "Direction Technique, IA",
     "exposition": "exposition",
     "cible_frequence": "nb_sinistres", "cible_cout": "cout_total_sinistres",
     "facteurs": [
@@ -2030,7 +2030,7 @@ class TestEmpreinteVersionneeSchema(unittest.TestCase):
         # par elle n'ecretent pas les memes contrats.
         # ⚠️⚠️ BUMP `s5` -> `s6` LE 02/09/2026, golden et constante dans le
         # MEME commit. Motif : `valeurs_absentes` entre dans le payload --
-        # constat `qualite/C15`, arbitre par Selasse. Elle decide si une ligne
+        # constat `qualite/C15`, arbitre par la direction technique. Elle decide si une ligne
         # a valeur absente est EXCLUE, IMPUTEE, ou si le run S'ARRETE. Deux
         # plans qui n'en different que par elle ne tarifent pas les memes
         # contrats.

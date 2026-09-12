@@ -82,7 +82,7 @@ Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleu
 
 **C5 — La courbe de Lorenz est tracée, pas mesurée** — même formule qu'A3 (`t ** (1/(1+2g))`). Ici s'ajoute une contradiction d'axe : l'abscisse annonce « % contrats (**du moins au plus risqué**) » alors que le Gini trie **décroissant**, le plus risqué d'abord.
 
-> ✅ **`a4/C5`** · **FERMÉ le 29/08/2026 PAR SUPPRESSION — arbitrage de Selasse.**
+> ✅ **`a4/C5`** · **FERMÉ le 29/08/2026 PAR SUPPRESSION — arbitrage de la direction technique.**
 > *Preuve : `test_sensibilite_profils.py`, 4 contrôles.*
 >
 > ⚠️ La contradiction d'axe disparaît avec la figure : **il n'y a plus d'axe.**>
@@ -140,7 +140,7 @@ Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleu
 
 **C11 — La clé `gini` n'existe pas dans le classement**, et **9 sites** lisent `.get('gini', défaut)`. Les clés réelles sont `gini_test` / `gini_train`. Le défaut `0.25` est ce qui alimente `_optimisation_tarifaire`.
 
-> ✅ **`a4/C11`** · **FERMÉ le 30/08/2026 — RANG 1, arbitré par Selasse.**
+> ✅ **`a4/C11`** · **FERMÉ le 30/08/2026 — RANG 1, arbitré par la direction technique.**
 > *Preuve : `test_reference_a3_monitoring.py`, 14 contrôles, 4 violations
 > plantées.*
 >

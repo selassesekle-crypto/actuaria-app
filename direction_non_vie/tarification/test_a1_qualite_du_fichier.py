@@ -1,6 +1,6 @@
 """⚠️⚠️ UNE QUESTION, UN VERDICT — A1 NE JUGE PLUS CE QUI N'EST PAS À LUI.
 
-Étape ⑤-③ du chantier 1-B, arbitrée par Selasse le 02/09/2026 : *rendre à
+Étape ⑤-③ du chantier 1-B, arbitrée par la direction technique le 02/09/2026 : *rendre à
 chacun sa propre question, ni réparer ni supprimer.*
 
 ```

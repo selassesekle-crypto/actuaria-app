@@ -33,7 +33,7 @@ d'un appel reseau.*
 ⚠️ ET LE CONSTAT EST PLUS LARGE QUE CE LOT NE LE FERME : les **six** syntheses
 du rapport (`mapping`, `exclusions`, `alertes_experience`, `modele_dl`,
 `qualite_donnees`, `colonnes_plan_manquantes`) vivent TOUTES dans ce seul
-prompt. Ce lot ne cable que celle que Selasse a autorisee. Les cinq autres sont
+prompt. Ce lot ne cable que celle que la direction technique a autorisee. Les cinq autres sont
 NOMMEES, non traitees.
 
 ⚠️ Le texte n'est pas reecrit ici : il vient de `synthese_modele_dl`, la source
@@ -131,11 +131,11 @@ class TestAvertissementDLSurLaSurfaceSignee(unittest.TestCase):
         """
         html = R.export_html(
             result_a3={}, result_a4={},
-            result_a6=_a6('DL_TABNET', 'Deep Learning', valide_par='M. Dupont'),
+            result_a6=_a6('DL_TABNET', 'Deep Learning', valide_par='Actuaire Test'),
             narration_calculee=('', 'absente'))
         texte = html if isinstance(html, str) else html.decode('utf-8', 'replace')
         self.assertNotIn('ACTION REQUISE', texte)
-        self.assertIn('M. Dupont', texte)
+        self.assertIn('Actuaire Test', texte)
         self.assertIn('29/08/2026', texte)
         print("    A-3 valide : l'action requise disparait, la trace reste")
 

@@ -1145,7 +1145,7 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
         _bandeau(ws1, "Rapport Ingestion & Validation", "Synthèse qualité des données",
                  "A1 — Ingestion", aid, arrete)
         r = 7
-        # ⚠️⚠️ DEUX VERDICTS, DEUX QUESTIONS -- arbitre par Selasse le
+        # ⚠️⚠️ DEUX VERDICTS, DEUX QUESTIONS -- arbitre par la direction technique le
         # 02/09/2026. Ce bloc disait « QUALITE DES DONNEES », exactement
         # comme la ligne que publie la couche qualite quatre onglets plus
         # loin. *Deux pastilles cote a cote sous le meme titre se lisent

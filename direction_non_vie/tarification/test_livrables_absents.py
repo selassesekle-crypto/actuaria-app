@@ -1,6 +1,6 @@
 """⚠️⚠️ UN RUN PEUT ETRE VERT ET N'AVOIR PRODUIT AUCUN DOCUMENT.
 
-Constat `services/C13`, ouvert par Selasse le 02/09/2026 apres la question
+Constat `services/C13`, ouvert par la direction technique le 02/09/2026 apres la question
 << est-ce qu'a ce stade tout va bien avec certitude ? >>.
 
 Les **neuf** exportateurs du module partagent une seule et meme forme :

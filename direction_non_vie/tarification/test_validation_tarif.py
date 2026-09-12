@@ -34,7 +34,7 @@ troisieme est NON MONOTONE : celui-la a tire sur du bruit -- un IC a 95 %
 tombe entierement sous zero environ 2,5 % du temps quand le vrai effet est nul,
 et on en mesure dix-huit par execution.
 
-**Arbitre par Selasse le 05/09/2026 : on PUBLIE toujours -- Gini, intervalle,
+**Arbitre par la direction technique le 05/09/2026 : on PUBLIE toujours -- Gini, intervalle,
 effectif du holdout ET rapport n/p -- et on ne bloque JAMAIS tout seul. Un
 blocage dur se declare au PLAN (`refus_anti_selection`, defaut `False`).**
 

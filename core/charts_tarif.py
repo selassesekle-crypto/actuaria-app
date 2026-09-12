@@ -3,7 +3,7 @@
 core/charts_tarif.py — Graphiques de tarification, charte visuelle V3.
 ════════════════════════════════════════════════════════════════════════════
 
-SOURCE UNIQUE du style graphique de la tarification (validé par Selasse, V3).
+SOURCE UNIQUE du style graphique de la tarification (validé par la direction technique, V3).
 Module PUR : ne dépend que de plotly + numpy — AUCUN import d'agent (même
 principe que core/plan_tarifaire.py, core/severite.py). Chaque fonction prend
 des DONNÉES EXPLICITES et retourne un objet `plotly.graph_objects.Figure`.
@@ -183,7 +183,7 @@ def couleur_rag(statut: str, fond: str = FOND_SOMBRE, *, avec_diese: bool = True
 def couleur_texte_rag(statut: str, fond: str = FOND_SOMBRE) -> str:
     """La couleur d'un statut QUAND ELLE SERT À ÉCRIRE.
 
-    ⚠️⚠️ AUCUN TEXTE EN ROUGE, NULLE PART — arbitré par Selasse le 27/08/2026,
+    ⚠️⚠️ AUCUN TEXTE EN ROUGE, NULLE PART — arbitré par la direction technique le 27/08/2026,
     sans exception ni cas par cas. `ROUGE #E74C3C` vaut **3,74** sur le fond
     des figures : il passe comme OBJET (WCAG 1.4.11, 3:1) et échoue comme
     TEXTE (1.4.3, 4,5:1).

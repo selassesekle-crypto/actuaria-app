@@ -278,7 +278,7 @@ pas dans le constat : il fallait fermer pour l'obtenir.*
 bonnes · 150 affirmations mesurées.**
 
 ⚠️ **59 et non 58** : `conformite/C14` a été inscrit le 24/08/2026 sur arbitrage
-de Selasse — voir [CARTE.md](CARTE.md).
+de la direction technique — voir [CARTE.md](CARTE.md).
 
 | fichier | lignes | état | constats |
 |---|---|---|---|

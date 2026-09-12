@@ -44,7 +44,7 @@ dire lequel des deux il est, si.*
 Deux parametres du meme nom, un mort et un vif -- raison de plus pour dire
 lequel est lequel.
 
-⚠️ `socle/C1` n'etait PAS dans ce lot -- il attendait son arbitrage. Selasse a
+⚠️ `socle/C1` n'etait PAS dans ce lot -- il attendait son arbitrage. La direction technique a
 tranche le 01/09/2026 : le seuil porte sur CHAQUE SINISTRE. Il est ferme par
 `test_socle_c1_assiette_ecretement`, qui porte les controles `SC-1` a `SC-9`.
 """
