@@ -1089,13 +1089,46 @@ class AgentA1Ingestion:
         #
         # ⚠️ CE CHIFFRE RESTE UN FAIT PUBLIÉ, IL N'ENTRE PLUS DANS LE SCORE :
         # la plausibilité de l'exposition appartient à la couche qualité.
-        if 'exposition' in df.columns:
+        #
+        # ⚠️⚠️ ET LE NOM DE LA COLONNE VIENT DU PLAN LUI AUSSI — 12/09/2026.
+        # Le correctif du 02/09 ci-dessus a pose la BORNE depuis le plan et
+        # laissé le NOM en littéral, TROIS LIGNES PLUS BAS, dans le même
+        # `if`. *Un correctif qui atterrit sur une moitié de sa propre
+        # expression.* Sur `auto_fr_reel` (colonne `Exposure`), le test
+        # `'exposition' in df.columns` échouait et la branche `else`
+        # publiait un 100,0 FABRIQUÉ.
+        #
+        # Mesure du 12/09, mêmes données, 600 lignes sur 6 000 portant une
+        # exposition impossible (3,5) :
+        #
+        #     colonne `Exposure`     expo_ok_pct = 100,0   (jamais regardée)
+        #     colonne `exposition`   expo_ok_pct =  90,0   (mesurée)
+        #
+        # *Une exposition qu'on n'a pas su lire était publiée conforme à
+        # 100 %.* Sur données saines les deux valent 100,0 : la coïncidence
+        # masquait le défaut, il a fallu abîmer la donnée pour le voir.
+        #
+        # ⚠️ SANS PLAN, RIEN N'EST DÉCLARÉ : le défaut historique
+        # `'exposition'` reste alors le repli, et il est DIT ici. Ce n'est
+        # pas le même geste que redécider un rôle que le plan porte.
+        _col_expo = (getattr(plan, 'exposition', None)
+                     if plan is not None else None) or 'exposition'
+        if _col_expo in df.columns:
             _borne_expo = borne_exposition(plan) if plan is not None else 1.0
-            expo_ok = (df['exposition']
+            expo_ok = (df[_col_expo]
                        .between(0, _borne_expo, inclusive='right')).mean() * 100
+            _motif_expo = None
         else:
-            _borne_expo = 1.0
-            expo_ok = 100.0
+            # ⚠️⚠️ ABSENTE : ON DÉCLARE, ON NE CERTIFIE PAS. Publier 100,0
+            # ici certifiait une exposition que personne n'avait lue —
+            # « non mesuré = VERT », le défaut que la couche qualité a
+            # fermé et qui survivait ici.
+            _borne_expo = borne_exposition(plan) if plan is not None else 1.0
+            expo_ok = None
+            _motif_expo = (
+                f"colonne d'exposition '{_col_expo}' absente du fichier : "
+                f"aucun taux de conformité n'est publié, aucune valeur "
+                f"n'est supposée.")
 
         # ── 4. Valeurs aberrantes actuarielles ────────────────────────────────
         # ⚠️ AUCUNE NORME EXTERNE N'EST INVOQUÉE ICI. Ces lignes citaient
@@ -1172,8 +1205,11 @@ class AgentA1Ingestion:
                     )
 
         # 4d. Exposition strictement positive
-        if 'exposition' in df.columns:
-            n_expo_nul = int((df['exposition'] <= 0).sum())
+        # ⚠️ MEME SOURCE QUE LE CONTROLE 3 : le nom vient du plan. Ce site
+        # lisait lui aussi le littéral, donc sur `auto_fr_reel` l'aberration
+        # « exposition ≤ 0 » n'était JAMAIS cherchée.
+        if _col_expo in df.columns:
+            n_expo_nul = int((df[_col_expo] <= 0).sum())
             if n_expo_nul > 0:
                 aberrants['exposition_nulle_ou_negative'] = n_expo_nul
                 alertes_aberrants.append(
@@ -1233,7 +1269,11 @@ class AgentA1Ingestion:
             'echeance':            col_ech,
             'granularite':         granularite,
             'note_identite':       note_identite,
-            'expo_ok_pct':         round(expo_ok, 2),
+            # ⚠️ `None` quand la colonne est absente — et le MOTIF voyage
+            # avec, sinon l'absence redevient muette.
+            'expo_ok_pct':         (None if expo_ok is None
+                                    else round(expo_ok, 2)),
+            'expo_non_mesuree_motif': _motif_expo,
             'score_global':        round(score, 2),
             'colonnes':            df.columns.tolist(),
             # Valeurs aberrantes actuarielles — contrôles du module

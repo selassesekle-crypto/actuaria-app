@@ -1109,6 +1109,19 @@ class AgentA4ML:
         """
         t_debut      = datetime.now()
         audit_id     = f"A4_{t_debut.strftime('%Y%m%d_%H%M%S')}"
+        # ⚠️⚠️ L'EXPOSITION VIENT DU PLAN SIGNE, PAS D'UN LITTERAL. Le defaut
+        # `'exposition'` etait une SECONDE declaration du role que le plan
+        # porte deja (`plan.exposition`), et aucun appelant de production ne
+        # l'ecrasait (releve AST : 0 site passant `col_exposition=`). Sur le
+        # seul plan du depot qui nomme sa colonne autrement (`auto_fr_reel`,
+        # `Exposure`), le litteral gagnait : offset de frequence pose a ZERO
+        # puis `KeyError: 'exposition'` au GLM de cout.
+        #   *Une colonne DECLAREE au plan ne peut pas etre redecidee par un
+        #   defaut de signature : le plan est le document opposable.*
+        # ⚠️ On derive ICI plutot que chez l'appelant : un assemblage manuel
+        # des agents (constat `agents/C1`) rouvrirait le trou sinon.
+        if plan is not None and getattr(plan, 'exposition', None):
+            col_exposition = plan.exposition
         sous_branche = (result_a2.get('branche') or 'inconnue')
 
         # Gini de référence GLM — lu chez A3, ou ABSENT.

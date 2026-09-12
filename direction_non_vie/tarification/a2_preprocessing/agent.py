@@ -718,7 +718,7 @@ class AgentA2Preprocessing:
             # ── ÉTAPE 6 : VALIDATION FINALE ───────────────────────────────────
             logger.info(f"[{audit_id}] Étape 6/6 : Validation finale")
             df, stats_valid = self._valider_sortie(
-                df, sous_branche, cible_frequence, cible_cout
+                df, sous_branche, cible_frequence, cible_cout, plan=plan
             )
             rapport['etapes'].append('validation')
             rapport['transformations']['validation'] = stats_valid
@@ -1884,7 +1884,8 @@ class AgentA2Preprocessing:
         df: pd.DataFrame,
         sous_branche: str,
         cible_freq: str,
-        cible_cout: str
+        cible_cout: str,
+        plan: PlanTarifaire | None = None,
     ) -> Tuple[pd.DataFrame, Dict]:
         """
         Validation finale du DataFrame preprocessé.
@@ -1979,12 +1980,43 @@ class AgentA2Preprocessing:
                 "le modèle de fréquence."
             )
 
-        # Vérification exposition
-        if 'exposition' in df.columns:
-            expo_ok = ((df['exposition'] > 0) & (df['exposition'] <= 1)).all()
+        # ── Vérification exposition ───────────────────────────────────────
+        # ⚠️⚠️ LA COLONNE ET LA BORNE VIENNENT DU PLAN — 12/09/2026, constat
+        # `A2-D1`. Ce bloc cherchait la colonne littérale `'exposition'` et
+        # comparait à `1` en dur, dans un agent qui reçoit le plan et dont
+        # le JUMEAU `_traiter_exposition`, trois cents lignes plus haut,
+        # lit déjà `plan.exposition` ET `borne_exposition(plan)` — tous deux
+        # importés dans ce même fichier.
+        #
+        # *Deux fonctions du même fichier répondaient différemment à la
+        # même question.* Mesure du 12/09, mêmes données saines :
+        # `col_exposition_trouvee=True` (le jumeau a trouvé la colonne) et
+        # `exposition_valide=False` (ce bloc ne l'a pas trouvée).
+        #
+        # Et la conséquence n'est pas cosmétique : `_calculer_statut_rag`
+        # lit ce champ — `if not val.get('exposition_valide', True): return
+        # 'AMBRE'`. Un nom de colonne plafonnait donc le statut d'A2 sur des
+        # données saines.
+        #
+        # ⚠️ SANS PLAN, ON DÉCLARE AU LIEU DE CERTIFIER : `None` et un motif
+        # publié. `None` ne remonte pas le RAG à VERT — une vérification qui
+        # n'a pas eu lieu ne certifie rien.
+        _col_expo = getattr(plan, 'exposition', None) if plan is not None \
+            else None
+        if plan is None or not _col_expo:
+            stats['exposition_valide'] = None
+            stats['exposition_valide_motif'] = (
+                "aucun plan fourni : la colonne d'exposition n'est pas "
+                "déclarée, la validation n'a pas eu lieu.")
+        elif _col_expo in df.columns:
+            _borne = borne_exposition(plan)
+            expo_ok = ((df[_col_expo] > 0) & (df[_col_expo] <= _borne)).all()
             stats['exposition_valide'] = bool(expo_ok)
         else:
             stats['exposition_valide'] = False
+            stats['exposition_valide_motif'] = (
+                f"le plan déclare la colonne d'exposition '{_col_expo}' et "
+                f"le DataFrame ne la porte pas.")
 
         # Liste des colonnes numériques disponibles pour les modèles
         cols_num = df.select_dtypes(
