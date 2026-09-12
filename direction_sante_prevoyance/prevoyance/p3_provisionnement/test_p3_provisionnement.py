@@ -486,7 +486,12 @@ def _impl_test_t6_provisions_long_terme():
     rente_an = sal * rente                     # 27 000 €
     v        = 1.0 / (1 + taux_a)
     annuite  = sum(v**t for t in range(1, int(dur) + 1))  # ~18.9 ans
-    nb_inv   = max(0, int(nb * tip * 0.60))    # = int(500 × 0.00336 × 0.60) = 1
+    # ⚠️ ATTENDU CORRIGÉ LE 12/09/2026, en même temps que le contrat.
+    # Ce test RECALCULAIT la troncature `int()` pour en faire son attendu : il
+    # verrouillait donc le défaut qu'il aurait dû dénoncer. Cette troncature
+    # faisait valoir la PM 0 EUR jusqu'à 496 assurés, puis 482 895 EUR au 497e.
+    # Une espérance de nombre d'invalides est continue.
+    nb_inv   = max(0.0, nb * tip * 0.60)       # 500 × 0.00336 × 0.60 = 1.008
     pm_att   = nb_inv * rente_an * annuite
 
     pm_obt = r["pm_rentes_ip"]

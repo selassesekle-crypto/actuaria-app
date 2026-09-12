@@ -43,7 +43,8 @@ D06 / H5 — le garde-fou ne bornait QUE PAR LE HAUT. Un LR de 1,21 % passait
 
 __all__ = [
     "LR_CTIP_ITT_MARCHE", "LR_PLANCHER_VRAISEMBLABLE", "LR_CIBLE_MAX",
-    "charge_sinistres", "loss_ratio", "statut_loss_ratio",
+    "apriori_volume_mature", "charge_sinistres", "loss_ratio",
+    "statut_loss_ratio",
 ]
 
 # Reference de marche employee FAUTE DE SINISTRES OBSERVES, jamais a la place.
@@ -124,3 +125,47 @@ def statut_loss_ratio(lr):
             v * 100, LR_CIBLE_MAX * 100)
     return "NON VALIDÉE", (
         "S/P = %.1f%% > 100%% — regime deficitaire" % (v * 100))
+
+
+# =============================================================================
+#  A PRIORI DU BORNHUETTER-FERGUSON
+# =============================================================================
+
+def apriori_volume_mature(dernier_diag, pct_developpe, n, loss_ratio_apriori,
+                          nb_annees_matures=3):
+    """A priori BF construit sur le VOLUME OBSERVE, et non sur l ultime projete.
+
+    LE DEFAUT FERME (D09)
+    En l absence de primes exogenes, l a priori valait `ult_cl * lr` --
+    l ultime projete par Chain Ladder de l annee meme qu on cherche a estimer.
+    Le BF degenerait alors en `lr x CL`, identiquement. Mesure :
+    **BF / CL = 0,680000 exactement**, soit le loss ratio a priori, et
+    **Mack - CL = 0,000000**. Trois methodes publiees, une seule valeur -- et
+    un « CV inter-methodes » de 16,89 % calcule sur trois copies de la meme
+    chose, presente comme une mesure d incertitude de modele.
+
+    Un contre-test l avait confirme : en fournissant de vraies primes acquises,
+    le rapport tombait a 0,9922 -- une valeur qui VARIE avec les donnees, comme
+    doit le faire une methode independante. Le chemin correct existait deja ;
+    il n etait simplement jamais emprunte.
+
+    Returns
+    -------
+    (numpy.ndarray, str) : le vecteur d a priori, et sa provenance.
+    """
+    import numpy as np
+
+    k = max(1, min(int(nb_annees_matures), int(n)))
+    observes = [
+        float(dernier_diag[i]) / float(pct_developpe[i])
+        for i in range(k)
+        if float(pct_developpe[i]) > 0
+    ]
+    if not observes:
+        return (np.array([float(dernier_diag[i]) for i in range(n)]),
+                "diagonale observee (degrade — aucune annee mature)")
+
+    socle = sum(observes) / len(observes)
+    return (np.full(n, socle),
+            "volume moyen des %d annee(s) mature(s) — independant de l ultime "
+            "projete" % len(observes))

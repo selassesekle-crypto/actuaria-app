@@ -79,10 +79,12 @@ except ImportError:
 # S/P = charge de sinistres / cotisations, la charge incluant les
 # provisions. Definition et source dans services/sp_ratio.py.
 try:
-    from ...services.sp_ratio import loss_ratio, statut_loss_ratio
+    from ...services.sp_ratio import (
+        apriori_volume_mature, loss_ratio, statut_loss_ratio,
+    )
 except ImportError:  # execution directe du module, hors paquet
     from direction_sante_prevoyance.services.sp_ratio import (
-        loss_ratio, statut_loss_ratio,
+        apriori_volume_mature, loss_ratio, statut_loss_ratio,
     )
 
 # ── Trace console tolerante a l encodage ─────────────────────────────────────
@@ -131,8 +133,16 @@ FACTEURS_REFERENCE_ITT = [1.55, 1.28, 1.12, 1.04, 1.015]
 
 # SCR NSLT sous-catégorie 2 — Protection du revenu / ITT
 # Source : Annexe II, Règlement Délégué (UE) 2015/35
-SIGMA_NSLT_PRIMES   = 0.10   # σ primes = 10%
-SIGMA_NSLT_RESERVES = 0.11   # σ réserves = 11%
+# Risk Adjustment IFRS 17 -- les deux termes, nommes.
+RA_COC_SCR_PCT   = 0.35   # part du BE prise comme proxy de SCR
+RA_COC_RATE      = 0.06   # cout du capital EIOPA
+RA_PLANCHER_PCT  = 0.03   # plancher de place, prevoyance long terme
+# Ecarts types du segment 2 « assurance de protection du revenu »
+# (lignes d'activite 2 et 14), annexe XIV du RD (UE) 2015/35.
+# Avant le 12/09/2026 : 0,10 et 0,11, qui ne correspondent a aucun
+# segment de cette annexe.
+SIGMA_NSLT_PRIMES   = 0.085  # sigma primes brut, segment 2
+SIGMA_NSLT_RESERVES = 0.14   # sigma reserves, segment 2
 
 # Taux d'actualisation PM Rentes IP (proxy EIOPA RFR)
 TAUX_ACT_RFR = 0.025
@@ -263,8 +273,8 @@ class AgentP3ProvissionnementPrevoyance:
 
             # Totaux
             be_total = be_itt['be'] + pm_rentes + psap_ip
-            scr      = self._scr(be_total)
-            risk_adj = self._risk_adjustment(be_total)
+            scr      = self._scr(be_total, src["primes_acquises"])
+            risk_adj, source_ra = self._risk_adjustment(be_total)
             tp_prev  = be_total + risk_adj
             prov_tot = be_total + prec
             lr       = src['sinistres_payes_total'] / max(src['primes_acquises'], 1)
@@ -348,6 +358,9 @@ class AgentP3ProvissionnementPrevoyance:
                 # Totaux
                 "be_prevoyance":        round(be_total, 2),
                 "risk_adjustment":      round(risk_adj, 2),
+                # Lequel des deux termes l emporte : le cout du
+                # capital, ou le plancher. L etiquette suit la valeur.
+                "source_ra": source_ra,
                 "tp_prevoyance":        round(tp_prev, 2),
                 "provision_totale":     round(prov_tot, 2),
                 "loss_ratio":           round(lr, 4),
@@ -362,6 +375,9 @@ class AgentP3ProvissionnementPrevoyance:
                 "sorties_p4": {
                     "be_prevoyance":    round(be_total, 2),
                     "risk_adjustment":  round(risk_adj, 2),
+                    # Lequel des deux termes l emporte : le cout du
+                    # capital, ou le plancher. L etiquette suit la valeur.
+                    "source_ra": source_ra,
                     "tp_prevoyance":    round(tp_prev, 2),
                     "be_itt":           round(be_itt['be'], 2),
                     "pm_rentes_ip":     round(pm_rentes, 2),
@@ -1354,9 +1370,22 @@ class AgentP3ProvissionnementPrevoyance:
             )
 
         lr = float(np.clip(lr, 0.01, 3.0))
-        mu = np.array([float(primes[i]) * lr
-                       for i in range(n)]) if primes is not None and len(primes) >= n \
-            else ult_cl * lr
+        # ⚠️ CORRIGÉ LE 12/09/2026 — sans primes exogènes, l'a priori était
+        # `ult_cl * lr`, c'est-à-dire l'ultime projeté par Chain Ladder de
+        # l'année qu'on cherche justement à estimer. Le Bornhuetter-Ferguson
+        # dégénérait alors algébriquement en `lr x CL` : mesuré,
+        # **BF / CL = 0,680000 exactement**, soit le loss ratio a priori.
+        # Trois méthodes publiées, une seule valeur — et un « CV inter-méthodes »
+        # de 16,89 % calculé sur trois copies de la même chose.
+        #
+        # L'a priori se construit désormais sur le VOLUME OBSERVÉ des années
+        # matures, qui ne dépend pas de l'année estimée : c'est ce qui rend le
+        # BF indépendant du Chain Ladder, sa raison d'être.
+        if primes is not None and len(primes) >= n:
+            mu = np.array([float(primes[i]) * lr for i in range(n)])
+            source_apriori = "primes exogenes fournies"
+        else:
+            mu, source_apriori = apriori_volume_mature(diag, pct, n, lr)
 
         ibnr_bf = np.zeros(n)
         ult_bf  = np.zeros(n)
@@ -1706,8 +1735,25 @@ class AgentP3ProvissionnementPrevoyance:
             poids = {meth: round(v / tp, 4) for meth, v in poids.items()}
 
         be   = float(sum(poids[meth] * r for meth, (r, _) in incl.items()))
-        vals = [r for r, _ in incl.values()]
-        cvi  = float(np.std(vals) / max(np.mean(vals), 1e-9) * 100) if len(vals) > 1 else 0.0
+        # ⚠️ CORRIGÉ LE 12/09/2026 — le « CV inter-méthodes » comptait Mack
+        # comme une estimation INDÉPENDANTE du Chain Ladder. Or la réserve
+        # centrale de Mack (1993) EST celle du Chain Ladder : Mack n'apporte
+        # pas un second point, il apporte la VARIANCE autour du premier.
+        # Mesuré : `Mack − CL = 0,000000` exactement. Le CV mesurait donc
+        # l'écart entre x, x et 0,68 x — une constante arithmétique présentée
+        # comme une incertitude de modèle, et lue comme telle par l'ACPR.
+        #
+        # Le CV ne porte plus que sur des méthodes réellement distinctes, et
+        # il DIT sur lesquelles. S'il n'en reste qu'une, il n'est pas publié.
+        _COLINEAIRES = {"mack_1993", "mack"}   # meme point central que chain_ladder
+        _distinctes = {m: r for m, (r, _) in incl.items() if m not in _COLINEAIRES}
+        vals = list(_distinctes.values())
+        if len(vals) > 1:
+            cvi = float(np.std(vals) / max(np.mean(vals), 1e-9) * 100)
+            cvi_base = sorted(_distinctes)
+        else:
+            cvi = 0.0
+            cvi_base = sorted(_distinctes)
 
         boot_ok = bool(boot.get("be_bootstrap", 0) > 0)
         if boot_ok:
@@ -1724,6 +1770,10 @@ class AgentP3ProvissionnementPrevoyance:
         return {
             "be":                round(be, 2),
             "cv_inter":          round(cvi, 2),
+            # Sur QUELLES methodes le CV porte : sans cela, un lecteur
+            # ne peut pas savoir si elles sont independantes.
+            "cv_inter_methodes": cvi_base,
+            "cv_inter_exclues":  sorted(_COLINEAIRES & set(incl)),
             "methodes_incluses": list(incl.keys()),
             "poids":             poids,
             "methode_rec":       rec_n or rec,
@@ -1750,7 +1800,14 @@ class AgentP3ProvissionnementPrevoyance:
         v         = 1.0 / (1 + src["taux_actualisation"])
         annuite   = sum(v**t for t in range(1, int(dur_ip) + 1))
         # v3.0 : formule corrigée — suppression du facteur age/10 (inversé en v2)
-        nb_inv    = max(0, int(src["nb_assures"] * src["taux_ip"] * 0.60))
+        # ⚠️ CORRIGÉ LE 12/09/2026 — `int()` tronquait vers zéro une
+        # ESPÉRANCE. Mesuré : la PM valait 0 EUR jusqu'à 496 assurés, puis
+        # 482 895 EUR au 497e — un assuré de plus faisait apparaître un
+        # demi-million d'euros de provision. Une espérance de nombre
+        # d'invalides est continue : on ne la tronque pas. L'asymétrie
+        # avec `_psap_ip`, qui plancher à 1 sur la MÊME quantité, achevait
+        # de montrer qu'un des deux était faux.
+        nb_inv    = max(0.0, float(src["nb_assures"]) * float(src["taux_ip"]) * 0.60)
         return nb_inv * rente_an * annuite
 
     def _psap_ip(self, src: Dict) -> float:
@@ -1769,28 +1826,59 @@ class AgentP3ProvissionnementPrevoyance:
     #  N7 — SCR NSLT SOUS-CAT 2
     # =========================================================================
 
-    def _scr(self, be_total: float) -> Dict:
+    def _scr(self, be_total: float, primes_acquises: float = 0.0) -> Dict:
         """
-        SCR NSLT sous-catégorie 2 — Protection du revenu.
+        SCR souscription santé non-SLT — segment 2, protection du revenu.
 
-        σ_réserves = 11% (Annexe II RD 2015/35)
-        SCR_prov = 3 × σ × BE (Art. 105 S2)
+        ⚠️ CORRIGÉ LE 12/09/2026, AU TEXTE DU RÈGLEMENT.
+
+        Le code appliquait le sigma de PRIMES au Best Estimate :
+            scr_prime = 3 x SIGMA_NSLT_PRIMES x be_total
+        Or le Règlement délégué (UE) 2015/35 définit DEUX mesures de volume
+        distinctes, et celle du risque de primes ne contient pas le BE :
+
+            V(prem,s) = max(Ps ; P(last,s)) + FP(existing,s) + FP(future,s)
+              — art. 147 §3, où Ps et P(last,s) sont des PRIMES ;
+            V(res,s)  = meilleure estimation de la provision pour sinistres
+                        à payer — art. 147 §6.
+
+        Le BE était donc compté DEUX FOIS, avec deux sigmas, et l'exposition
+        aux primes était totalement absente du SCR : un portefeuille doublant
+        ses primes sans changer ses provisions voyait son SCR inchangé.
+
+        Les sigmas eux-mêmes ne venaient d'aucun segment. Annexe XIV du même
+        règlement, pour le segment 2 « assurance de protection du revenu »
+        (lignes d'activité 2 et 14) : σ primes = 8,5 %, σ réserves = 14 %.
+        Le code utilisait 10 % et 11 % — le 11 % coïncide exactement avec le
+        σ réserves du segment 3, « indemnisation des travailleurs ». Que ce
+        soit la cause reste une HYPOTHÈSE non instruite ; le fait, lui, est
+        que ces valeurs ne sont pas celles de l'activité.
         """
+        volume_primes = max(0.0, float(primes_acquises))
         scr_prov  = 3.0 * SIGMA_NSLT_RESERVES * be_total
-        scr_prime = 3.0 * SIGMA_NSLT_PRIMES   * be_total
+        scr_prime = 3.0 * SIGMA_NSLT_PRIMES   * volume_primes
         ratio     = scr_prov / max(be_total, 1e-9)
+        assiette_primes = (
+            "primes acquises" if volume_primes > 0
+            else "AUCUNE prime fournie — SCR de primes nul, a corriger")
         return {
             "scr_provisions":  round(scr_prov,  0),
             "scr_primes":      round(scr_prime, 0),
             "sigma_reserves":  SIGMA_NSLT_RESERVES,
             "sigma_primes":    SIGMA_NSLT_PRIMES,
+            "volume_primes":   round(volume_primes, 0),
+            "assiette_primes": assiette_primes,
             "ratio_scr_be":    round(ratio, 4),
-            "lob":             "NSLT sous-cat 2 — Protection du revenu",
-            "methode":         "Formule standard Art.105 S2 (Rgt 2015/35)",
+            "lob":             "Sante non-SLT segment 2 — protection du revenu",
+            "methode":         (
+                "RD 2015/35 art. 147 (mesures de volume) et art. 148 "
+                "(ecarts types), annexe XIV"),
             "message": (
-                f"SCR_prov = 3 × {SIGMA_NSLT_RESERVES:.0%} × {be_total:,.0f}€ "
-                f"= {scr_prov:,.0f}€ (ratio={ratio:.1%}). "
-                f"NSLT sous-cat 2 — Annexe II RD 2015/35."
+                f"SCR_prov = 3 x {SIGMA_NSLT_RESERVES:.1%} x BE {be_total:,.0f} EUR "
+                f"= {scr_prov:,.0f} EUR | "
+                f"SCR_primes = 3 x {SIGMA_NSLT_PRIMES:.1%} x primes "
+                f"{volume_primes:,.0f} EUR = {scr_prime:,.0f} EUR "
+                f"({assiette_primes})."
             ),
         }
 
@@ -1798,15 +1886,31 @@ class AgentP3ProvissionnementPrevoyance:
     #  N8 — RISK ADJUSTMENT IFRS 17
     # =========================================================================
 
-    def _risk_adjustment(self, be_total: float) -> float:
+    def _risk_adjustment(self, be_total: float):
         """
         Risk Adjustment IFRS 17 — méthode CoC 6% (§B91 IFRS 17).
 
         RA = SCR_morbidité × CoC = 0.35 × BE × 0.06 = 2.1% BE.
         Floor : 3% BE (pratique marché prévoyance long terme).
         """
-        ra = 0.35 * be_total * 0.06
-        return max(ra, be_total * 0.03)
+        # ⚠️ CORRIGÉ LE 12/09/2026 — le plancher mordait TOUJOURS.
+        # 0,35 x 0,06 = 2,10 %, strictement inférieur au plancher de 3,00 % :
+        # le `max` retournait le plancher pour TOUTE valeur de BE positive, et
+        # le coût du capital n'avait aucun effet. Balayage de 10 kEUR à 100 MEUR :
+        # le ratio RA/BE restait rigoureusement à 3,00 %. L'étiquette publiée
+        # annonçait pourtant « CoC 6 % ».
+        # Le calcul est conservé ; ce qui change, c'est qu'il DIT lequel des
+        # deux termes l'emporte, et que l'étiquette suit la valeur.
+        ra_coc      = RA_COC_SCR_PCT * RA_COC_RATE * be_total
+        ra_plancher = be_total * RA_PLANCHER_PCT
+        if ra_coc >= ra_plancher:
+            return ra_coc, "cout du capital (%.0f%% SCR x CoC %.0f%%) = %.2f%% du BE" % (
+                RA_COC_SCR_PCT * 100, RA_COC_RATE * 100,
+                ra_coc / max(be_total, 1e-9) * 100)
+        return ra_plancher, (
+            "PLANCHER %.1f%% du BE — le cout du capital n'en represente que "
+            "%.2f%%" % (RA_PLANCHER_PCT * 100,
+                        ra_coc / max(be_total, 1e-9) * 100))
 
     # =========================================================================
     #  N9 — HYPOTHÈSES SORTIE + RAG
