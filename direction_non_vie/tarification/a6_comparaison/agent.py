@@ -2125,6 +2125,25 @@ class AgentA6Comparaison:
 
             # ── Recalibration + Gini sur cette fenêtre ────────────────────────
             gini_wf = None
+            # ⚠️⚠️ SA JUMELLE S'INITIALISE ICI AUSSI, ET ELLE NE LE FAISAIT
+            # PAS. `gini_train_wf` n'etait affectee qu'aux deux lignes du
+            # `try` IMBRIQUE, plus bas, et elle est lue hors des DEUX `try`
+            # au moment de publier la fenetre. Quand le `try` exterieur
+            # levait avant d'atteindre ce bloc imbrique :
+            #   . a la PREMIERE fenetre -> `UnboundLocalError` ;
+            #   . aux fenetres SUIVANTES -> la valeur de la fenetre
+            #     PRECEDENTE etait publiee comme etant celle-ci.
+            # ⚠️⚠️ ET C'EST 30 % DU SCORE QUI DESIGNE LE MODELE DE
+            # PRODUCTION. Ce champ alimente `ratio_sur_apprentissage` :
+            # deux fenetres portant le Gini d'apprentissage d'un AUTRE
+            # exercice faussent la mesure du sur-apprentissage **dans le
+            # sens rassurant** -- un modele parait stable parce qu'on lui
+            # prete la stabilite d'une autre annee.
+            # ⚠️ Le commentaire de la publication promettait deja << la
+            # contrepartie d'apprentissage VOYAGE avec elle >>. *Une phrase
+            # de portee n'est pas un comportement : celle-ci ne tenait que
+            # lorsque rien n'echouait.*
+            gini_train_wf = None
             try:
                 # Une instance FRAÎCHE à chaque fenêtre — jamais réentraînée
                 # sur l'état d'une fenêtre précédente.
