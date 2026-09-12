@@ -703,6 +703,12 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
         reserve_vra  = result_a6.get('reserve_vraisemblance')
         reserve_bas  = result_a6.get('reserve_bases_gini')
         reserve_sur  = result_a6.get('reserve_surapprentissage')
+        # ⚠️⚠️ LES DEUX RÉSERVES QUI N'ATTEIGNAIENT QUE LE RAPPORT D'ÉQUIPE —
+        # 12/09/2026. Elles sont produites par A6 depuis A3 et publiées par
+        # une seule des trois fabriques. Ce classeur est SIGNÉ : son lecteur
+        # ne pouvait pas savoir qu'un modèle discriminait à l'envers.
+        anti_sel_a3  = result_a6.get('anti_selection_a3')
+        reserve_gini = result_a6.get('reserve_gini_a3')
         arb_contest  = result_a6.get('arbitrage_contestable')
         audit_trail  = result_a6.get('audit_trail', {})
 
@@ -823,6 +829,20 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
         if reserve_sur:
             _kpi(ws3, r, "⚠ Sur-apprentissage (non plafonnant)", reserve_sur,
                  statut="AMBRE", wrap=True); r += 1
+        # ⚠️⚠️ UN VERDICT, PAS UNE RÉSERVE : le modèle attribue les primes les
+        # plus faibles aux risques les plus élevés. ROUGE, comme dans le
+        # rapport d'équipe — la couleur dit la nature du fait.
+        if anti_sel_a3:
+            _kpi(ws3, r, "⚠ Anti-sélection — modèle qui discrimine à "
+                 "l'envers", anti_sel_a3, statut="ROUGE", wrap=True); r += 1
+        # ⚠️⚠️ ET CELLE-CI EST VERTE, C'EST LE POINT. Elle DÉCLARE une absence
+        # de mesure, elle ne dégrade rien. Lui donner AMBRE reproduirait,
+        # dans la couleur, la confusion que `a3/C6` a supprimée dans la
+        # valeur : un Gini non mesurable n'est pas un pouvoir discriminant
+        # nul.
+        if reserve_gini:
+            _kpi(ws3, r, "Réserve — Gini non mesuré (aucun statut dégradé)",
+                 reserve_gini, statut="VERT", wrap=True); r += 1
         # ⚠️ Le choix automatique se dit contestable — il ne bloque rien.
         if arb_contest:
             _kpi(ws3, r, "⚠ Arbitrage contestable", arb_contest,

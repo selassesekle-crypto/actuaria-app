@@ -270,7 +270,10 @@ _LABELS_SYNTHESES = (
     # diraient la même chose autrement seraient pires que le silence.
     ('anti_selection', 'Anti-sélection — modèle qui discrimine à l\'envers'),
     ('reserve_gini',   'Réserve — Gini non mesuré (aucun statut dégradé)'),
-    # ⚠️ Les trois réserves d'A6, quatrième fois que le libellé s'écrit dans
+    # ⚠️ Les QUATRE réserves d'arbitrage — la phrase disait « trois » pour
+    # quatre entrées, et A6 en produit SIX en comptant les deux ci-dessus
+    # (relu le 12/09/2026, quand le rapport modèles est passé de 4 à 6).
+    # Cinquième fois que le libellé s'écrit dans
     # le même geste que la clé. Elles ne portent AUCUN verdict : elles
     # disent ce que l'arbitrage n'a pas pu établir, et le disent au lecteur
     # du rapport qui circule — pas seulement à l'Excel A6.
@@ -708,7 +711,9 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         if _synth_res6:
             _kpi(ws5, r, "Réserve — Gini non mesuré (aucun statut dégradé)",
                  _synth_res6, statut="VERT", wrap=True); r += 1
-        # ⚠️ Les trois réserves d'A6. Statut AMBRE : contrairement à la
+        # ⚠️ Trois des SIX réserves d'A6 — les deux du dessus ont leur
+        # propre couleur, et `reserve_surapprentissage` arrive par le FILET
+        # plus bas. Statut AMBRE : contrairement à la
         # réserve de Gini au-dessus — qui déclare une ABSENCE de mesure —
         # celles-ci portent sur un arbitrage qui A EU LIEU dans des
         # conditions dégradées. La nuance est réelle et se lit à la couleur.

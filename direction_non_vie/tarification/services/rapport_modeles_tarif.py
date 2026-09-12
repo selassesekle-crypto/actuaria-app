@@ -591,10 +591,22 @@ RAISON_INCONNUE = ('Statut non VERT sans cause enregistrée — anomalie à '
                    'signaler : le rapport ne peut pas justifier son statut.')
 
 
-#: Les trois réserves d'A6, avec leur libellé. ⚠️ SOURCE UNIQUE, LUE PAR LES
+#: Les SIX réserves d'A6, avec leur libellé. ⚠️ SOURCE UNIQUE, LUE PAR LES
 #: DEUX FORMATS de ce rapport : le HTML et le Word partent tous deux au CAC,
 #: et n'en corriger qu'un laisserait la moitié du livrable signé muette —
 #: c'est exactement ce qui s'est produit pour l'avertissement DL.
+#:
+#: ⚠️⚠️ ELLES ÉTAIENT QUATRE ICI ET SIX DANS LE RAPPORT D'ÉQUIPE — 12/09/2026.
+#: La docstring de `reserves_arbitrage` raconte leur propagation : d'abord
+#: l'Excel A6 seul, puis le rapport d'équipe, puis celui-ci. *La propagation
+#: s'est arrêtée à quatre sur six.* `anti_selection_a3` et `reserve_gini_a3`
+#: ont été ajoutées à l'équipe avec des commentaires soignés, et jamais à ce
+#: catalogue — qui se dit pourtant SOURCE UNIQUE. Mesuré : zéro occurrence,
+#: par n'importe quel chemin, dans ce fichier et dans `tarif_excel`.
+#:
+#: ⚠️ ET LE COMMENTAIRE DISAIT « LES TROIS RÉSERVES » POUR QUATRE ENTRÉES.
+#: Le texte qui accompagne un comportement n'avait pas été relu quand le
+#: comportement a changé.
 RESERVES_A6 = (
     ('reserve_arbitrage', "L'arbitrage n'avait qu'un candidat"),
     ('reserve_vraisemblance', 'Vraisemblance du Gini non calibrée'),
@@ -602,6 +614,18 @@ RESERVES_A6 = (
     # ⚠️ H1 ne plafonne plus le statut ; le dire est la condition du retrait.
     ('reserve_surapprentissage',
      'Sur-apprentissage non satisfait, mais non plafonnant'),
+    # ⚠️⚠️ CES DEUX-LÀ SE LISENT COMME UNE PAIRE, ET LEUR DIFFÉRENCE EST TOUT
+    # LE SUJET : la première annonce un VERDICT — le modèle discrimine à
+    # l'envers, le statut est ROUGE —, la seconde une ABSENCE : le Gini n'a
+    # pas pu être mesuré, et RIEN n'est dégradé pour autant. Les confondre
+    # reproduirait, dans la couleur, le zéro fabriqué que `a3/C6` a
+    # supprimé dans la valeur. Libellés repris MOT POUR MOT du rapport
+    # d'équipe, qui les portait déjà : deux libellés pour un même fait
+    # seraient pires que le silence.
+    ('anti_selection_a3',
+     "Anti-sélection — modèle qui discrimine à l'envers"),
+    ('reserve_gini_a3',
+     'Réserve — Gini non mesuré (aucun statut dégradé)'),
 )
 
 TITRE_RESERVES_A6 = "RÉSERVES SUR L'ARBITRAGE"

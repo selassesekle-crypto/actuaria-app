@@ -52,8 +52,34 @@ import unittest
 import zipfile
 
 from direction_non_vie.tarification.services import rapport_equipe_tarif as RE
+from direction_non_vie.tarification.services import rapport_modeles_tarif as RM
+from direction_non_vie.tarification.services import tarif_excel as TX
 
-_CLES = ('reserve_arbitrage', 'reserve_vraisemblance', 'reserve_bases_gini')
+#: ⚠️⚠️ L'ASSIETTE SUIT LE CATALOGUE, ELLE N'EST PLUS ECRITE A LA MAIN --
+#: 12/09/2026. Elle valait `('reserve_arbitrage', 'reserve_vraisemblance',
+#: 'reserve_bases_gini')`, une liste FERMEE de trois. Consequence mesuree :
+#: `reserve_surapprentissage`, puis `anti_selection_a3` et
+#: `reserve_gini_a3`, ont ete ajoutees ailleurs sans jamais entrer ici. Le
+#: controle restait VERT pendant que la couverture se degradait de 3/3 a
+#: 3/6. *Un controle dont l'assiette est ecrite a la main atteste ce qu'on
+#: a pense a y mettre, pas ce que le systeme publie.*
+#:
+#: `RESERVES_A6` est la source unique du rapport modeles : toute reserve
+#: qui y entre est desormais EXIGEE sur les trois fabriques, sans qu'aucune
+#: ligne de ce fichier ne bouge.
+_CLES = tuple(cle for cle, _ in RM.RESERVES_A6)
+
+#: ⚠️⚠️ LE PLANCHER, ET IL FERME LE TROU QUE LA DERIVATION OUVRE. Une
+#: assiette derivee de l'objet surveille peut etre VIDEE par lui : retirer
+#: une entree de `RESERVES_A6` retirerait du meme geste l'obligation de la
+#: publier, et tout resterait vert. *Une assiette qui suit sa cible ne
+#: surveille plus sa cible.* Ces six cles sont donc gelees : le catalogue
+#: ne peut que CROITRE, et toute reserve retiree doit l'etre ici dans le
+#: MEME commit, ce qui en fait une decision et non un effet de bord.
+_PLANCHER = frozenset({
+    'reserve_arbitrage', 'reserve_vraisemblance', 'reserve_bases_gini',
+    'reserve_surapprentissage', 'anti_selection_a3', 'reserve_gini_a3',
+})
 
 
 def _docx(blob: bytes) -> str:
@@ -213,6 +239,64 @@ class T2_LaCouvertureEstEpingleeEtSesTrousNommes(unittest.TestCase):
                 self.assertIn(
                     temoin, RM.export_html({}, {}, r6),
                     f"« {cle} » n'atteint plus le rapport modeles (html)")
+
+    def test_ra_8_le_CATALOGUE_ne_peut_que_croitre(self):
+        """RA-8 : le plancher, qui empeche l'assiette de se vider.
+
+        ⚠️⚠️ `_CLES` DERIVE DE `RESERVES_A6`, et c'est ce qui fait que toute
+        reserve neuve est exigee partout sans qu'une ligne de ce fichier ne
+        bouge. Mais une assiette derivee de sa cible peut etre videe PAR sa
+        cible : retirer une entree du catalogue retirerait l'obligation de
+        la publier, et les six controles resteraient verts sur un depot
+        devenu muet. *La derivation donne la croissance, le plancher donne
+        la non-regression -- il faut les deux.*
+        """
+        cles = set(_CLES)
+        self.assertFalse(
+            _PLANCHER - cles,
+            f"{len(_PLANCHER - cles)} reserve(s) ont DISPARU du catalogue "
+            f"`RESERVES_A6` : {sorted(_PLANCHER - cles)}. Les retirer du "
+            f"plancher dans le MEME commit, ou les remettre.")
+        self.assertEqual(
+            len(cles), len(_CLES),
+            f"une cle est en DOUBLE dans `RESERVES_A6` : {_CLES}")
+        for cle, libelle in RM.RESERVES_A6:
+            with self.subTest(cle=cle):
+                self.assertTrue(
+                    (libelle or '').strip(),
+                    f"« {cle} » entre au catalogue SANS LIBELLE : le html et "
+                    f"le word iterent le catalogue, une cle sans libelle est "
+                    f"rendue NULLE PART, en silence")
+
+    def test_ra_7_le_WORD_signe_et_l_EXCEL_A6_les_portent_AUSSI(self):
+        """RA-7 : les deux surfaces que `RA-6` ne regardait pas.
+
+        ⚠️⚠️ `RA-6` ne verifiait que le HTML du rapport modeles. Or le WORD
+        part au CAC avec lui, et le depot connait deja ce piege : *n'en
+        corriger qu'un laisse la moitie du livrable signe muette -- c'est
+        exactement ce qui s'est produit pour l'avertissement DL.* Le
+        controle qui devait l'empecher ne regardait qu'une moitie.
+
+        ⚠️ ET L'EXCEL A6 EST LA SURFACE OU LES DEUX RESERVES MANQUAIENT.
+        Mesure du 12/09/2026 : `anti_selection_a3` et `reserve_gini_a3`
+        etaient produites par A6, publiees par le seul rapport d'equipe, et
+        absentes du classeur SIGNE -- son lecteur ne pouvait pas savoir
+        qu'un modele discriminait a l'envers.
+
+        ⚠️ Pas de `try/except` ici non plus : un export casse doit ROUGIR.
+        """
+        for cle in _CLES:
+            temoin = f'ZZ{cle.upper().replace("_", "")}ZZ'
+            r6 = _r6(**{cle: temoin})
+            with self.subTest(cle=cle, surface='modeles/word'):
+                self.assertIn(
+                    temoin, _docx(RM.export_word({}, {}, r6)),
+                    f"« {cle} » n'atteint pas le WORD du rapport modeles, "
+                    f"qui part au CAC avec le html")
+            with self.subTest(cle=cle, surface='excel A6'):
+                self.assertIn(
+                    temoin, _xlsx(TX.export_excel_a6(r6, audit_id='RA7')),
+                    f"« {cle} » n'atteint pas le classeur A6 SIGNE")
 
 
 if __name__ == '__main__':
