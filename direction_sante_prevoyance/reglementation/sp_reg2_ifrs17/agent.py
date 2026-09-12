@@ -35,6 +35,37 @@ from typing import Dict
 
 import numpy as np
 
+
+def _premiere_source(*candidats):
+    """Premiere source disponible, et son NOM COMPLET (agent + cle).
+
+    Chaque candidat est `(nom, source, cle)`. Si `cle` vaut None, la source
+    est traitee comme un QRT et lue par le code de ligne R0100 / C0010.
+    """
+    for nom, source, cle in candidats:
+        if not source:
+            continue
+        if cle is None:
+            valeur, trouvee = valeur_qrt(source, "R0100", "C0010")
+            if trouvee:
+                return float(valeur), nom
+            continue
+        valeur, trouvee = lire_nombre(source, cle, defaut=None)
+        if trouvee:
+            return float(valeur), nom
+    return 0.0, None
+
+
+# ── Lecture des contrats amont ──────────────────────────────────────────────
+# Les sources sont essayees DANS L ORDRE, et celle qui a servi est
+# publiee. Voir services/sp_contrats.py.
+try:
+    from ...services.sp_contrats import lire_nombre, valeur_qrt
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_contrats import (
+        lire_nombre, valeur_qrt,
+    )
+
 warnings.filterwarnings("ignore")
 logging.basicConfig(
     level=logging.INFO,
@@ -233,11 +264,50 @@ class AgentSPReg2IFRS17:
         ra_prev  = float(result_p4.get("risk_adjustment", 0))
 
         # PA depuis les sorties disponibles
-        qrt = result_s3.get("qrt_s13", {})
-        pa_sante = float(result_s3.get("primes_acquises",
-                    result_p4.get("sorties_naomie", {}).get("primes_acquises", be_sante * 2)
-                    if not qrt else be_sante * 2))
-        pa_prev  = float(result_p4.get("sorties_naomie", {}).get("primes_acquises", be_prev * 2))
+        # ⚠️ CORRIGÉ LE 12/09/2026 — UNE TERNAIRE NEUTRALISÉE.
+        # Les deux branches de la conditionnelle finissaient sur la MÊME
+        # expression `be_sante * 2` : le test `if not qrt` ne servait à rien,
+        # et les primes valaient TOUJOURS deux fois le Best Estimate, quelle
+        # que soit la présence du QRT. Syntaxiquement correct, sémantiquement
+        # vide — aucun compilateur ne le signale, aucune relecture rapide ne
+        # le voit.
+        #
+        # Mesuré : primes acquises réelles 474 565 EUR, valeur utilisée
+        # 278 858 EUR (= 2 x BE), soit −41,2 % sur l'assiette qui sert à
+        # établir la marge de service contractuel. Conséquence algébrique
+        # vérifiée : avec PA = 2 x BE, la CSM se réduit à BE − RA exactement
+        # (137 294 = 139 429 − 2 136). La CSM n'était plus une marge, c'était
+        # une réécriture du BE.
+        #
+        # Les sources sont désormais essayées DANS L'ORDRE, et celle qui a
+        # servi est publiée.
+        # ⚠️ La provenance doit NOMMER L'AGENT, pas seulement la clé.
+        # Une première version de ce correctif rendait « primes_acquises » sans
+        # préciser d'où : elle est allée chercher les primes de la PRÉVOYANCE
+        # pour la branche santé, et l'étiquette ne permettait pas de le voir.
+        # Une provenance qui n'identifie pas sa source ne vaut guère mieux
+        # qu'une absence de provenance.
+        pa_sante, source_pa_sante = _premiere_source(
+            ("S3.primes_acquises", result_s3, "primes_acquises"),
+            ("S3.qrt_s13 R0100", result_s3.get("qrt_s13"), None),
+        )
+        if source_pa_sante is None:
+            pa_sante = be_sante * 2
+            source_pa_sante = (
+                "REPLI 2 x BE — aucune prime acquise sante disponible ; la CSM "
+                "calculee sur cette base n'est PAS une marge")
+        pa_sante = float(pa_sante)
+
+        pa_prev, source_pa_prev = _premiere_source(
+            ("P4.sorties_naomie.primes_acquises",
+             result_p4.get("sorties_naomie", {}), "primes_acquises"),
+            ("P4.primes_acquises", result_p4, "primes_acquises"),
+        )
+        if source_pa_prev is None:
+            pa_prev = be_prev * 2
+            source_pa_prev = (
+                "REPLI 2 x BE — aucune prime acquise prevoyance disponible")
+        pa_prev = float(pa_prev)
 
         if prime_charged > 0:
             # prime_charged override global
@@ -249,6 +319,10 @@ class AgentSPReg2IFRS17:
             "be_sante": be_sante, "ra_sante": ra_sante,
             "be_prev":  be_prev,  "ra_prev":  ra_prev,
             "pa_sante": pa_sante, "pa_prev":  pa_prev,
+            # D ou viennent les primes : un lecteur doit savoir si la
+            # CSM repose sur des primes reelles ou sur un repli.
+            "source_pa_sante": source_pa_sante,
+            "source_pa_prev":  source_pa_prev,
             "be_total": be_sante + be_prev,
         }
 

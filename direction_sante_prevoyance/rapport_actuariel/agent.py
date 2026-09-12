@@ -80,6 +80,14 @@ except ImportError:
 from .m5_excel_sp  import export_excel_sp
 from .m5_rapport_sp import export_word_sp, export_pdf_sp
 
+# ── Lecture des contrats amont ──────────────────────────────────────────────
+try:
+    from ..services.sp_contrats import lire_premiere_cle
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_contrats import (
+        lire_premiere_cle,
+    )
+
 # ── Avis actuariel ──────────────────────────────────────────────────────────
 # Un avis ne se rend pas sur une donnee absente. Voir services/sp_avis.py
 # pour la mesure qui a impose ce troisieme etat.
@@ -313,6 +321,7 @@ class AgentSPRapportActuariel:
         # ── Prévoyance ────────────────────────────────────────────────────────
         be_prev = ra_prev = scr_prev = mcr_prev = pa_prev = 0
         lr_prev = psap_prev = pm_rentes = ibnr_prev = 0
+        source_ibnr_prev = "aucune donnee P3"
         taux_itt = taux_ip = 0
         nb_assures_prev = 0
         age_moyen_prev  = 0
@@ -338,7 +347,22 @@ class AgentSPRapportActuariel:
             modules.append("P3")
             psap_prev  = float(r_p3.get("psap_total", 0))
             pm_rentes  = float(r_p3.get("pm_rentes_ip", 0))
-            ibnr_prev  = float(r_p3.get("psap_total", 0)) * 0.30
+            # ⚠️ CORRIGÉ LE 12/09/2026 — l'IBNR prévoyance était FABRIQUÉ à
+            # 30 % de la PSAP, par un coefficient littéral sans source ni
+            # commentaire, alors que P3 CALCULE un IBNR par triangle. Trois
+            # chiffres pour la même grandeur coexistaient dans le dépôt : la
+            # valeur calculée, ce 30 %, et le « IBNR_ITT=35 %, IBNR_IP=20 % »
+            # du registre d'hypothèses. On reprend celui que P3 a calculé ;
+            # à défaut seulement, on replie EN LE DISANT.
+            ibnr_prev, _trouve_ibnr = lire_premiere_cle(
+                r_p3, "ibnr", "ibnr_itt", "be_itt")
+            if _trouve_ibnr is None:
+                ibnr_prev = float(r_p3.get("psap_total", 0)) * 0.30
+                source_ibnr_prev = (
+                    "REPLI 30 % de la PSAP — P3 ne publie pas d'IBNR ; "
+                    "coefficient sans base, a remplacer")
+            else:
+                source_ibnr_prev = "P3.%s" % _trouve_ibnr
             s4_p3      = r_p3.get("sorties_p4", {})
             ra_prev    = float(s4_p3.get("risk_adjustment", 0))
             be_prev    = float(s4_p3.get("be_prevoyance", 0))
@@ -427,6 +451,7 @@ class AgentSPRapportActuariel:
             "pa_prev":    pa_prev,  "lr_prev":     lr_prev,
             "psap_prev":  psap_prev, "pm_rentes_ip": pm_rentes,
             "ibnr_prev":  ibnr_prev,
+            "source_ibnr_prev": source_ibnr_prev,
             "nb_assures_prev": nb_assures_prev,
             "age_moyen_prev":  age_moyen_prev,
             "taux_itt":   taux_itt, "taux_ip": taux_ip,

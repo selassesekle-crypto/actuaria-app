@@ -79,6 +79,21 @@ SEUIL_SCR_CIBLE = 130.0   # % — seuil cible pratique marché
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+def _statut_section_sfcr(section, conforme_scr, conforme_mcr):
+    """Statut d une section du SFCR, CALCULE et non cherche dans le texte.
+
+    La section E porte la gestion du capital : elle ne peut pas etre marquee
+    conforme quand les ratios ne le sont pas. Les autres sections sont
+    descriptives : elles ne portent pas de verdict, et l afficher comme
+    « conforme » serait deja une affirmation de trop.
+    """
+    code = str((section or {}).get("code", "")).strip().upper()
+    if code == "E":
+        return "✅" if (conforme_scr and conforme_mcr) else "❌"
+    return "ℹ️"
+
+
+
 class AgentSPReg1Solvabilite2:
     """
     Agent SP-REG1 — Solvabilité 2 Santé-Prévoyance.
@@ -207,6 +222,7 @@ class AgentSPReg1Solvabilite2:
         except Exception as e:
             self.logger.error(f"[{aid}] ERREUR : {e}", exc_info=True)
             return self._erreur(str(e), aid)
+
 
     # =========================================================================
     # 1. EXTRACTION
@@ -463,13 +479,26 @@ class AgentSPReg1Solvabilite2:
                 "Le système de gouvernance repose sur une organisation à quatre directions "
                 "indépendantes (Non-Vie, Vie/EP-RE, Santé-Prévoyance, Data) sous supervision "
                 "de SOFIA (Directeur Général IA). La Direction Santé-Prévoyance est dirigée "
-                "par Amira, avec deux équipes : Santé (Chiara, agents S1-S3) et Prévoyance "
-                "(Diallo, agents P1-P4). La fonction actuarielle est assurée par l'ensemble "
-                "des agents avec audit trail traçable."
+                "avec deux equipes : Sante (agents S1-S3) et Prevoyance (agents P1-P4). "
+                "Les calculs sont produits par ces agents avec audit trail "
+                "tracable ; la FONCTION ACTUARIELLE au sens de la directive "
+                "est exercee par une personne physique habilitee, a renseigner."
             ),
             "donnees_cles": {
-                "structure": "4 directions · autonomie absolue",
-                "actuaire_designe": "Direction SP — Amira",
+                # ⚠️ DEUX MENTIONS RETIRÉES LE 12/09/2026.
+                # « 4 directions · autonomie absolue » : la mesure la
+                # contredit — deux imports croisés subsistent, et sans
+                # eux le HTML perd 58 % de son contenu. Une affirmation
+                # de portée non tenue dans un document déposé est un
+                # risque gratuit.
+                # « actuaire désigné » nommant un agent logiciel : la
+                # fonction actuarielle est exercée par une PERSONNE.
+                # Un SFCR qui nomme un programme à cette place expose
+                # l'entité.
+                "structure": "Direction Sante-Prevoyance",
+                "actuaire_designe": (
+                    "A RENSEIGNER — la fonction actuarielle est exercee "
+                    "par une personne physique habilitee"),
             },
         })
 
@@ -688,7 +717,15 @@ class AgentSPReg1Solvabilite2:
         L += ["📋 SFCR — SECTIONS A-E (Directive S2 Art.51)", "─"*50]
         for s in sfcr:
             contenu_s = s.get("contenu", "")
-            status = "✅" if ("conforme" in contenu_s.lower() or "✅" in contenu_s) else "ℹ️"
+            # ⚠️ CORRIGÉ LE 12/09/2026 — le statut d'une section du SFCR était
+            # décidé en cherchant la CHAÎNE « conforme » dans son TEXTE. Une
+            # section dont le texte dit « non conforme » CONTIENT la
+            # sous-chaîne « conforme » et sortait donc… conforme. Le contrôle
+            # lisait la prose, pas le comportement. Mesuré : un SFCR à ratio de
+            # couverture du SCR de 46,7 %, avec un RAG global ROUGE, gardait un
+            # badge ✅ en section E « Gestion du capital ».
+            status = _statut_section_sfcr(
+                s, src["ratio_scr"] >= 100.0, src["ratio_mcr"] >= 100.0)
             L.append(f"  {status} Section {s['code']} — {s['titre']}")
 
         # ORSA
