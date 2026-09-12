@@ -64,6 +64,16 @@ except ImportError:  # execution directe du module, hors paquet
         mcr_lineaire_segment,
     )
 
+# ── Lecture d un contrat amont ─────────────────────────────────────────────
+# Une cle lue sous un nom que personne ne produit rend son repli, pour
+# toujours, sans rien dire. Voir services/sp_contrats.py.
+try:
+    from ...services.sp_contrats import lire_premiere_cle
+except ImportError:  # execution directe du module, hors paquet
+    from direction_sante_prevoyance.services.sp_contrats import (
+        lire_premiere_cle,
+    )
+
 # ── Trace console tolerante a l encodage ─────────────────────────────────────
 # `tracer` remplace `print` : identique a l usage, mais incapable de lever sur
 # une console etroite (cp1252). Sans lui, un simple caractere de statut faisait
@@ -159,10 +169,20 @@ class AgentP4ReportingPrevoyance:
 
             # ── 2. PROVISIONS TECHNIQUES PRÉVOYANCE ──────────────────────────
             be_prev  = src['be_prevoyance']
-            # RA : priorité au calcul CoC de P3 (IFRS 17 conforme)
-            # Fallback : COC_RA × BE si P3 non fourni
-            ra_p3    = src.get('risk_adjustment_p3', 0)
-            risk_adj = ra_p3 if ra_p3 > 0 else max(be_prev * COC_RA, be_prev * 0.03)
+            # RA : priorité au calcul CoC de P3 (IFRS 17 conforme).
+            # ⚠️ CORRIGÉ LE 12/09/2026 — cette priorité était ANNONCÉE et
+            # jamais tenue : la clé lue s'appelait `risk_adjustment_p3`, un nom
+            # que P3 n'a jamais produit. Le repli s'appliquait donc dans 100 %
+            # des exécutions, et le QRT S.14 publiait 908 € là où P3 avait
+            # calculé 454 € — exactement le double, pour la même grandeur.
+            # P3 publie `risk_adjustment` dans `sorties_p4`, avec `source_ra`.
+            risk_adj = src['risk_adjustment']
+            source_ra = src['source_ra']
+            if risk_adj <= 0:
+                risk_adj = max(be_prev * COC_RA, be_prev * 0.03)
+                source_ra = (
+                    "repli P4 : max(%.0f %% ; 3 %%) du BE — P3 n'a pas fourni "
+                    "de Risk Adjustment" % (COC_RA * 100))
             tp_prev  = be_prev + risk_adj
 
             # ── 3. SCR INVALIDITÉ EIOPA ───────────────────────────────────────
@@ -217,6 +237,7 @@ class AgentP4ReportingPrevoyance:
                 # ── Provisions ──────────────────────────────────────────────
                 'be_prevoyance':    round(be_prev, 2),
                 'risk_adjustment':  round(risk_adj, 2),
+                'source_ra':        source_ra,
                 'tp_prevoyance':    round(tp_prev, 2),
                 'pm_rentes_ip':     src['pm_rentes_ip'],
                 'psap_total':       src['psap_total'],
@@ -314,8 +335,19 @@ class AgentP4ReportingPrevoyance:
                 f"Fournissez fonds_propres= pour un résultat fiable."
             )
 
+        # Risk Adjustment calcule par P3. La lecture cherche le nom canonique
+        # puis les orthographes historiques, et DIT lequel a servi : un repli
+        # muet est exactement ce qui a fait publier 908 EUR pour 454 EUR.
+        ra_p3, cle_ra = lire_premiere_cle(
+            p4, "risk_adjustment", "risk_adjustment_p3", "ra_prevoyance")
+        source_ra = p4.get("source_ra") or ""
+        if cle_ra and not source_ra:
+            source_ra = "P3.sorties_p4.%s" % cle_ra
+
         return {
             'be_prevoyance':  be_prev,
+            'risk_adjustment': ra_p3,
+            'source_ra':      source_ra,
             'fonds_propres_estimes': fpp_estime,
             'fonds_propres_mention': fpp_mention,
             'pm_rentes_ip':   pm_rentes,
@@ -831,27 +863,29 @@ class AgentP4ReportingPrevoyance:
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
+    from direction_sante_prevoyance.services.sp_console import (
+        repertoire_demonstration)
+    _DEMO = repertoire_demonstration('p4')
     tracer("="*70)
     tracer("  P4 VALENTIN v2.0 — DÉMO REPORTING PRÉVOYANCE QRT S.14")
     tracer("  SCR Invalidité EIOPA | MCR prévoyance | QRT S.14.01")
     tracer("="*70)
 
-    import sys; sys.path.insert(0,'/home/claude')
     from direction_sante_prevoyance.prevoyance.p1_tarification.agent import AgentP1TarificationPrevoyance
     from direction_sante_prevoyance.prevoyance.p2_tables_morbidite.agent import AgentP2TablesMorbidite
     from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvissionnementPrevoyance
 
-    r1 = AgentP1TarificationPrevoyance(models_path='/tmp',audit_path='/tmp',verbose=False).run(
+    r1 = AgentP1TarificationPrevoyance(models_path=_DEMO/'p1', audit_path=_DEMO/'p1', verbose=False).run(
         age=40, salaire_brut=45_000, categorie='employe',
         franchise_jours=90, taux_rente_ipp=0.60, duree_contrat=20,
         chargement_pct=0.20, generer_graphiques=False)
-    r2 = AgentP2TablesMorbidite(models_path='/tmp',audit_path='/tmp',verbose=False).run(
+    r2 = AgentP2TablesMorbidite(models_path=_DEMO/'p2', audit_path=_DEMO/'p2', verbose=False).run(
         result_p1=r1, horizon_ans=10, generer_graphiques=False)
-    r3 = AgentP3ProvissionnementPrevoyance(models_path='/tmp',audit_path='/tmp',verbose=False).run(
+    r3 = AgentP3ProvissionnementPrevoyance(models_path=_DEMO/'p3', audit_path=_DEMO/'p3', verbose=False).run(
         result_p1=r1, result_p2=r2, generer_graphiques=False)
 
     agent = AgentP4ReportingPrevoyance(
-        models_path='/tmp/p4/models', audit_path='/tmp/p4/audit', verbose=True
+        models_path=_DEMO/'p4'/'models', audit_path=_DEMO/'p4'/'audit', verbose=True
     )
     r = agent.run(result_p1=r1, result_p2=r2, result_p3=r3,
                   fonds_propres=5_000_000, generer_graphiques=False)

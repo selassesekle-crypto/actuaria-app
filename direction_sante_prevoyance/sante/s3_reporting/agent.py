@@ -577,6 +577,9 @@ class AgentS3ReportingSante:
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
+    from direction_sante_prevoyance.services.sp_console import (
+        repertoire_demonstration)
+    _DEMO = repertoire_demonstration('s3')
     tracer("="*70)
     tracer("  S3 BINTA v2.0 — DÉMO REPORTING SANTÉ QRT S.13")
     tracer("  SCR NSLT EIOPA | MCR | Ratio SCR/MCR | QRT S.13.01")
@@ -594,7 +597,7 @@ if __name__ == '__main__':
     }
 
     agent = AgentS3ReportingSante(
-        models_path='/tmp/s3/models', audit_path='/tmp/s3/audit', verbose=True
+        models_path=_DEMO/'models', audit_path=_DEMO/'models', verbose=True
     )
     r = agent.run(result_s1=r_s1, result_s2=r_s2,
                   fonds_propres=2_000_000.0, generer_graphiques=False)

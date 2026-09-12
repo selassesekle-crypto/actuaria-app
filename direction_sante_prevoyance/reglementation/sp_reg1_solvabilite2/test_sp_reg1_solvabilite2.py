@@ -93,7 +93,12 @@ def _result_p4(
 
 
 def _agent():
-    return AgentSPReg1Solvabilite2(audit_path="/tmp/sp_reg1_tests", verbose=False)
+    # Un chemin POSIX litteral n est pas invalide sous Windows : il se
+    # resout a la racine du disque. Voir services/sp_console.py.
+    from direction_sante_prevoyance.services.sp_console import (
+        repertoire_demonstration)
+    return AgentSPReg1Solvabilite2(
+        audit_path=repertoire_demonstration("sp_reg1_tests"), verbose=False)
 
 
 # ── TEST 1 — Structure de base et contrat de sortie ───────────────────────────

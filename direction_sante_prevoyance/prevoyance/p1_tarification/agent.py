@@ -736,13 +736,16 @@ class AgentP1TarificationPrevoyance:
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
+    from direction_sante_prevoyance.services.sp_console import (
+        repertoire_demonstration)
+    _DEMO = repertoire_demonstration('p1')
     tracer("="*70)
     tracer("  P1 AXEL v2.0 — DÉMO TARIFICATION PRÉVOYANCE ITT/IP/DÉCÈS")
     tracer("  BCAC 2019 | TD88-90 | TH0002 | Branchement A2 | ANI 2013")
     tracer("="*70)
 
     agent = AgentP1TarificationPrevoyance(
-        models_path='/tmp/p1/models', audit_path='/tmp/p1/audit', verbose=True
+        models_path=_DEMO/'models', audit_path=_DEMO/'models', verbose=True
     )
     r = agent.run(
         result_a2=None,

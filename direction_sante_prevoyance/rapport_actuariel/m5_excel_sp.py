@@ -140,23 +140,44 @@ def _onglet_sinistralite(wb, data: Dict):
     t.fill = _fill(NAVY); t.font = _font(bold=True, color=OR)
     t.alignment = _align("center")
 
+    # ⚠️ CORRIGÉ LE 12/09/2026 — la colonne « LR poste » lisait `lr_poste`,
+    # une clé qu'AUCUN agent du périmètre ne produit : elle affichait « — »
+    # sur toutes les lignes, de toutes les exécutions, depuis toujours.
+    # Un S/P par poste exigerait une CLÉ DE RÉPARTITION DES PRIMES par poste,
+    # que personne ne calcule ; l'inventer serait fabriquer de l'actuariat.
+    # La colonne porte donc une grandeur RÉELLEMENT calculable à partir des
+    # mêmes données : la part de chaque poste dans la charge totale.
     _header_row(ws, 2, ["Poste", "Fréquence/an", "Coût moyen (€)", "Charge mutuelle (€)",
-                          "Remb. SS (%)", "LR poste", "Source"])
+                          "Remb. SS (%)", "Part de la charge", "Source"])
 
     postes = data.get("sinistralite_par_poste", {})
+
+    def _charge(infos):
+        if isinstance(infos, dict):
+            return float(infos.get("charge_mutuelle", 0) or 0)
+        try:
+            return float(infos)
+        except (TypeError, ValueError):
+            return 0.0
+
+    charge_totale = sum(_charge(i) for i in postes.values())
+
     for r, (poste, infos) in enumerate(postes.items(), 3):
+        part = (_charge(infos) / charge_totale) if charge_totale > 0 else None
+        cell_part = f"{part:.1%}" if part is not None else "—"
         if isinstance(infos, dict):
             _data_row(ws, r, [
                 poste.capitalize(),
                 f"{infos.get('frequence_an', 0):.2f}",
                 f"{infos.get('cout_acte', infos.get('cout_moyen',0)):,.2f}",
                 f"{infos.get('charge_mutuelle', 0):,.2f}",
-                f"{infos.get('remb_ss', infos.get('taux_ss',0))*100:.1f}%",
-                f"{infos.get('lr_poste', 0):.1%}" if infos.get("lr_poste") else "—",
+                f"{infos.get('remb_ss', 0)*100:.1f}%",
+                cell_part,
                 "DREES 2023",
             ])
         else:
-            _data_row(ws, r, [poste.capitalize(), "—", "—", f"{infos:,.2f}", "—", "—", "DREES/FNMF"])
+            _data_row(ws, r, [poste.capitalize(), "—", "—", f"{infos:,.2f}", "—",
+                              cell_part, "DREES/FNMF"])
 
     _set_col_widths(ws, [20, 14, 16, 18, 14, 12, 14])
     return ws

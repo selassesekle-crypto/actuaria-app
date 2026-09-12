@@ -848,6 +848,9 @@ class AgentS2ProvissionnementSante:
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
+    from direction_sante_prevoyance.services.sp_console import (
+        repertoire_demonstration)
+    _DEMO = repertoire_demonstration('s2')
     tracer("="*70)
     tracer("  S2 SELMA v2.0 — DÉMO PROVISIONNEMENT SANTÉ")
     tracer("  PSAP par poste | IBNR cadences santé | PREC | Triangle")
@@ -882,7 +885,7 @@ if __name__ == '__main__':
     }
 
     agent = AgentS2ProvissionnementSante(
-        models_path='/tmp/s2/models', audit_path='/tmp/s2/audit', verbose=True
+        models_path=_DEMO/'models', audit_path=_DEMO/'models', verbose=True
     )
     r = agent.run(result_s1=r_s1, generer_graphiques=False)
 

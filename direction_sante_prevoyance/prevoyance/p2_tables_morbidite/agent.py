@@ -882,6 +882,9 @@ class AgentP2TablesMorbidite:
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
+    from direction_sante_prevoyance.services.sp_console import (
+        repertoire_demonstration)
+    _DEMO = repertoire_demonstration('p2')
     tracer("="*70)
     tracer("  P2 RAYAN v2.0 — DÉMO TABLES MORBIDITÉ")
     tracer("  Chaîne de Markov 4 états | BCAC 2019 | TD88-90")
@@ -901,7 +904,7 @@ if __name__ == '__main__':
     }
 
     agent = AgentP2TablesMorbidite(
-        models_path='/tmp/p2/models', audit_path='/tmp/p2/audit', verbose=True
+        models_path=_DEMO/'models', audit_path=_DEMO/'models', verbose=True
     )
     r = agent.run(result_p1=r_p1, horizon_ans=10, generer_graphiques=False)
 

@@ -2292,6 +2292,9 @@ class AgentP3ProvissionnementPrevoyance:
 # =============================================================================
 
 if __name__ == "__main__":
+    from direction_sante_prevoyance.services.sp_console import (
+        repertoire_demonstration)
+    _DEMO = repertoire_demonstration('p3')
     tracer("=" * 70)
     tracer("  P3 ÉLODIE v3.0 — PROVISIONNEMENT PRÉVOYANCE")
     tracer("  Triangle ITT | CL | Mack 1993 | BF CTIP | Bootstrap ODP")
@@ -2315,7 +2318,7 @@ if __name__ == "__main__":
     }
 
     agent = AgentP3ProvissionnementPrevoyance(
-        models_path="/tmp/p3/models", audit_path="/tmp/p3/audit", verbose=True
+        models_path=_DEMO/'models', audit_path=_DEMO/'models', verbose=True
     )
     r = agent.run(result_p1=r_p1, result_p2=r_p2, generer_graphiques=False)
 

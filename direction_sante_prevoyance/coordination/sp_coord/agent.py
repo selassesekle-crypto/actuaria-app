@@ -511,7 +511,12 @@ class AgentSPCoord:
             "📊 SCR CONSOLIDÉ (ρ=0.25 EIOPA Annexe IV)", "─" * 50,
             f"  SCR Santé NSLT           : {src['scr_sante']:>14,.0f}€",
             f"  SCR Invalidité SLT       : {src['scr_prev']:>14,.0f}€",
-            f"  Bénéfice diversification : {div:>14,.0f}€  ({div/(src['scr_sante']+src['scr_prev'])*100:.1f}%)",
+            # ⚠️ CORRIGÉ LE 12/09/2026 — seule division du fichier sans garde,
+            # alors que les onze autres en portent une. L'asymétrie signalait
+            # l'oubli : un SCR consolidé nul levait `ZeroDivisionError` et
+            # AUCUN document n'était produit. Même garde que ligne 389.
+            f"  Bénéfice diversification : {div:>14,.0f}€  "
+            f"({div / max(src['scr_sante'] + src['scr_prev'], 1) * 100:.1f}%)",
             f"  SCR Consolidé            : {scr:>14,.0f}€",
             f"  MCR Consolidé            : {mcr:>14,.0f}€",
             f"  Fonds Propres            : {src['fpp']:>14,.0f}€",

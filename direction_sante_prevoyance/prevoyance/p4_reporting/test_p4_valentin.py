@@ -61,12 +61,35 @@ def _impl_test_p4_scr_invalidite_positif(pipeline_p4):
 def _impl_test_p4_mcr_plancher_art129(pipeline_p4):
     """MCR prévoyance soumis au plancher absolu 3.7M€ — S2 Art.129.
     Sur un petit portefeuille, le plancher est naturellement actif.
+
+    ⚠️ CORRIGÉ LE 12/09/2026 — CE TEST NE POUVAIT PAS ÉCHOUER. Il lisait
+    `mcr_prevoyance`, une clé que P4 n'a jamais produite : la lecture rendait
+    son repli 0, et l'assertion était `0 >= 0`. Elle serait restée verte si le
+    MCR avait valu zéro, s'il avait disparu, ou s'il n'avait jamais été
+    calculé. Le test portait le nom du plancher et ne le vérifiait pas.
     """
     *_, r_p4 = pipeline_p4
-    mcr = r_p4.get("mcr_prevoyance", 0)
-    assert mcr >= 0, "MCR doit être ≥ 0"
-    # MCR >= plancher si formulaire actif — art. 248 par. 1 (plancher
-    # absolu) et annexe XIX pour les coefficients, PAS l article 252.
+    assert "mcr" in r_p4, (
+        "P4 doit publier `mcr` : c'est la grandeur que ce test surveille, et "
+        "une cle absente rendrait l assertion vide de sens.")
+    mcr = r_p4["mcr"]
+    lineaire = r_p4["mcr_lineaire"]
+    regime = r_p4["mcr_regime"]
+
+    # Le plancher ABSOLU de la branche protection du revenu — art. 248 par. 1
+    # (plancher absolu) et annexe XIX pour les coefficients, PAS l article 252.
+    PLANCHER_ABS = 3_700_000.0
+    assert mcr >= PLANCHER_ABS, (
+        f"MCR = {mcr:,.0f} EUR < plancher absolu {PLANCHER_ABS:,.0f} EUR")
+    assert regime == "PLANCHER_ACTIF", (
+        f"Sur ce portefeuille le MCR lineaire vaut {lineaire:,.0f} EUR, tres "
+        f"en dessous du plancher : le regime doit etre PLANCHER_ACTIF, "
+        f"obtenu {regime!r}")
+    assert lineaire < PLANCHER_ABS, (
+        f"MCR lineaire = {lineaire:,.0f} EUR : si le lineaire depassait le "
+        f"plancher, ce test ne mesurerait plus ce qu il annonce")
+    assert r_p4["mcr_reference"], (
+        "Le MCR doit publier la reference de ses coefficients (annexe XIX)")
     assert r_p4["success"], "P4 doit réussir même avec plancher MCR"
 
 

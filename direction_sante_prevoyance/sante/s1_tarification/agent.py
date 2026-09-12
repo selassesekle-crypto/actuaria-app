@@ -797,13 +797,16 @@ class AgentS1TarificationSante:
 
 # ══════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
+    from direction_sante_prevoyance.services.sp_console import (
+        repertoire_demonstration)
+    _DEMO = repertoire_demonstration('s1')
     tracer("="*70)
     tracer("  S1 LÉONIE v2.0 — DÉMO TARIFICATION FRAIS DE SANTÉ")
     tracer("  DREES 2023 | ANI 2013 | Branchement A2 | Standard ActuarIA")
     tracer("="*70)
 
     agent = AgentS1TarificationSante(
-        models_path='/tmp/s1/models', audit_path='/tmp/s1/audit', verbose=True
+        models_path=_DEMO/'models', audit_path=_DEMO/'models', verbose=True
     )
 
     # Démo sans données (paramètres manuels)

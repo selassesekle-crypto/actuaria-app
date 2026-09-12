@@ -1441,11 +1441,18 @@ class AgentRapportPrevoyance:
         qx            = taux_sin.get("deces", "—")
 
         # ── Markov (P2) ──
+        # ⚠️ CORRIGÉ LE 12/09/2026 — le second niveau de repli lisait `m6` et
+        # `m12`, deux noms que P2 n'a jamais produits : il publiait donc les
+        # littéraux 0,40 et 0,20 comme s'ils étaient mesurés, dès que le
+        # premier chemin manquait. P2 publie `mois_6` et `mois_12`.
+        # Aujourd'hui le premier chemin aboutit, ce repli est mort — c'est
+        # précisément pourquoi il pouvait mentir sans qu'on s'en aperçoive.
         sorties_p3    = (p2 or {}).get("sorties_p3", {})
+        maintien_p2   = (p2 or {}).get("prob_maintien", {}) or {}
         prob_m6       = float(sorties_p3.get("prob_maintien_6m",
-                              (p2 or {}).get("prob_maintien", {}).get("m6", 0.40)))
+                              maintien_p2.get("mois_6", 0.0)) or 0.0)
         prob_m12      = float(sorties_p3.get("prob_maintien_12m",
-                              (p2 or {}).get("prob_maintien", {}).get("m12", 0.20)))
+                              maintien_p2.get("mois_12", 0.0)) or 0.0)
         esp_itt       = sorties_p3.get("esperance_duree_itt",
                         (p2 or {}).get("esperances", {}).get("esperance_duree_itt", "—"))
         esp_ip        = sorties_p3.get("esperance_duree_ip_ans",

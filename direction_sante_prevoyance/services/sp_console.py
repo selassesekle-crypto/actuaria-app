@@ -40,7 +40,8 @@ Les deux sont conservés : ils ne couvrent pas la même surface.
 """
 import sys
 
-__all__ = ["tracer", "securiser_sortie", "ecrire_console", "sortie_sure"]
+__all__ = ["tracer", "securiser_sortie", "ecrire_console", "sortie_sure",
+           "repertoire_demonstration"]
 
 
 def tracer(*valeurs, sep=" ", end="\n", file=None, flush=False):
@@ -168,3 +169,31 @@ def sortie_sure(encodage=None):
     """
     enc = encodage or getattr(sys.stdout, "encoding", None) or "utf-8"
     return enc.lower().replace("_", "-") not in _ENCODAGES_ETROITS
+
+
+def repertoire_demonstration(code_agent):
+    r"""Répertoire d'écriture des blocs de démonstration `__main__`.
+
+    LE DÉFAUT FERMÉ (D15)
+    Les sept blocs de démonstration écrivaient dans des chemins POSIX
+    littéraux — `/tmp/p1/models`, `/tmp/p4/audit`. Sous Windows ces chemins
+    ne sont pas invalides : ils se résolvent en `C:\tmp\...`, un répertoire
+    créé à la RACINE DU DISQUE, hors de tout ménage. Mesuré le 12/09/2026 :
+    `C:\tmp` contenait **92 707 fichiers pour 117,9 Mo** — dont la quasi-
+    totalité vient d'une autre direction, mais le mécanisme est identique ici.
+
+    `p4_reporting` portait en plus un `sys.path.insert(0, '/home/claude')` :
+    un chemin de machine de développement, en TÊTE du chemin de recherche,
+    donc prioritaire sur le dépôt lui-même. Inerte sous Windows puisque le
+    répertoire n'existe pas — mais le dépôt est public, et sur une machine où
+    ce répertoire existe, un module homonyme y serait chargé à la place du vrai.
+
+    Cette fonction rend un répertoire temporaire RÉEL, celui que le système
+    d'exploitation désigne, sous un nom qui dit à quoi il sert.
+    """
+    import tempfile
+    from pathlib import Path
+
+    chemin = Path(tempfile.gettempdir()) / ("actuaria_demo_%s" % code_agent)
+    chemin.mkdir(parents=True, exist_ok=True)
+    return chemin

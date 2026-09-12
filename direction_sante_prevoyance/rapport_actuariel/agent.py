@@ -595,6 +595,13 @@ class AgentSPRapportActuariel:
             "be_total":        round(be_total, 2),
             "ra_total":        round(ra_total, 2),
             "tp_total":        round(tp_total, 2),
+            # ⚠️ AJOUTÉ LE 12/09/2026. L'onglet « Provisions » du classeur
+            # signé lit `tp_sante` et `tp_prev` ; personne ne les produisait.
+            # La ligne « TP = BE + RA » sortait donc VIDE dans les trois
+            # colonnes, sur une feuille intitulée « Provisions techniques —
+            # IFRS 17 + Solvabilité 2 », et rien ne disait pourquoi.
+            "tp_sante":        round(m1["be_sante"] + m1["ra_sante"], 2),
+            "tp_prev":         round(m1["be_prev"] + m1["ra_prev"], 2),
             "scr_consolide":   round(scr, 2),
             "mcr_consolide":   round(mcr, 2),
             "fonds_propres":   round(fpp, 2),
