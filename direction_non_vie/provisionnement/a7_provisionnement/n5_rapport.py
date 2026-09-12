@@ -487,14 +487,11 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         # j'avais ecrit ne visait que le classeur, sur la foi de l'audit
         # qui ne cite que lui. Le controle a elargi l'assiette aux trois
         # modules de livrable et a rendu ce site-ci.
-        # ⚠️ UN AUTRE SITE SIGNALE, NON TOUCHE : `actuaria_app.py` (deux
-        # fois) -- l'application Streamlit disparait a la migration et n'est
-        # pas dans ce perimetre.
-        # Le troisieme site signale ici,
+        # ⚠️ DEUX AUTRES SITES SIGNALES, NON TOUCHES : `actuaria_app.py`
+        # (deux fois) -- l'application Streamlit disparait a la migration
+        # et n'est pas dans ce perimetre -- et
         # `direction_sante_prevoyance/services/m_rapport_prov_prev.py`,
-        # N'EXISTE PLUS : mesure du 12/09/2026, ce module n'etait importe par
-        # personne dans tout le depot (releves AST et au texte concordants),
-        # et il a ete supprime avec les six autres de sa famille.
+        # qui est une autre direction.
         (f"BEST ESTIMATE (brut, actualisation S2 en aval par A10) : "
          f"{_f(BE)} | CV={_pct(CV)}"),
         "",

@@ -194,17 +194,14 @@ class F5_LeDepotEntier(unittest.TestCase):
             except (OSError, UnicodeDecodeError):
                 continue
             # ⚠️ ON MET EN SOURDINE LES *SyntaxWarning* DE `ast.parse`, ET
-            # UNIQUEMENT ICI. Ce test n'est pas le messager des défauts de
-            # syntaxe des autres modules : il les relaierait à chaque passage
-            # de la gate, où on les prendrait pour une panne d'ici.
-            #
-            # ⚠️ LE MOTIF CITÉ ICI ÉTAIT PÉRIMÉ, MESURÉ LE 12/09/2026. Ce
-            # commentaire désignait `m_rapport_tarif_prev.py` ligne 217 comme
-            # « un vrai défaut, SIGNALÉ ET NON TRAITÉ ». L'antislash y avait
-            # depuis été échappé, et le fichier — jamais importé par personne —
-            # a été supprimé. Relevé sur le dépôt entier ce jour : ZÉRO fichier
-            # émet un SyntaxWarning. La mise en sourdine reste, parce qu'elle
-            # protège le rôle de ce test, et non parce qu'un coupable existe.
+            # UNIQUEMENT ICI. Un fichier du dépôt en émet un —
+            # `direction_sante_prevoyance/services/m_rapport_tarif_prev.py`
+            # ligne 217 porte la séquence d'échappement invalide « \\  » (elle
+            # deviendra une erreur dans une version future de Python). C'est
+            # un vrai défaut, SIGNALÉ ET NON TRAITÉ : il est dans une autre
+            # direction et n'a rien à voir avec F5. Mais ce test n'est pas son
+            # messager : il le relayerait à chaque passage de la gate, où on
+            # le prendrait pour une panne d'ici.
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter('ignore', SyntaxWarning)
