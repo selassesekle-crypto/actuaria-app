@@ -418,6 +418,19 @@ class TestLeVerdictCiteEstCeluiRendu(unittest.TestCase):
         chemin = (pathlib.Path(_RACINE) / 'direction_non_vie' / 'tarification'
                   / 'services' / 'rapport_modeles_tarif.py')
         arbre = ast.parse(chemin.read_text(encoding='utf-8'))
+        # ⚠️⚠️ L'ASSIETTE EST L'ARGUMENT DE L'APPEL, PAS LE MODULE. La
+        # premiere redaction faisait `assertIn("'statut_rag'",
+        # ast.unparse(arbre))` -- sur TOUT le module. Or
+        # `rapport_modeles_tarif.py` porte huit occurrences de `statut_rag`,
+        # dont `statut = (...).get('statut_rag', 'AMBRE')` a quatre lignes du
+        # site : le sceau attestait sur une chaine qui ne bougera jamais.
+        #   Mesure du 11/09/2026 : en replantant EXACTEMENT le defaut `D4` --
+        # les deux appels citant `_dec.verdict_systeme`, le champ que
+        # l'appelant a lui-meme rempli -- le controle restait **VERT**, six
+        # occurrences de `statut_rag` subsistant ailleurs, pendant que le
+        # document publiait << L'actuaire SUIT le verdict du systeme >> sur
+        # une decision citant VERT quand le systeme avait rendu ROUGE.
+        # *Un controle qui ne regarde pas l'appel ne surveille pas l'appel.*
         vus = {}
         for fonction in ast.walk(arbre):
             if not isinstance(fonction, ast.FunctionDef):
@@ -425,16 +438,29 @@ class TestLeVerdictCiteEstCeluiRendu(unittest.TestCase):
             for n in ast.walk(fonction):
                 if (isinstance(n, ast.Call)
                         and getattr(n.func, 'id', None) == 'synthese_decision'):
-                    vus[fonction.name] = len(n.args) + len(n.keywords)
+                    vus[fonction.name] = [
+                        ast.unparse(a) for a in
+                        list(n.args) + [k.value for k in n.keywords]]
         for exportateur in ('export_html', 'export_word'):
             self.assertIn(exportateur, vus)
+            arguments = vus[exportateur]
             self.assertGreaterEqual(
-                vus[exportateur], 2,
+                len(arguments), 2,
                 f"`{exportateur}` appelle `synthese_decision` sans le verdict "
                 f"reel : la comparaison ne peut pas avoir lieu")
-            source = ast.unparse(arbre)
-            self.assertIn("'statut_rag'", source,
-                          "le verdict reel ne vient plus de `statut_rag`")
+            verdict = ' '.join(arguments[1:])
+            self.assertIn(
+                "'statut_rag'", verdict,
+                f"`{exportateur}` passe {verdict!r} comme verdict du systeme : "
+                f"il ne vient pas de `statut_rag`")
+            # ⚠️ ET LE SECOND SENS, QUI EST LE DEFAUT `D4` LUI-MEME : le
+            # verdict compare ne peut pas venir de la DECISION, sinon on
+            # compare un champ a lui-meme et `divergence` vaut toujours faux.
+            self.assertNotIn(
+                'verdict_systeme', verdict,
+                f"`{exportateur}` compare le verdict cite A LUI-MEME "
+                f"({verdict!r}) : c'est le defaut `D4`, six couples sur neuf "
+                f"publiaient alors un verdict systeme FAUX sans signalement")
         print(f"    DA-13e les deux exportateurs passent le verdict reel "
               f"({sorted(vus)})")
 

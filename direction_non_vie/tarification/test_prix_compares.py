@@ -505,25 +505,44 @@ class TestAucuneBandeCablee(unittest.TestCase):
         print("    PC-22 aucun des 20 plans ne declare de bande de niveau")
 
     def test_PC23_LE_SCEAU_sans_bande_E2_n_ecarte_PERSONNE(self):
-        """⚠️⚠️ LE CONTROLE CENTRAL DE CET ARBITRAGE, ET IL EST COMPORTEMENTAL.
+        """⚠️⚠️ LE SCEAU DE L'ARBITRAGE : AUCUNE BANDE N'EST POSEE PAR DEFAUT.
         Un plant qui poserait une bande par defaut -- un litteral, une valeur
         calculee, n'importe quoi -- doit faire rougir ceci. *E2 reste MESURE et
-        PUBLIE ; il n'ELIMINE pas.*"""
+        PUBLIE ; il n'ELIMINE pas.*
+
+        ⚠️⚠️ CE CONTROLE EST UN RELEVE DE SIGNATURE, PAS UN COMPORTEMENT --
+        et sa version du 10/09/2026 se disait << comportemental >> alors
+        qu'elle ne parcourait **AUCUNE PAIRE**. Elle appariait
+        `zip(noms[len(noms) - len(n.defaults):], defauts)` avec `noms` couvrant
+        posonly + args + **kwonly** mais la tranche prise sur `len(n.defaults)`
+        SEUL, qui ne compte que les positionnels. Or `bande` est KEYWORD-ONLY :
+        `n.defaults` est vide, la tranche vaut `[]`, le `zip` est vide, et
+        `litteraux` valait `[]` QUOI QU'ON ECRIVE dans la signature.
+        Mesure du 11/09/2026 : un plant `*, bande=(0.9, 1.1)` restait **VERT**,
+        `*, bande_niveau=[0.85, 1.15]` restait **VERT** ; seule la forme
+        POSITIONNELLE -- que le code n'emploie pas -- rougissait.
+        Le COMPORTEMENT, lui, est tenu par `PC-9` (sans bande, aucun candidat
+        n'est ecarte par le critere) et par `PC-10` (son miroir)."""
         source = inspect.getsource(comparer_les_prix)
         arbre = ast.parse(source)
         litteraux = []
         for n in ast.walk(arbre):
             if not isinstance(n, ast.arguments):
                 continue
-            noms = [a.arg for a in list(n.posonlyargs) + list(n.args)
-                    + list(n.kwonlyargs)]
-            defauts = list(n.defaults) + [d for d in n.kw_defaults if d]
-            for nom, defaut in zip(noms[len(noms) - len(n.defaults):],
-                                   defauts):
-                if 'bande' in nom and not (
+            # ⚠️⚠️ LES DEUX FAMILLES DE DEFAUTS S'APPARIENT SEPAREMENT.
+            # `n.defaults` ne concerne QUE les positionnels ; `n.kw_defaults`
+            # est aligné sur `n.kwonlyargs`, trou compris (`None` = pas de
+            # défaut). Les mélanger dans un seul `zip` décale l'appariement.
+            positionnels = list(n.posonlyargs) + list(n.args)
+            paires = list(zip(positionnels[len(positionnels) - len(n.defaults):],
+                              n.defaults))
+            paires += [(a, d) for a, d in zip(n.kwonlyargs, n.kw_defaults)
+                       if d is not None]
+            for arg, defaut in paires:
+                if 'bande' in arg.arg and not (
                         isinstance(defaut, ast.Constant)
                         and defaut.value is None):
-                    litteraux.append(f"{nom}={ast.unparse(defaut)}")
+                    litteraux.append(f"{arg.arg}={ast.unparse(defaut)}")
         self.assertEqual(
             litteraux, [],
             f"une bande est posee PAR DEFAUT : {litteraux}. Une regle qui "
