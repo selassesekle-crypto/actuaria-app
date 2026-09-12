@@ -914,7 +914,7 @@ def _export_html_sante(m1: Dict, m3: Dict, m4: Dict,
             f'      <tr><td>SCR Santé Total</td><td>{_f(m3.get("scr_sante"))}</td><td>Formule standard EIOPA</td></tr>\n'
             f'      <tr><td>MCR Santé</td><td>{_f(m3.get("mcr_sante"))}</td><td>Art.252 RD 2015/35</td></tr>\n'
             f'      <tr><td>Fonds propres éligibles</td><td>{_f(m3.get("fonds_propres"))}</td><td>Bilan S2</td></tr>\n'
-            f'      <tr><td>Ratio SCR</td><td style="color:{_statut_col(rag)};font-weight:700;">{_pct(m3.get("ratio_scr_pct"))} {"✅" if m3.get("ratio_scr_pct", 0) >= SEUIL_SCR else "❌"}</td><td>Seuil ≥ 100% — Art.129 S2</td></tr>\n'
+            f'      <tr><td>Ratio SCR</td><td style="color:{_statut_col(rag)};font-weight:700;">{_pct(m3.get("ratio_scr_pct"))} {"✅" if _ratio_atteint_doc(_ratio_lu(m3, "ratio_scr_pct"), SEUIL_SCR) else "❌"}</td><td>Seuil ≥ 100% — Art.129 S2</td></tr>\n'
             f'      <tr><td>Ratio MCR</td><td>{_pct(m3.get("ratio_mcr_pct"))}</td><td>Art.129 S2</td></tr>\n'
             '    </tbody>\n'
             '  </table>\n'
@@ -1371,6 +1371,44 @@ def _export_excel_sante(m1: Dict, m3: Dict, m4: Dict,
 # AGENT PRINCIPAL
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _ratio_lu(source, cle):
+    """Lit un ratio de couverture qui PEUT NE PAS EXISTER.
+
+    ⚠️ AJOUTE LE 12/09/2026 — REGRESSION INTRODUITE PAR L ARBITRAGE A3.
+    Depuis A3, un ratio assis sur des fonds propres estimes vaut `None` et
+    non 0 : zero se lirait comme une insuffisance de capital reelle. Les deux
+    rapports signes le relisaient avec `float(...)` et PLANTAIENT -- aucun
+    document produit, sur un message d erreur illisible.
+
+    Rend `None` quand le ratio n existe pas. Les appelants doivent alors
+    ECRIRE qu il n est pas calculable, jamais afficher un nombre.
+    """
+    if not isinstance(source, dict):
+        return None
+    valeur = source.get(cle)
+    if valeur is None:
+        return None
+    try:
+        return float(valeur)
+    except (TypeError, ValueError):
+        return None
+
+
+def _ratio_atteint_doc(valeur, seuil):
+    """`valeur >= seuil`, FAUX si la valeur n existe pas.
+
+    Un seuil non atteint faute de mesure n est pas un seuil franchi.
+    """
+    return valeur is not None and valeur >= seuil
+
+
+def _ratio_txt(valeur):
+    """Le ratio en texte, ou « NON CALCULABLE » -- jamais « 0,0 % »."""
+    if valeur is None:
+        return "NON CALCULABLE"
+    return "%.1f %%" % valeur
+
+
 class AgentRapportSante:
     """
     Agent Rapport Santé — Rapport actuariel consolidé Sous-direction Santé.
@@ -1469,7 +1507,7 @@ class AgentRapportSante:
                 "tp_sante":         round(m3.get("tp_sante", 0), 2),
                 "scr_sante":        round(m3.get("scr_sante", 0), 2),
                 "mcr_sante":        round(m3.get("mcr_sante", 0), 2),
-                "ratio_scr_pct":    round(m3.get("ratio_scr_pct", 0), 1),
+                "ratio_scr_pct":    _ratio_lu(m3, "ratio_scr_pct"),
                 "loss_ratio":       round(m3.get("loss_ratio", 0), 4),
                 "ani_conforme":     m3.get("ani_conforme", False),
                 "avis_actuariel":   avis,
@@ -1614,8 +1652,8 @@ class AgentRapportSante:
             scr_cat      = float(s3.get("scr_cat", 0))
             mcr_sante    = float(s3.get("mcr_sante", 0))
             fp           = float(s3.get("fonds_propres", fonds_propres))
-            ratio_scr    = float(s3.get("ratio_scr_pct", 0))
-            ratio_mcr    = float(s3.get("ratio_mcr_pct", 0))
+            ratio_scr    = _ratio_lu(s3, "ratio_scr_pct")
+            ratio_mcr    = _ratio_lu(s3, "ratio_mcr_pct")
         else:
             # Recalcul depuis formule standard EIOPA si S3 absent
             scr_prem  = 3.0 * SCR_SIGMA_PREM * primes_acq
@@ -1682,11 +1720,11 @@ class AgentRapportSante:
         hyp = []
 
         # H1 — Ratio SCR ≥ 100%
-        ok1 = m3.get("ratio_scr_pct", 0) >= SEUIL_SCR
+        ok1 = _ratio_atteint_doc(_ratio_lu(m3, "ratio_scr_pct"), SEUIL_SCR)
         hyp.append({
             "id": "H1",
             "hypothese": f"Ratio SCR ≥ {SEUIL_SCR:.0f}% — Art.129 Directive S2",
-            "valeur": f"Ratio SCR = {m3.get('ratio_scr_pct', 0):.1f}% {'≥' if ok1 else '<'} {SEUIL_SCR:.0f}%",
+            "valeur": f"Ratio SCR = {_ratio_txt(_ratio_lu(m3, 'ratio_scr_pct'))} {'≥' if ok1 else '<'} {SEUIL_SCR:.0f}%",
             "statut": "VALIDÉE" if ok1 else "NON VALIDÉE",
             "critique": True,
         })
@@ -1735,11 +1773,11 @@ class AgentRapportSante:
         })
 
         # H5 — Ratio SCR cible ≥ 130%
-        ok5 = m3.get("ratio_scr_pct", 0) >= SEUIL_SCR_CIBLE
+        ok5 = _ratio_atteint_doc(_ratio_lu(m3, "ratio_scr_pct"), SEUIL_SCR_CIBLE)
         hyp.append({
             "id": "H5",
             "hypothese": f"Ratio SCR ≥ {SEUIL_SCR_CIBLE:.0f}% (cible interne)",
-            "valeur": f"Ratio SCR = {m3.get('ratio_scr_pct', 0):.1f}% {'≥' if ok5 else '<'} {SEUIL_SCR_CIBLE:.0f}%",
+            "valeur": f"Ratio SCR = {_ratio_txt(_ratio_lu(m3, 'ratio_scr_pct'))} {'≥' if ok5 else '<'} {SEUIL_SCR_CIBLE:.0f}%",
             "statut": "VALIDÉE" if ok5 else "À JUSTIFIER",
             "critique": False,
         })
@@ -1749,7 +1787,13 @@ class AgentRapportSante:
         return hyp
 
     def _rag(self, hyp: list, m3: Dict) -> str:
-        if m3.get("ratio_scr_pct", 0) < SEUIL_SCR or m3.get("ratio_mcr_pct", 0) < 100:
+        # ⚠️ Un ratio ABSENT n est pas un ratio INSUFFISANT, mais il
+        # ne doit pas non plus laisser passer un VERT : le RAG rougit,
+        # et le motif publie dit laquelle des deux raisons a joue.
+        _r_scr = _ratio_lu(m3, "ratio_scr_pct")
+        _r_mcr = _ratio_lu(m3, "ratio_mcr_pct")
+        if (_r_scr is None or _r_mcr is None
+                or _r_scr < SEUIL_SCR or _r_mcr < 100):
             return "ROUGE"
         non_val = [h for h in hyp if h["statut"] == "NON VALIDÉE" and h["critique"]]
         if non_val:
@@ -1761,19 +1805,19 @@ class AgentRapportSante:
         if rag == "VERT":
             return "FAVORABLE", (
                 f"Le portefeuille santé présente un profil de risque maîtrisé. "
-                f"Ratio SCR = {m3.get('ratio_scr_pct', 0):.1f}% — solvabilité conforme Art.129 S2. "
+                f"Ratio SCR = {_ratio_txt(_ratio_lu(m3, 'ratio_scr_pct'))} — solvabilité conforme Art.129 S2. "
                 f"Loss Ratio = {m3.get('loss_ratio', 0)*100:.1f}% — sinistralité dans la norme FNMF 2023."
             )
         elif rag == "AMBRE":
             return "AVEC RÉSERVES", (
                 f"Le portefeuille santé nécessite une attention sur les points signalés. "
-                f"Ratio SCR = {m3.get('ratio_scr_pct', 0):.1f}%. "
+                f"Ratio SCR = {_ratio_txt(_ratio_lu(m3, 'ratio_scr_pct'))}. "
                 "Des ajustements tarifaires ou de provisionnement peuvent être nécessaires."
             )
         else:
             return "DÉFAVORABLE", (
                 f"Situation nécessitant une action corrective immédiate. "
-                f"Ratio SCR = {m3.get('ratio_scr_pct', 0):.1f}% — insuffisant (seuil 100% Art.129 S2). "
+                f"Ratio SCR = {_ratio_txt(_ratio_lu(m3, 'ratio_scr_pct'))} — insuffisant (seuil 100% Art.129 S2). "
                 "Plan de rétablissement à soumettre à l'ACPR."
             )
 
@@ -1920,7 +1964,7 @@ class AgentRapportSante:
                 "session_hash": session_hash,
                 "be_sante":    round(m3.get("be_sante", 0), 2),
                 "scr_sante":   round(m3.get("scr_sante", 0), 2),
-                "ratio_scr":   round(m3.get("ratio_scr_pct", 0), 1),
+                "ratio_scr":   _ratio_lu(m3, "ratio_scr_pct"),
                 "loss_ratio":  round(m3.get("loss_ratio", 0), 4),
             }
             log = self.audit_path / "rapport_sante_audit.jsonl"
@@ -1935,7 +1979,7 @@ class AgentRapportSante:
             f"[{aid}] {ic} {rag} | {avis} | "
             f"BE={m3.get('be_sante', 0):,.0f}€ | "
             f"SCR={m3.get('scr_sante', 0):,.0f}€ | "
-            f"Ratio={m3.get('ratio_scr_pct', 0):.1f}% | "
+            f"Ratio={_ratio_txt(_ratio_lu(m3, 'ratio_scr_pct'))} | "
             f"LR={m3.get('loss_ratio', 0)*100:.1f}% | "
             f"Hash={session_hash}"
         )

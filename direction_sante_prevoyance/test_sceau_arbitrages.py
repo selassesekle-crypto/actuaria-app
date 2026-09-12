@@ -337,5 +337,111 @@ class TestA1ChaqueTableDitCeQuElleDecrit(unittest.TestCase):
                 self.assertIn("_erreur_tables", src)
 
 
+class TestA3LesDocumentsSORTENTQuandLeRatioNExistePas(unittest.TestCase):
+    """⚠️ RÉGRESSION QUE J'AI INTRODUITE ET POUSSÉE, TROUVÉE EN MESURANT.
+
+    L'arbitrage A3 fait valoir `None` au ratio quand les fonds propres ne sont
+    pas fournis. Les DEUX rapports signés le relisaient avec `float(...)` et
+    `>= SEUIL`, et PLANTAIENT : *float() argument must be a string or a real
+    number*. Aucun document produit, sur un message illisible.
+
+    **Mes 319 tests verts ne l'ont pas vu**, parce qu'aucun ne lançait les
+    agents de rapport avec `fonds_propres=0`. C'est exactement le motif que ce
+    chantier traque depuis le début — une assiette qui ne couvre pas le cas où
+    la grandeur MANQUE — et je l'ai reproduit dans mon propre correctif.
+
+    Refuser de publier un chiffre n'est pas planter. Un refus s'explique.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import contextlib
+        import io as _io
+        import logging
+        logging.disable(logging.CRITICAL)
+        cls._silence = contextlib.redirect_stdout
+        cls._io = _io
+
+    def _rapports(self, fonds_propres):
+        from .prevoyance.p1_tarification.agent import (
+            AgentP1TarificationPrevoyance)
+        from .prevoyance.p2_tables_morbidite.agent import AgentP2TablesMorbidite
+        from .prevoyance.p3_provisionnement.agent import (
+            AgentP3ProvissionnementPrevoyance)
+        from .prevoyance.p4_reporting.agent import AgentP4ReportingPrevoyance
+        from .prevoyance.rapport_prevoyance.agent import AgentRapportPrevoyance
+        from .sante.rapport_sante.agent import AgentRapportSante
+        from .sante.s1_tarification.agent import AgentS1TarificationSante
+        from .sante.s2_provisionnement.agent import AgentS2ProvissionnementSante
+        from .sante.s3_reporting.agent import AgentS3ReportingSante
+
+        with self._silence(self._io.StringIO()):
+            s1 = AgentS1TarificationSante(verbose=False).run(
+                nb_assures=1000, age_moyen=40, contrat="collectif",
+                garantie_niveau="premium", generer_graphiques=False)
+            s2 = AgentS2ProvissionnementSante(verbose=False).run(
+                result_s1=s1, generer_graphiques=False)
+            s3 = AgentS3ReportingSante(verbose=False).run(
+                result_s1=s1, result_s2=s2, fonds_propres=fonds_propres,
+                generer_graphiques=False)
+            r1 = AgentP1TarificationPrevoyance(verbose=False).run(
+                age=40, salaire_brut=45_000, categorie="employe",
+                generer_graphiques=False)
+            r2 = AgentP2TablesMorbidite(verbose=False).run(
+                result_p1=r1, generer_graphiques=False)
+            r3 = AgentP3ProvissionnementPrevoyance(verbose=False).run(
+                result_p1=r1, result_p2=r2, generer_graphiques=False)
+            r4 = AgentP4ReportingPrevoyance(verbose=False).run(
+                result_p1=r1, result_p2=r2, result_p3=r3,
+                fonds_propres=fonds_propres, generer_graphiques=False)
+            return {
+                "rapport Sante": AgentRapportSante(verbose=False).run(
+                    result_s1=s1, result_s2=s2, result_s3=s3,
+                    generer_graphiques=False),
+                "rapport Prevoyance": AgentRapportPrevoyance(
+                    verbose=False).run(
+                    result_p1=r1, result_p2=r2, result_p3=r3, result_p4=r4,
+                    generer_graphiques=False),
+            }
+
+    def test_les_deux_rapports_sortent_SANS_fonds_propres(self):
+        for nom, r in self._rapports(0.0).items():
+            with self.subTest(rapport=nom):
+                self.assertTrue(
+                    r["success"],
+                    "%s PLANTE quand les fonds propres manquent : %s. "
+                    "Refuser de publier un ratio n'est pas planter."
+                    % (nom, r.get("erreur")))
+                self.assertGreater(
+                    len(r.get("word_bytes") or b""), 10_000,
+                    "%s ne produit plus de Word exploitable." % nom)
+
+    def test_le_document_DIT_que_le_ratio_n_est_pas_calculable(self):
+        """Un tiret muet laisserait croire a un defaut d'affichage."""
+        import re
+        for nom, r in self._rapports(0.0).items():
+            with self.subTest(rapport=nom):
+                brut = r.get("html_bytes")
+                html = (brut.decode("utf-8", "replace")
+                        if isinstance(brut, bytes) else str(brut or ""))
+                texte = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
+                self.assertIn(
+                    "NON CALCULABLE", texte,
+                    "%s publie un ratio absent SANS dire pourquoi." % nom)
+
+    def test_avec_fonds_propres_les_deux_rapports_publient_un_chiffre(self):
+        import re
+        for nom, r in self._rapports(5_000_000.0).items():
+            with self.subTest(rapport=nom):
+                self.assertTrue(r["success"], r.get("erreur"))
+                brut = r.get("html_bytes")
+                html = (brut.decode("utf-8", "replace")
+                        if isinstance(brut, bytes) else str(brut or ""))
+                self.assertNotIn(
+                    "NON CALCULABLE", re.sub(r"<[^>]+>", " ", html),
+                    "%s se declare non calculable alors que les fonds "
+                    "propres sont fournis." % nom)
+
+
 if __name__ == "__main__":
     unittest.main()
