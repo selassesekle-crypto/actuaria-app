@@ -2143,7 +2143,39 @@ class AgentA3GLM:
                     df[vars_gamma].fillna(0), has_constant='add'
                 )
                 try:
-                    predictions['cout_moyen'] = self.modeles['gamma'].predict(X).values
+                    # ⚠️⚠️ `np.asarray` ET NON `.values` — LA LIGNE ETAIT
+                    # MORTE, ET LE REPLI SILENCIEUX LA MASQUAIT. Le modele
+                    # de cout n'est pas un objet statsmodels : c'est
+                    # `core.severite.ModeleCout`, dont `predict` est
+                    # **annote `-> np.ndarray`** et fait lui-meme le
+                    # `np.asarray`. `.values` n'a donc JAMAIS pu exister sur
+                    # son resultat : le `except` juste en dessous se
+                    # declenchait a CHAQUE run atteignant ce site, et posait
+                    # la moyenne observee -- un cout identique pour tout le
+                    # portefeuille.
+                    #
+                    # Mesure du 13/09/2026, quatre portefeuilles
+                    # independants (graines, tailles et sinistralites
+                    # differentes, cout dependant du profil) :
+                    #
+                    #     cout moyen predit   AVANT  1 valeur distincte
+                    #                         APRES  1 907 / 4 998 / 2 500
+                    #                                / 5 861
+                    #     prime pure          AVANT  414 valeurs distinctes
+                    #                         APRES  2 218
+                    #
+                    # *Le tarif ne segmentait que sur une de ses deux
+                    # moities : la frequence variait, le cout non.* Et
+                    # l'agregat ne bougeait que de -0,65 %, ce qui masquait
+                    # entierement la divergence individuelle.
+                    #
+                    # ⚠️ C'est la forme EXACTE du constat `a3/C15`, deja
+                    # ferme sur la branche frequence et sur le chemin de
+                    # secours : le meme `.values` sur ce qui n'en a pas.
+                    # *Le fermer a deux endroits sur trois laissait le
+                    # troisieme vivant, et invisible.*
+                    predictions['cout_moyen'] = np.asarray(
+                        self.modeles['gamma'].predict(X), dtype=float)
                 except Exception as e:
                     logger.warning(f"Erreur prédiction Gamma : {e}")
                     predictions['cout_moyen'] = np.full(
