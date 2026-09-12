@@ -545,6 +545,62 @@ class Facteur:
 
         return tuple(cols)
 
+    # ── CE QUE LE PLAN NE SAIT PAS LIRE ────────────────────────────────────
+    def motif_illisible(self, valeur) -> str | None:
+        """Pourquoi cette valeur n'est pas lisible au regard du plan, ou `None`.
+
+        ⚠️⚠️ ELLE VIT ICI PARCE QU'ELLE SERT DEUX FOIS, ET QUE LES DEUX
+        SURFACES DIVERGEAIENT. `TarifNonVie.tarifer(contrat)` portait cette
+        regle et REFUSAIT ; `pipeline_complet(portefeuille)` -- l'autre surface
+        du MEME prix -- ne la portait pas et ne voyait RIEN. Mesure du
+        11/09/2026 sur `auto`, 1 500 lignes, un seul `bonus_malus =
+        'beaucoup'` :
+
+            couche qualite      0 signalement, 0 exclusion
+            prime de la ligne   344,99 EUR -> 288,85 EUR   (-16,27 %)
+            TOTAL du portefeuille          +0,0000 %
+
+        *Le coefficient d'equilibre ramene le total : la divergence vit
+        entierement dans la REPARTITION, et aucun controle agrege ne peut la
+        voir.* C'est le constat `pipeline/C1` -- « le souscripteur recoit la
+        prime du contrat MOYEN en croyant tarifer le sien » -- corrige sur UNE
+        surface seulement.
+
+        ⚠️ UNE DEFINITION, DEUX USAGES, ET ILS NE DECIDENT PAS PAREIL : sur un
+        contrat isole on REFUSE (le prix est signe individuellement), sur un
+        portefeuille on SIGNALE (regle 3 : ambigu, ni exclu ni corrige). *Le
+        criterion est commun, la sanction ne l'est pas -- et c'est voulu.*
+
+        ⚠️ ELLE N'INVENTE AUCUNE BORNE : elle ne lit que ce que le plan
+        DECLARE — les modalites d'un categoriel, la nature numerique d'un
+        continu, et `bornes` si elles sont posees.
+        """
+        if self.type == 'categoriel' and self.modalites:
+            if valeur not in self.modalites:
+                return (f"modalite {valeur!r} INCONNUE — le plan declare "
+                        f"{list(self.modalites)}. Tarifer reviendrait a "
+                        f"imputer une valeur que l'assure n'a pas fournie.")
+            return None
+        if valeur is None or (isinstance(valeur, str) and not valeur.strip()):
+            return (f"valeur ABSENTE ({valeur!r}) — elle serait imputee, et la "
+                    f"prime rendue serait celle du contrat MOYEN, pas celle de "
+                    f"ce contrat.")
+        try:
+            x = float(valeur)
+        except (TypeError, ValueError):
+            return (f"valeur ILLISIBLE ({valeur!r}) — un facteur numerique "
+                    f"attend un nombre. Elle serait imputee en silence.")
+        if not math.isfinite(x):
+            return f"valeur non finie ({valeur!r})."
+        if self.bornes is not None:
+            bas, haut = self.bornes
+            if not (bas <= x <= haut):
+                return (f"valeur {x!r} HORS DU DOMAINE declare au plan "
+                        f"[{bas}, {haut}]. Elle est lisible, mais le modele "
+                        f"n'a jamais vu cette plage : la prime rendue serait "
+                        f"une EXTRAPOLATION, pas une tarification.")
+        return None
+
 
 @dataclass(frozen=True)
 class Comportement:

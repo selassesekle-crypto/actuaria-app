@@ -1047,6 +1047,65 @@ def controler_qualite(
                  f"entre un vrai zero, une erreur de saisie et une grandeur "
                  f"inconnue : c'est a l'actuaire de le dire.")
 
+    # ⚠️⚠️ ET LES FACTEURS TARIFAIRES, QUE PERSONNE NE REGARDAIT — correctif
+    # du 11/09/2026. La boucle ci-dessus couvre les trois GRANDEURS ; les
+    # facteurs, eux, n'etaient interroges NULLE PART sur cette couche. Or
+    # `TarifNonVie.tarifer(contrat)` REFUSE un facteur illisible depuis le
+    # constat `pipeline/C1` : *« le souscripteur recoit la prime du contrat
+    # MOYEN en croyant tarifer le sien, et rien ne le signale. »* La correction
+    # n'avait atteint qu'UNE des deux surfaces du prix.
+    #
+    #   Mesure du 11/09/2026, `auto`, 1 500 lignes, UN `bonus_malus =
+    #   'beaucoup'` : 0 signalement, 0 exclusion ; la ligne fautive passe de
+    #   344,99 a 288,85 EUR (-16,27 %) ; le TOTAL reste a +0,0000 % parce que
+    #   le coefficient d'equilibre le ramene. *La divergence vit entierement
+    #   dans la REPARTITION : aucun controle agrege ne pouvait la voir.*
+    #
+    # ⚠️ ON SIGNALE, ON N'EXCLUT PAS, ET LE CODE N'EST PAS DISQUALIFIANT. Une
+    # valeur illisible est AMBIGUE, pas impossible : la doctrine du module est
+    # de la signaler et de la laisser (regle 3). `valeur_illisible_facteur`
+    # n'entre pas dans `CODES_DISQUALIFIANTS`, donc il ne peut ni escalader
+    # seul ni entrer dans l'union : **aucun euro ne bouge, aucun fichier ne se
+    # met a bloquer.** *On rend d'abord visible ; on decide ensuite.*
+    #
+    # ⚠️ LE CRITERION VIENT DU PLAN ET DE LUI SEUL (`Facteur.motif_illisible`),
+    # jamais d'une copie locale : c'est ce qui empeche les deux surfaces de
+    # rediverger. ⚠️ RGPD : le message ne cite NI valeur NI index -- un compte
+    # et un motif generique suffisent.
+    for _f in (getattr(plan, 'facteurs', ()) or ()):
+        if _f.nom not in df.columns:
+            continue            # absence = amputation, un autre sujet
+        # ⚠️⚠️ UN MASQUE BOOLEEN, PAS UNE LISTE D'INDICES — reparation du
+        # 13/09/2026 sur le correctif recu, prouvee par TROIS mesures.
+        # `_ajouter` fait `np.flatnonzero(np.asarray(mask, dtype=bool))` et
+        # publie `index=` a partir de la ; son parametre s'appelle `mask`, et
+        # la boucle JUMELLE trente lignes plus haut lui passe
+        # `detecter_illisible(...)`, annote `-> np.ndarray`. *L'asymetrie
+        # avec le voisin immediat etait le revelateur le moins cher.*
+        #   . execution  : 1 ligne fautive comptee, 0 anomalie emise ;
+        #   . contrat    : 13 autres appels passent un masque, celui-ci
+        #                  etait le seul a passer des indices ;
+        #   . experience : valeur fautive a l'index 0 -> RIEN
+        #                  (`asarray([0], bool)` vaut `[False]`) ; a
+        #                  l'index 7 -> une anomalie designant la ligne 0 ;
+        #                  aux index {0, 7} -> une seule, designant la 1.
+        # *Le correctif sous-comptait, se trompait de ligne, et perdait
+        # entierement la premiere -- et sa verification ne regardait que le
+        # CODE et la COLONNE, jamais QUELLE ligne etait nommee.*
+        _mauvaises = [
+            _f.motif_illisible(v) is not None
+            for v in df[_f.nom].tolist()]
+        _ajouter('valeur_illisible_facteur', 3, 'facteur', _f.nom,
+                 _mauvaises,
+                 f"facteur '{_f.nom}' : valeur(s) que le PLAN ne sait pas "
+                 f"lire — modalite hors enumeration, valeur absente, non "
+                 f"numerique, non finie, ou hors des `bornes` declarees. A2 "
+                 f"les IMPUTE en silence : ces contrats recevraient la prime "
+                 f"du contrat MOYEN, pas la leur. Ambigu : signale, jamais "
+                 f"exclu. ⚠ Le total du portefeuille n'en dit rien -- le "
+                 f"coefficient d'equilibre le ramene, et l'ecart vit dans la "
+                 f"REPARTITION.")
+
     # ⚠️⚠️ L'IDENTIFIANT EST UN LIBELLE, PAS UNE GRANDEUR. Il figurait dans la
     # boucle ci-dessus, ou `detecter_illisible` le declarait illisible des
     # qu'il n'etait pas numerique : mesure, 100 % sur des identifiants tout a

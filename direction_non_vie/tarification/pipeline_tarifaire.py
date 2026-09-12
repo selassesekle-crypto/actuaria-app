@@ -25,7 +25,6 @@ Rien ici ne « sait » ce qu'est une voiture ou un chantier : tout vient du plan
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List
@@ -34,6 +33,11 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
+# ⚠️ `math` N'EST PLUS IMPORTE ICI : son seul usage etait le `math.isfinite`
+# d'`anomalies_du_contrat`, parti avec la regle dans `Facteur.motif_illisible`.
+# *Un import qui survit a son usage devient une piste fausse pour qui cherche
+# ou la regle est ecrite* — c'est le motif que l'en-tete de ce module applique
+# deja a `families` et a `QualiteBloquante`.
 # ⚠️ `families` n'est plus importé ici : la seule construction de famille de ce
 # module était celle du GLM de fréquence, partie dans `core/frequence.py` avec
 # le reste du moteur. *Un import qui survit à son usage devient une piste
@@ -378,49 +382,27 @@ class TarifNonVie:
         d'aujourd'hui, à l'identique. **0/20 plans en déclarent : aucun euro
         ne bouge le jour de la pose.**
         """
+        # ⚠️⚠️ LA REGLE VIT DANS LE PLAN, PAS ICI — correctif du 11/09/2026.
+        # Elle etait ecrite dans cette methode, et dans cette methode SEULE :
+        # `pipeline_complet(portefeuille)`, l'autre surface du MEME prix, ne
+        # la portait pas. Mesure : un `bonus_malus = 'beaucoup'` dans un
+        # portefeuille de 1 500 lignes n'y produisait AUCUN signalement, et la
+        # ligne passait de 344,99 a 288,85 EUR (-16,27 %) pour un TOTAL
+        # inchange a +0,0000 %. *Recopier la regle dans la couche qualite
+        # aurait pose une seconde definition ; elle descend donc dans
+        # `Facteur.motif_illisible`, et les deux surfaces la LISENT.*
+        #
+        # ⚠️ LA SANCTION, ELLE, RESTE PROPRE A CHAQUE SURFACE : ici on REFUSE
+        # (le prix d'un contrat est signe individuellement), la couche qualite
+        # SIGNALE (regle 3 : ambigu, ni exclu ni corrige). *Un criterion
+        # commun n'impose pas une decision commune.*
         anomalies = []
         for f in self.plan.facteurs:
             if f.nom not in contrat:
                 continue                       # absence = amputation, autre sujet
-            valeur = contrat[f.nom]
-            if f.type == 'categoriel' and f.modalites:
-                if valeur not in f.modalites:
-                    anomalies.append(
-                        f"facteur '{f.nom}' : modalite {valeur!r} INCONNUE — "
-                        f"le plan declare {list(f.modalites)}. Tarifer "
-                        f"reviendrait a imputer une valeur que l'assure n'a "
-                        f"pas fournie.")
-                continue
-            if valeur is None or (isinstance(valeur, str) and not valeur.strip()):
-                anomalies.append(
-                    f"facteur '{f.nom}' : valeur ABSENTE ({valeur!r}) — elle "
-                    f"serait imputee, et la prime rendue serait celle du "
-                    f"contrat MOYEN, pas celle de ce contrat.")
-                continue
-            try:
-                x = float(valeur)
-            except (TypeError, ValueError):
-                anomalies.append(
-                    f"facteur '{f.nom}' : valeur ILLISIBLE ({valeur!r}) — un "
-                    f"facteur numerique attend un nombre. Elle serait imputee "
-                    f"en silence.")
-                continue
-            if not math.isfinite(x):
-                anomalies.append(
-                    f"facteur '{f.nom}' : valeur non finie ({valeur!r}).")
-                continue
-            # ⚠️⚠️ LA PLAUSIBILITE, ET SEULEMENT SI LE PLAN L'A DECLAREE —
-            # constat `pipeline/C1`, residu. Le motif dit la BORNE SIGNEE :
-            # l'actuaire doit pouvoir vérifier le refus contre son plan.
-            if f.bornes is not None:
-                bas, haut = f.bornes
-                if not (bas <= x <= haut):
-                    anomalies.append(
-                        f"facteur '{f.nom}' : valeur {x!r} HORS DU DOMAINE "
-                        f"declare au plan [{bas}, {haut}]. Elle est lisible, "
-                        f"mais le modele n'a jamais vu cette plage : la prime "
-                        f"rendue serait une EXTRAPOLATION, pas une "
-                        f"tarification.")
+            motif = f.motif_illisible(contrat[f.nom])
+            if motif:
+                anomalies.append(f"facteur '{f.nom}' : {motif}")
         return anomalies
 
     def tarifer(self, contrat: dict,
