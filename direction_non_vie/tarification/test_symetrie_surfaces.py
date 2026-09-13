@@ -108,13 +108,29 @@ _EXCEPTIONS = {
 #: commentaires. *Un zero rendu par un relevé qui sur-compte est decisif.*
 #: Mesure du 12/09/2026 : zero occurrence, par n'importe quel chemin, dans
 #: les deux surfaces qui ne la portent pas.
+#: ⚠️⚠️ SEPT CLES LE 12/09, DEUX LE 13/09 -- ET C'EST LE SCEAU LUI-MEME QUI
+#: A EXIGE LA MISE A JOUR. `SY-4` dit qu'une cle qui cesse d'etre solitaire
+#: sort de cette table DANS LE MEME COMMIT. Les lots L8 a L11 ont publie
+#: cinq faits sans que la constante bouge : la gate complete du 13/09 a
+#: rougi dessus, nommement, sur les cinq. *Un garde-fou qui ne constate pas
+#: la reparation mais l'EXIGE poste par poste vaut mieux qu'un compte tenu
+#: a la main -- et il a mordu sur MON oubli, a travers quatre commits.*
+#:
+#:     anti_selection_a3 · reserve_gini_a3      -> L8  `9bc30b3`
+#:     arbitrage_contestable                    -> L9  `d517c85`
+#:     controle_effet                           -> L10 `2cd4112`
+#:     sensibilite_profils                      -> L11 `2b9304c`
+#:
+#: ⚠️ LES DEUX QUI RESTENT NE SONT PAS UN OUBLI : elles sont ISOLEES PAR
+#: ARBITRAGE du 12/09, et leur raison est ecrite.
+#:   · `stabilite_rang` -- mesure optionnelle, 62,1 s par tirage, aucun
+#:     producteur en production ;
+#:   · `publication_reglementaire` -- seule sa moitie `non_produit` a ete
+#:     publiee sur les deux rapports ; la moitie `possede` duplique ce que
+#:     le rapport modeles porte deja. *La cle reste donc en dette, et c'est
+#:     exact : elle est encore solitaire sur l'Excel.*
 _DETTE_GELEE = {
-    'anti_selection_a3': 'equipe (HTML+Word)',
-    'arbitrage_contestable': 'excel (A6+equipe)',
-    'controle_effet': 'excel (A6+equipe)',
     'publication_reglementaire': 'excel (A6+equipe)',
-    'reserve_gini_a3': 'equipe (HTML+Word)',
-    'sensibilite_profils': 'modeles (HTML+Word)',
     'stabilite_rang': 'modeles (HTML+Word)',
 }
 
