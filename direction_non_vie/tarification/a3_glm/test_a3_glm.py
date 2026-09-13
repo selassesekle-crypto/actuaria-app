@@ -299,9 +299,13 @@ class TestConformiteA3(unittest.TestCase):
     plan signé et dérive ses candidates de plan.colonnes_produites() — plus de
     sous-branche à deviner, plus de repli « toutes colonnes numériques ». Une
     colonne genre BRUTE et pré-encodée absente du plan — 'sexe_M' ici — est donc
-    écartée par la LISTE BLANCHE DU PLAN, EN AMONT de filtrer_genre. Ce test
-    vérifie désormais cette exclusion par liste blanche ; ses assertions (aucune
-    variable genre ni sinistralité dans le GLM) restent exactes et pertinentes.
+    écartée par filtrer_genre, qui passe désormais EN AMONT de la liste
+    blanche du plan — l'ordre a été inversé le 13/09/2026 (constat `CFR-1`)
+    pour que les deux filtres réglementaires puissent encore journaliser ce
+    qu'ils retirent. Les trois filtres commutent : l'ensemble retenu est
+    identique, et les assertions de ce test (aucune variable genre ni
+    sinistralité dans le GLM) restent exactes et pertinentes — c'est la
+    PHRASE qui devait se relire, pas le comportement.
     L'élargissement de filtrer_genre lui-même — le cas où une colonne prohibée
     PEUT encore devenir candidate — est exercé là où ce risque subsiste : la
     réinjection d'une colonne '*_enc' (test V10-B1 ci-dessous : 'titre_enc' →

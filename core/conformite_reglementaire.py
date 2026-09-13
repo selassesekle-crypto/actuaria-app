@@ -643,8 +643,13 @@ def selectionner_features_autorisees(
     et peut déclarer une variable manquante via `facteurs_supplementaires` ou en
     l'ajoutant à FACTEURS_TARIFAIRES_AUTORISES).
 
-    À utiliser en PREMIER, avant filtrer_genre / filtrer_famille_cible, qui
-    restent appliqués ensuite en défense en profondeur.
+    ⚠️⚠️ À UTILISER EN DERNIER, APRÈS filtrer_genre et filtrer_famille_cible
+    — inversé le 13/09/2026 (constat `CFR-1`). Placée en premier, elle
+    retirait `sexe` et les grandeurs dérivées de la sinistralité AVANT que
+    les deux filtres réglementaires ne les voient : ni l'arrêt C-236/09 ni
+    la fuite de données ne pouvaient plus être journalisés. Les trois
+    fonctions sont de purs filtres à prédicat, donc elles COMMUTENT : le
+    fail-safe garde exactement la même portée, seule la TRACE change.
 
     Paramètres
     ----------
@@ -683,9 +688,26 @@ def filtrer_features(
     POINT D'ENTRÉE UNIQUE de la conformité sur une liste de features.
 
     Enchaîne les trois garde-fous, dans cet ordre :
-      1. LISTE BLANCHE  — seuls les facteurs tarifaires déclarés passent ;
-      2. filtrer_genre  — défense en profondeur (CJUE C-236/09) ;
-      3. filtrer_famille_cible — défense en profondeur (anti data leakage).
+      1. filtrer_genre  — défense en profondeur (CJUE C-236/09) ;
+      2. filtrer_famille_cible — défense en profondeur (anti data leakage) ;
+      3. LISTE BLANCHE  — seuls les facteurs tarifaires déclarés passent.
+
+    ⚠️⚠️ CET ORDRE A ÉTÉ INVERSÉ LE 13/09/2026 (constat `CFR-1`), ET C'EST
+    UN CHOIX DE TRAÇABILITÉ, PAS DE CALCUL. Les trois sont de purs filtres
+    à prédicat : ils ne RETIENNENT que, n'ajoutent jamais — donc ils
+    COMMUTENT, et l'ensemble retenu est rigoureusement le même dans les
+    deux ordres (mesuré sur 2 000 listes tirées : 0 écart, ordre des
+    éléments compris). Ce qui change est la TRACE : la liste blanche
+    retirait `sexe` et `prime_pure` AVANT que les deux filtres
+    réglementaires ne les voient, et aucun des deux ne pouvait plus
+    journaliser. Mesure du 13/09 sur une liste portant les deux :
+    C-236/09 0 log et fuite 0 log AVANT, 1 et 1 APRÈS.
+    *Un filtre placé après celui qui lui ôte son objet ne peut plus rien
+    tracer — et un contrôle qui ne peut pas se déclencher est du décor.*
+    ⚠️ EFFET DE BORD DÉCLARÉ : le journal de la liste blanche ne cite plus
+    `sexe` ni `prime_pure` parmi ses « colonnes non déclarées ». Chaque
+    exclusion est désormais attribuée à SA cause réglementaire, une seule
+    fois, au lieu d'être imputée au fail-safe.
 
     Tout agent de TOUTE direction construisant une matrice X doit appeler
     cette fonction — et elle seule.
@@ -696,12 +718,18 @@ def filtrer_features(
     filtre appliqué à une liste intermédiaire peut être intégralement contourné
     vingt lignes plus bas.
     """
+    # ⚠️⚠️ MEME CONSTAT `conformite/C11`, SUR CE CHEMIN-CI. La liste blanche
+    # retirait `sexe` et `prime_pure` AVANT que les deux filtres reglementaires
+    # ne les voient : mesure du 11/09/2026, **0 log citant C-236/09 et 0 log
+    # citant la fuite** sur un portefeuille qui portait les deux.
+    # *Un filtre place apres celui qui lui ote son objet ne peut plus rien
+    # tracer.* Les trois commutent : l'ensemble retenu est inchange.
+    f = filtrer_genre(feature_names, contexte=contexte, logger_agent=logger_agent)
+    f = filtrer_famille_cible(f, contexte=contexte, logger_agent=logger_agent)
     f = selectionner_features_autorisees(
-        feature_names, contexte=contexte, logger_agent=logger_agent,
+        f, contexte=contexte, logger_agent=logger_agent,
         facteurs_supplementaires=facteurs_supplementaires,
     )
-    f = filtrer_genre(f, contexte=contexte, logger_agent=logger_agent)
-    f = filtrer_famille_cible(f, contexte=contexte, logger_agent=logger_agent)
     return f
 
 
@@ -1281,9 +1309,9 @@ def construire_matrice_x(
     SEUL point de construction d'une matrice de features conforme.
 
     QUATRE garde-fous, dont le dernier ne dépend d'aucun nom :
-      1. LISTE BLANCHE           — seuls les facteurs déclarés passent ;
-      2. FILTRE GENRE            — CJUE C-236/09 ;
-      3. FILTRE ANTI-FUITE       — grandeurs de sinistralité (par le nom) ;
+      1. FILTRE GENRE            — CJUE C-236/09 ;
+      2. FILTRE ANTI-FUITE       — grandeurs de sinistralité (par le nom) ;
+      3. LISTE BLANCHE           — seuls les facteurs déclarés passent ;
       4. CONTRÔLE PAR L'EFFET    — corrélation avec la cible ≥ 0,80 → fuite,
                                    QUEL QUE SOIT LE NOM (audit V12).
 
@@ -1311,7 +1339,13 @@ def construire_matrice_x(
     """
     candidates = [str(c) for c in colonnes]
 
-    # ── ① LISTE BLANCHE + ② GENRE + ③ FUITE PAR LE NOM ────────────────────────
+    # ── ① GENRE + ② FUITE PAR LE NOM + ③ LISTE BLANCHE ────────────────────────
+    # ⚠️⚠️ CET ORDRE A ÉTÉ INVERSÉ LE 13/09/2026 (constat `CFR-1`). Les
+    # deux filtres réglementaires JOURNALISENT ce qu'ils retirent — c'est
+    # la trace opposable devant l'ACPR — et la liste blanche leur ôtait
+    # leur objet avant qu'ils ne le voient. Les trois sont de purs filtres
+    # à prédicat : ils COMMUTENT, l'ensemble retenu est le même (mesuré
+    # sur 2 000 listes, 0 écart, ordre des éléments compris).
     _log = logger_agent or logger
     declarees = None
     cols_exemptees_effet = None
@@ -1363,11 +1397,20 @@ def construire_matrice_x(
         # intersecter puis filtrer donnent le même résultat. Seule la TRACE
         # change — aucun euro ne bouge, et `A1-2` du lot voisin le prouve
         # par exécution ici même (CF-4, CF-5).
+        # ⚠️⚠️ CONSTAT `conformite/C11`, SECONDE MOITIE. Le garde-fou n°3
+        # etait reste APRES l'intersection, la ou le n°2 avait ete deplace
+        # AVANT. Mesure du 11/09/2026, portefeuille portant `prime_pure`
+        # non declaree au plan : 1 log citant C-236/09, **0 log citant la
+        # fuite de donnees**. La trace ACPR de l'anti-fuite par le NOM ne
+        # pouvait pas se declencher — le motif de ce constat, applique a un
+        # seul des deux filtres.
+        # ⚠️ L'ENSEMBLE RETENU EST LE MEME : filtrer et intersecter
+        # commutent. Seule la TRACE change, et aucun euro ne bouge.
         conformes = filtrer_genre(list(candidates), contexte=contexte,
                                   logger_agent=logger_agent)             # ② INV-3
-        conformes = [c for c in conformes if c in declarees]
         conformes = filtrer_famille_cible(conformes, contexte=contexte,
                                           logger_agent=logger_agent)     # ③ (par le nom)
+        conformes = [c for c in conformes if c in declarees]
     else:
         # Rétrocompat : liste blanche codée + facteurs_supplementaires. Chemin
         # des appelants (A3/A4/A5/A6) non encore migrés vers le plan déclaratif.
