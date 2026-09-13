@@ -1211,6 +1211,27 @@ def tarif_publie(tarif, portefeuille=None, modele_recommande=None) -> dict:
         'chargements': synthese_chargements(plan),
         'regime_fiscal': synthese_regime_fiscal(plan),
         'validation_hypothese': phrase_decoupe(plan),
+        # ⛔⛔ CONSTAT `VAL-1` — CE QUE LE TARIF SAIT DE LUI-MÊME N'ATTEIGNAIT
+        # AUCUN DES SIX LIVRABLES SIGNÉS. `core/validation_tarif.py` écrit
+        # « ce module PUBLIE — le Gini, son intervalle, l'effectif du holdout
+        # ET le rapport n/p » ; mesuré le 11/09/2026, « publier » y voulait
+        # dire « rendre dans un dict » : `tarifer()` porte le bloc, et aucune
+        # des trois fabriques de documents ne lit une seule de ses clés
+        # (0 lecture par AST sur `validation`, `mentions`, `niveau_max`,
+        # `ic_bas`, `sinistres_par_parametre`).
+        #   Mesuré sur le cas EXCLU — 0 des 20 plans livrés ne déclare de
+        #   découpe, donc le bloc est aujourd'hui toujours `None`. Avec une
+        #   découpe déclarée : une mention AMBRE « POUVOIR DISCRIMINANT NON
+        #   DISTINGUABLE DE ZERO (severite) » est calculée, et le HTML produit
+        #   ne contient ni cette phrase, ni « NE DISCRIMINE PAS », ni même le
+        #   mot « holdout ».
+        # ⚠️ LA MÊME SOURCE POUR LES DEUX FORMATS : la phrase est construite
+        # ici et rendue à l'identique en HTML et en Word — jamais deux
+        # rédactions du même fait.
+        'validation_mentions': tuple(
+            f"[{_m.niveau}] {_m.texte}"
+            for _m in (getattr(getattr(tarif, 'validation', None),
+                               'mentions', None) or ())),
         # ⚠️⚠️ D'OU VIENT CE PRIX -- et l'ecart avec ce que le classement
         # recommande, quand il y en a un. Mesure du 09/09/2026 sur le document
         # reellement produit : le bloc prix ne disait RIEN de son origine, et
@@ -1262,7 +1283,8 @@ def _bloc_tarif_html(publie: dict) -> str:
         (publie.get('origine'), publie['total'].get('phrase_imputes'),
          publie.get('chargements'),
          publie.get('regime_fiscal'),
-         publie.get('validation_hypothese')) if p)
+         publie.get('validation_hypothese'),
+         *publie.get('validation_mentions', ())) if p)
     return (
         f'<div class="raisons-plafond">\n'
         f'  <div class="raisons-titre">{TITRE_TARIF}</div>\n'
@@ -3363,7 +3385,8 @@ def export_word(
                             _tar_w['total'].get('phrase_imputes'),
                             _tar_w.get('chargements'),
                             _tar_w.get('regime_fiscal'),
-                            _tar_w.get('validation_hypothese')):
+                            _tar_w.get('validation_hypothese'),
+                            *_tar_w.get('validation_mentions', ())):
                 if _phrase:
                     _run(p, '   · ' + _phrase, sz=8, col=NR).add_break()
             _run(p, f"   Empreinte du plan : {_tar_w['plan_empreinte']}",
