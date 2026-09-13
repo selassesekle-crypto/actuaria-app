@@ -2216,91 +2216,133 @@ class AgentA3GLM:
         # Prédictions Poisson (fréquence annuelle)
         if 'poisson' in self.modeles:
             vars_poisson = self.metriques['poisson']['vars_retenues']
-            if vars_poisson:
-                X = sm.add_constant(
-                    df[vars_poisson].fillna(0), has_constant='add'
-                )
-                try:
-                    pred_freq = self.modeles['poisson'].predict(X, offset=offset)
-                    # Annualisation : λ_annuel = λ_observé / exposition
-                    # ⚠️ `np.asarray` plutot que `.values` : il accepte une
-                    # Series comme un ndarray. Ici l'`except` rattraperait,
-                    # mais *un invariant simple vaut mieux qu'un invariant
-                    # vrai seulement a certains endroits.*
-                    _pf = np.asarray(pred_freq)
-                    predictions['frequence_annuelle'] = _pf / np.maximum(expo, 1e-6)
-                    predictions['frequence_brute']    = _pf
-                except Exception as e:
-                    # ⚠️⚠️ ON LEVE, ON NE FABRIQUE PAS UNE FREQUENCE. Cette
-                    # valeur entre directement dans `prime_pure` vingt lignes
-                    # plus bas : la fabriquer, c'est fabriquer un PRIX.
-                    # Mesure du 11/09/2026 : le repli rendait -60,0 % de
-                    # charge et un tarif PLAT, sous `success=True`.
-                    # ⚠️ Les deux defauts de la valeur de repli sont documentes
-                    # dans la note `PredictionImpossible` : une cle `col_freq`
-                    # qui n'existe nulle part, et un litteral `0.1`.
-                    raise PredictionImpossible(
-                        f"GLM Poisson : le modele est ajuste mais ne peut pas "
-                        f"predire sur ce portefeuille ({type(e).__name__}: "
-                        f"{e}). Aucune frequence n'est fabriquee : elle "
-                        f"entrerait telle quelle dans la prime pure. "
-                        f"Variables attendues : "
-                        f"{self.metriques['poisson']['vars_retenues']}."
-                    ) from e
+            # ⚠️⚠️ PLUS DE GARDE SUR LA LISTE DE VARIABLES — 13/09/2026.
+            # `if vars_poisson:` sautait TOUT le bloc quand la selection n'avait
+            # rien retenu, sans `else`, sans journal ici, sans cle dans le
+            # resultat : **la prediction disparaissait en silence**, et
+            # `prime_pure` avec elle -- elle n'est calculee que si
+            # `frequence_annuelle` ET `cout_moyen` sont presentes.
+            #   Mesure du 13/09 : sur huit portefeuilles, TROIS perdaient
+            #   leur prime pure, `success: True` les huit fois. Et sur le
+            #   jeu de reference du GEL -- celui des documents signes -- le
+            #   Gamma retient zero variable : `cout_moyen` et `prime_pure`
+            #   manquaient aux livrables, sans un mot.
+            # ⚠️ LE MODELE EXISTE POURTANT, ET IL SAIT PREDIRE. Le socle
+            # l'ajuste a la SEULE CONSTANTE et le declare legitime : << c'est
+            # un tarif qui ne segmente pas, et il se dit >>. *L'agent
+            # jetait le modele que le socle venait d'ajuster.* Mesure, garde
+            # levee : le Gamma rend 1 200 valeurs et la prime pure revient a
+            # 1 165 valeurs distinctes.
+            # ⚠️ CE QUE CELA PUBLIE EST UN TARIF PLAT SUR CETTE MOITIE, et
+            # c'est voulu : `metriques['puissance_selection']` porte la
+            # phrase << SELECTION PEU SEGMENTANTE : AUCUNE variable
+            # significative a 5 % >>. *Un tarif a zero facteur se voit ; un
+            # tarif absent ne se voit pas.*
+            X = sm.add_constant(
+                df[vars_poisson].fillna(0), has_constant='add'
+            )
+            try:
+                pred_freq = self.modeles['poisson'].predict(X, offset=offset)
+                # Annualisation : λ_annuel = λ_observé / exposition
+                # ⚠️ `np.asarray` plutot que `.values` : il accepte une
+                # Series comme un ndarray. Ici l'`except` rattraperait,
+                # mais *un invariant simple vaut mieux qu'un invariant
+                # vrai seulement a certains endroits.*
+                _pf = np.asarray(pred_freq)
+                predictions['frequence_annuelle'] = _pf / np.maximum(expo, 1e-6)
+                predictions['frequence_brute']    = _pf
+            except Exception as e:
+                # ⚠️⚠️ ON LEVE, ON NE FABRIQUE PAS UNE FREQUENCE. Cette
+                # valeur entre directement dans `prime_pure` vingt lignes
+                # plus bas : la fabriquer, c'est fabriquer un PRIX.
+                # Mesure du 11/09/2026 : le repli rendait -60,0 % de
+                # charge et un tarif PLAT, sous `success=True`.
+                # ⚠️ Les deux defauts de la valeur de repli sont documentes
+                # dans la note `PredictionImpossible` : une cle `col_freq`
+                # qui n'existe nulle part, et un litteral `0.1`.
+                raise PredictionImpossible(
+                    f"GLM Poisson : le modele est ajuste mais ne peut pas "
+                    f"predire sur ce portefeuille ({type(e).__name__}: "
+                    f"{e}). Aucune frequence n'est fabriquee : elle "
+                    f"entrerait telle quelle dans la prime pure. "
+                    f"Variables attendues : "
+                    f"{self.metriques['poisson']['vars_retenues']}."
+                ) from e
 
         # Prédictions Gamma (coût moyen)
         if 'gamma' in self.modeles:
             vars_gamma = self.metriques['gamma']['vars_retenues']
-            if vars_gamma:
-                X = sm.add_constant(
-                    df[vars_gamma].fillna(0), has_constant='add'
-                )
-                try:
-                    # ⚠️⚠️ `np.asarray` ET NON `.values` — LA LIGNE ETAIT
-                    # MORTE, ET LE REPLI SILENCIEUX LA MASQUAIT. Le modele
-                    # de cout n'est pas un objet statsmodels : c'est
-                    # `core.severite.ModeleCout`, dont `predict` est
-                    # **annote `-> np.ndarray`** et fait lui-meme le
-                    # `np.asarray`. `.values` n'a donc JAMAIS pu exister sur
-                    # son resultat : le `except` juste en dessous se
-                    # declenchait a CHAQUE run atteignant ce site, et posait
-                    # la moyenne observee -- un cout identique pour tout le
-                    # portefeuille.
-                    #
-                    # Mesure du 13/09/2026, quatre portefeuilles
-                    # independants (graines, tailles et sinistralites
-                    # differentes, cout dependant du profil) :
-                    #
-                    #     cout moyen predit   AVANT  1 valeur distincte
-                    #                         APRES  1 907 / 4 998 / 2 500
-                    #                                / 5 861
-                    #     prime pure          AVANT  414 valeurs distinctes
-                    #                         APRES  2 218
-                    #
-                    # *Le tarif ne segmentait que sur une de ses deux
-                    # moities : la frequence variait, le cout non.* Et
-                    # l'agregat ne bougeait que de -0,65 %, ce qui masquait
-                    # entierement la divergence individuelle.
-                    #
-                    # ⚠️ C'est la forme EXACTE du constat `a3/C15`, deja
-                    # ferme sur la branche frequence et sur le chemin de
-                    # secours : le meme `.values` sur ce qui n'en a pas.
-                    # *Le fermer a deux endroits sur trois laissait le
-                    # troisieme vivant, et invisible.*
-                    predictions['cout_moyen'] = np.asarray(
-                        self.modeles['gamma'].predict(X), dtype=float)
-                except Exception as e:
-                    # ⚠️ MEME REGLE QUE LA FREQUENCE, ET POUR LA MEME RAISON :
-                    # `cout_moyen` est l'autre facteur de `prime_pure`.
-                    # Remplacer le modele de cout par la moyenne OBSERVEE
-                    # rendrait un cout identique pour tous les contrats --
-                    # la moitie du tarif cesserait de segmenter, en silence.
-                    raise PredictionImpossible(
-                        f"GLM de cout : le modele est ajuste mais ne peut pas "
-                        f"predire sur ce portefeuille ({type(e).__name__}: "
-                        f"{e}). Aucun cout moyen n'est fabrique : il "
-                        f"entrerait tel quel dans la prime pure."
-                    ) from e
+            # ⚠️⚠️ PLUS DE GARDE SUR LA LISTE DE VARIABLES — 13/09/2026.
+            # `if vars_gamma:` sautait TOUT le bloc quand la selection n'avait
+            # rien retenu, sans `else`, sans journal ici, sans cle dans le
+            # resultat : **la prediction disparaissait en silence**, et
+            # `prime_pure` avec elle -- elle n'est calculee que si
+            # `frequence_annuelle` ET `cout_moyen` sont presentes.
+            #   Mesure du 13/09 : sur huit portefeuilles, TROIS perdaient
+            #   leur prime pure, `success: True` les huit fois. Et sur le
+            #   jeu de reference du GEL -- celui des documents signes -- le
+            #   Gamma retient zero variable : `cout_moyen` et `prime_pure`
+            #   manquaient aux livrables, sans un mot.
+            # ⚠️ LE MODELE EXISTE POURTANT, ET IL SAIT PREDIRE. Le socle
+            # l'ajuste a la SEULE CONSTANTE et le declare legitime : << c'est
+            # un tarif qui ne segmente pas, et il se dit >>. *L'agent
+            # jetait le modele que le socle venait d'ajuster.* Mesure, garde
+            # levee : le Gamma rend 1 200 valeurs et la prime pure revient a
+            # 1 165 valeurs distinctes.
+            # ⚠️ CE QUE CELA PUBLIE EST UN TARIF PLAT SUR CETTE MOITIE, et
+            # c'est voulu : `metriques['puissance_selection']` porte la
+            # phrase << SELECTION PEU SEGMENTANTE : AUCUNE variable
+            # significative a 5 % >>. *Un tarif a zero facteur se voit ; un
+            # tarif absent ne se voit pas.*
+            X = sm.add_constant(
+                df[vars_gamma].fillna(0), has_constant='add'
+            )
+            try:
+                # ⚠️⚠️ `np.asarray` ET NON `.values` — LA LIGNE ETAIT
+                # MORTE, ET LE REPLI SILENCIEUX LA MASQUAIT. Le modele
+                # de cout n'est pas un objet statsmodels : c'est
+                # `core.severite.ModeleCout`, dont `predict` est
+                # **annote `-> np.ndarray`** et fait lui-meme le
+                # `np.asarray`. `.values` n'a donc JAMAIS pu exister sur
+                # son resultat : le `except` juste en dessous se
+                # declenchait a CHAQUE run atteignant ce site, et posait
+                # la moyenne observee -- un cout identique pour tout le
+                # portefeuille.
+                #
+                # Mesure du 13/09/2026, quatre portefeuilles
+                # independants (graines, tailles et sinistralites
+                # differentes, cout dependant du profil) :
+                #
+                #     cout moyen predit   AVANT  1 valeur distincte
+                #                         APRES  1 907 / 4 998 / 2 500
+                #                                / 5 861
+                #     prime pure          AVANT  414 valeurs distinctes
+                #                         APRES  2 218
+                #
+                # *Le tarif ne segmentait que sur une de ses deux
+                # moities : la frequence variait, le cout non.* Et
+                # l'agregat ne bougeait que de -0,65 %, ce qui masquait
+                # entierement la divergence individuelle.
+                #
+                # ⚠️ C'est la forme EXACTE du constat `a3/C15`, deja
+                # ferme sur la branche frequence et sur le chemin de
+                # secours : le meme `.values` sur ce qui n'en a pas.
+                # *Le fermer a deux endroits sur trois laissait le
+                # troisieme vivant, et invisible.*
+                predictions['cout_moyen'] = np.asarray(
+                    self.modeles['gamma'].predict(X), dtype=float)
+            except Exception as e:
+                # ⚠️ MEME REGLE QUE LA FREQUENCE, ET POUR LA MEME RAISON :
+                # `cout_moyen` est l'autre facteur de `prime_pure`.
+                # Remplacer le modele de cout par la moyenne OBSERVEE
+                # rendrait un cout identique pour tous les contrats --
+                # la moitie du tarif cesserait de segmenter, en silence.
+                raise PredictionImpossible(
+                    f"GLM de cout : le modele est ajuste mais ne peut pas "
+                    f"predire sur ce portefeuille ({type(e).__name__}: "
+                    f"{e}). Aucun cout moyen n'est fabrique : il "
+                    f"entrerait tel quel dans la prime pure."
+                ) from e
 
         # ── PRIME PURE = fréquence annuelle × coût PAR SINISTRE + graves ──────
         # Le terme de graves n'est pas un ajustement cosmétique : c'est la charge
@@ -2317,26 +2359,47 @@ class AgentA3GLM:
         # Prédictions Tweedie (prime pure directe)
         if 'tweedie' in self.modeles:
             vars_tweedie = self.metriques['tweedie']['vars_retenues']
-            if vars_tweedie:
-                X = sm.add_constant(
-                    df[vars_tweedie].fillna(0), has_constant='add'
-                )
-                try:
-                    # ⚠️ PAS D'OFFSET AU PREDICT NON PLUS. Le correctif
-                    # `0d2b9c2` n'avait été appliqué qu'au FIT :
-                    # `_calibrer_tweedie` ajuste sans offset — sa docstring
-                    # l'exige mot pour mot (« Ajouter offset=log(expo)
-                    # appliquerait l'exposition DEUX FOIS ») — et cette ligne
-                    # prédisait AVEC. Mesuré : corr(prime_pure_tweedie,
-                    # exposition) = +0,51, un contrat à forte exposition
-                    # recevant une prime 4,4× celle d'un contrat identique à
-                    # faible exposition. La prime pure est un TAUX ANNUEL :
-                    # elle est exposure-indépendante par construction.
-                    predictions['prime_pure_tweedie'] = self.modeles['tweedie'].predict(
-                        X
-                    ).values
-                except Exception as e:
-                    logger.warning(f"Erreur prédiction Tweedie : {e}")
+            # ⚠️⚠️ PLUS DE GARDE SUR LA LISTE DE VARIABLES — 13/09/2026.
+            # `if vars_tweedie:` sautait TOUT le bloc quand la selection n'avait
+            # rien retenu, sans `else`, sans journal ici, sans cle dans le
+            # resultat : **la prediction disparaissait en silence**, et
+            # `prime_pure` avec elle -- elle n'est calculee que si
+            # `frequence_annuelle` ET `cout_moyen` sont presentes.
+            #   Mesure du 13/09 : sur huit portefeuilles, TROIS perdaient
+            #   leur prime pure, `success: True` les huit fois. Et sur le
+            #   jeu de reference du GEL -- celui des documents signes -- le
+            #   Gamma retient zero variable : `cout_moyen` et `prime_pure`
+            #   manquaient aux livrables, sans un mot.
+            # ⚠️ LE MODELE EXISTE POURTANT, ET IL SAIT PREDIRE. Le socle
+            # l'ajuste a la SEULE CONSTANTE et le declare legitime : << c'est
+            # un tarif qui ne segmente pas, et il se dit >>. *L'agent
+            # jetait le modele que le socle venait d'ajuster.* Mesure, garde
+            # levee : le Gamma rend 1 200 valeurs et la prime pure revient a
+            # 1 165 valeurs distinctes.
+            # ⚠️ CE QUE CELA PUBLIE EST UN TARIF PLAT SUR CETTE MOITIE, et
+            # c'est voulu : `metriques['puissance_selection']` porte la
+            # phrase << SELECTION PEU SEGMENTANTE : AUCUNE variable
+            # significative a 5 % >>. *Un tarif a zero facteur se voit ; un
+            # tarif absent ne se voit pas.*
+            X = sm.add_constant(
+                df[vars_tweedie].fillna(0), has_constant='add'
+            )
+            try:
+                # ⚠️ PAS D'OFFSET AU PREDICT NON PLUS. Le correctif
+                # `0d2b9c2` n'avait été appliqué qu'au FIT :
+                # `_calibrer_tweedie` ajuste sans offset — sa docstring
+                # l'exige mot pour mot (« Ajouter offset=log(expo)
+                # appliquerait l'exposition DEUX FOIS ») — et cette ligne
+                # prédisait AVEC. Mesuré : corr(prime_pure_tweedie,
+                # exposition) = +0,51, un contrat à forte exposition
+                # recevant une prime 4,4× celle d'un contrat identique à
+                # faible exposition. La prime pure est un TAUX ANNUEL :
+                # elle est exposure-indépendante par construction.
+                predictions['prime_pure_tweedie'] = self.modeles['tweedie'].predict(
+                    X
+                ).values
+            except Exception as e:
+                logger.warning(f"Erreur prédiction Tweedie : {e}")
 
         return predictions
 
