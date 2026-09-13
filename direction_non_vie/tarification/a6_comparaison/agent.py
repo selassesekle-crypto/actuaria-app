@@ -3434,7 +3434,12 @@ class AgentA6Comparaison:
             print(
                 f"  {i:<4}{m['modele']:<30}"
                 f"{m['score_global']:<8.4f}"
-                f"{m['gini_test']:<8.4f}"
+                # ⚠️ `gini_test` peut valoir `None` -- aucun sinistre en
+                # test, ou prediction refusee -- et partait en `:.4f` sans
+                # aucune protection : `TypeError`, et le classement des dix
+                # premiers modeles disparaissait. Le module emploie DEJA
+                # `gini_texte` a cinq autres endroits ; ici il manquait.
+                f"{gini_texte(m['gini_test']):<8}"
                 f"{m['famille']}"
             )
         print(f"\n  ⭐ MODÈLE PRODUCTION : {modele_production['modele']}")

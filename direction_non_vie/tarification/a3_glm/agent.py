@@ -133,7 +133,7 @@ from core.conformite_reglementaire import (
     statut_anti_selection, synthese_anti_selection, synthese_gini_non_mesure,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
     gini_texte, ratio_sur_apprentissage, intervalle_sur_apprentissage,
-    meilleure_rejetee, phrase_puissance_selection,
+    meilleure_rejetee, phrase_puissance_selection, mesure_texte,
 )
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -2761,6 +2761,24 @@ class AgentA3GLM:
         # coût moyen n'a pas été évaluée — pas « 0 € ».
         _cp = m_gam.get('cout_moyen_pred')
         _cout_pred = f"{_cp:,.0f}€" if _cp is not None else "non mesuré"
+        # ⚠️⚠️ ET SES DEUX JUMELLES, OUBLIEES — 13/09/2026. Le garde ci-dessus
+        # existait pour le coût ; la fréquence prédite et la prime pure
+        # prédite, elles, partaient en `:.4f` et `:,.0f` derrière un
+        # `.get(cle, 0)`. *Or `.get(cle, defaut)` ne protège de RIEN quand la
+        # clé EXISTE et vaut `None` : le défaut ne couvre que l'ABSENCE.*
+        # C'est la troisième fois que cette famille mord dans ce chantier —
+        # après les six sites de `WORD-1` et la note `PredictionImpossible`
+        # qui la dénonce en toutes lettres.
+        #   Mesure du 13/09 : `frequence_pred` à `None` faisait lever
+        #   `TypeError: unsupported format string passed to
+        #   NoneType.__format__`, A3 rendait `success: False`, et le
+        #   portefeuille n'avait AUCUN TARIF.
+        # ⚠️ `mesure_texte` est la PRIMITIVE du dépôt pour cela — sa
+        # docstring l'écrit : « toute grandeur qu'un modèle peut ne pas avoir
+        # produite passe par ici ». On ne pose pas un second geste.
+        _freq_pred = mesure_texte(m_poi.get('frequence_pred'), 4)
+        _pp = m_twe.get('prime_pure_moy_pred')
+        _pp_pred = f"{_pp:,.0f}€" if _pp is not None else "non mesuré"
 
         # ── NIVEAU 1 : LECTURE ────────────────────────────────────────────────
         niveau1 = (
@@ -2773,7 +2791,7 @@ class AgentA3GLM:
             f"  AIC                : {m_poi.get('aic', 'N/A')}\n"
             f"  Gini (test)        : {gini_texte(m_poi.get('gini'))}\n"
             f"  Fréquence obs/pred : {m_poi.get('frequence_obs',0):.4f} / "
-            f"{m_poi.get('frequence_pred',0):.4f}\n"
+            f"{_freq_pred}\n"
             f"\n"
             f"GLM GAMMA (coût moyen) :\n"
             f"  Variables retenues : {m_gam.get('nb_vars_retenues', 0)}\n"
@@ -2786,7 +2804,7 @@ class AgentA3GLM:
             f"  Variables retenues : {m_twe.get('nb_vars_retenues', 0)}\n"
             f"  AIC                : {m_twe.get('aic', 'N/A')}\n"
             f"  Prime obs/pred     : {m_twe.get('prime_pure_moy_obs',0):,.0f}€ / "
-            f"{m_twe.get('prime_pure_moy_pred',0):,.0f}€"
+            f"{_pp_pred}"
         )
 
         # ── NIVEAU 2 : DIAGNOSTIC ─────────────────────────────────────────────

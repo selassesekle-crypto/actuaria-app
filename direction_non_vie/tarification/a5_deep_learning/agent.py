@@ -2046,7 +2046,12 @@ class AgentA5DeepLearning:
             print(
                 f"  {c['modele']:<35} "
                 f"{gini_texte(c['gini_test']):<10} "
-                f"{c['rmse_test']:<10.2f} "
+                # ⚠️ MEME CONTRAT QUE LE GINI JUSTE AU-DESSUS -- 13/09/2026.
+                # `rmse_test` peut valoir `None` (aucun sinistre en test, ou
+                # prediction refusee) et partait en `:.2f` : `TypeError`, et
+                # le classement entier disparaissait. *Le garde etait pose a
+                # une colonne et pas a sa voisine, dans la MEME ligne.*
+                f"{mesure_texte(c['rmse_test'], 2):<10} "
                 f"{c.get('type','')}"
             )
         print(f"\n{sep}")
