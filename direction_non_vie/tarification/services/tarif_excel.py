@@ -1163,6 +1163,45 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
 #  4 onglets : Synthèse · Qualité & Aberrants · Coercition Types · Audit Trail
 # =============================================================================
 
+# ⚠️⚠️ UN TAUX QU'ON N'A PAS MESURÉ NE SE DIVISE PAS — constat `XLA1-1`,
+# 14/09/2026, et c'est une RÉGRESSION DE CE CHANTIER, pas une dette reçue.
+#
+# Les trois taux de l'onglet 1 s'écrivaient `qualite.get(clé, 0) / 100`. Ce
+# défaut à `0` ne sert QUE si la clé est ABSENTE : quand elle est présente et
+# vaut `None`, la division lève `TypeError`, le `except` du bas rend `b''` —
+# **et le classeur signé n'existe pas**.
+#
+# `None` était inatteignable jusqu'au 13/09 : A1 posait
+# `'expo_ok_pct': round(expo_ok, 2)`. Le correctif `RDP-6` (« une exposition
+# qu'on n'a pas lue ne se certifie pas ») l'a rendu atteignable, et CE
+# fichier n'a pas suivi. Mesuré sur le chemin vivant, plan `auto_fr_reel`,
+# `AgentA1Ingestion.run` :
+#     colonne déclarée PRÉSENTE  -> excel_bytes = 9 350 octets
+#     colonne déclarée ABSENTE   -> excel_bytes =     0 octet
+#
+# ⚠️ ET LE MOTIF VOYAGE AVEC — constat `XLA1-2`. A1 écrit en commentaire
+# « le MOTIF voyage avec, sinon l'absence redevient muette » puis pose
+# `expo_non_mesuree_motif` ; relevé AST du 14/09 : **aucune surface de
+# production ne le lisait**, seul un test. Un fait calculé qui n'atteint
+# aucun livrable n'existe pas.
+#
+# ⚠️ LE DÉFAUT `0` DISPARAÎT AUSSI POUR LA CLÉ ABSENTE, délibérément : c'est
+# le zéro fabriqué que ce fichier condamne quatre fois ailleurs. Ce que cela
+# déplace est mesuré et publié dans la contre-épreuve du lot — le cas MESURÉ,
+# lui, reste identique octet pour octet.
+def _kpi_taux(ws, r: int, label: str, qualite: dict, cle: str,
+              motif_cle: str | None = None) -> int:
+    """Publie un taux en %, ou DIT son absence. Rend la ligne suivante."""
+    valeur = qualite.get(cle)
+    if valeur is None:
+        _kpi(ws, r, label,
+             (qualite.get(motif_cle) if motif_cle else None) or NON_MESURE,
+             statut="AMBRE", wrap=True)
+    else:
+        _kpi(ws, r, label, valeur / 100, fmt=FMT_PCT)
+    return r + 1
+
+
 def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] = None) -> bytes:
     """Génère le rapport Excel A1 Ingestion (4 onglets). Retourne bytes ou b''."""
     if not OPENPYXL_OK or not result_a1 or not result_a1.get('success'):
@@ -1218,9 +1257,10 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
                  statut=result_a1.get('statut_rag'), fmt=FMT_DEC4); r += 1
             _kpi(ws1, r, "Nb lignes", qualite.get('nb_lignes', 0), fmt=FMT_NB); r += 1
             _kpi(ws1, r, "Nb colonnes", qualite.get('nb_colonnes', 0), fmt=FMT_NB); r += 1
-            _kpi(ws1, r, "Taux complétude", qualite.get('taux_completude', 0) / 100, fmt=FMT_PCT); r += 1
+            r = _kpi_taux(ws1, r, "Taux complétude", qualite,
+                          'taux_completude')
             _kpi(ws1, r, "Nb doublons", qualite.get('nb_doublons', 0), fmt=FMT_NB); r += 1
-            _kpi(ws1, r, "Taux doublons", qualite.get('taux_doublons', 0) / 100, fmt=FMT_PCT); r += 1
+            r = _kpi_taux(ws1, r, "Taux doublons", qualite, 'taux_doublons')
         # ⚠️⚠️ SUR QUOI CE COMPTE DE DOUBLONS PORTE-T-IL — constat `A1.5`.
         # A1 calculait `source_identifiant` et `note_identite` depuis le
         # 24/08 ; mesuré le 05/09/2026, **seuls des tests les lisaient**. Le
@@ -1253,8 +1293,9 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
                          "Nb types d'anomalies détectées"):
                 _kpi(ws1, r, _nom, NON_TRANSMIS, statut="AMBRE"); r += 1
         else:
-            _kpi(ws1, r, "Exposition dans la borne déclarée au plan",
-                 qualite.get('expo_ok_pct', 0) / 100, fmt=FMT_PCT); r += 1
+            r = _kpi_taux(ws1, r, "Exposition dans la borne déclarée au plan",
+                          qualite, 'expo_ok_pct',
+                          motif_cle='expo_non_mesuree_motif')
             _kpi(ws1, r, "Nb types d'anomalies détectées", qualite.get('nb_types_aberrants', 0),
                  statut="VERT" if qualite.get('nb_types_aberrants', 0) == 0 else "AMBRE",
                  fmt=FMT_NB); r += 1
