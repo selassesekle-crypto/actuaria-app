@@ -91,7 +91,13 @@ def _reel() -> pd.DataFrame:
     Le detail des sinistres n'y est pas -- et c'est precisement ce qui l'empeche
     de trancher.
     """
-    d = pd.read_csv('data/PG_2017_CLAIMS_YEAR0.csv')
+    # ⚠️⚠️ CONSTAT `CWD-1` : le chemin se derive de `__file__`. Un
+    # `read_csv` relatif leve `FileNotFoundError` depuis un autre
+    # repertoire -- bruyant, donc moins grave qu'un glob vide, mais la
+    # cause est la meme et le remede aussi.
+    import pathlib as _pl
+    _racine = _pl.Path(__file__).resolve().parents[2]
+    d = pd.read_csv(_racine / 'data' / 'PG_2017_CLAIMS_YEAR0.csv')
     g = d.groupby(['id_client', 'id_vehicle', 'id_year']).agg(
         cout_total_sinistres=('claim_amount', 'sum'),
         nb_sinistres=('claim_nb', 'sum')).reset_index()

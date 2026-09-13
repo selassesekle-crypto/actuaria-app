@@ -497,6 +497,28 @@ class Facteur:
                 f"'{self.nom}' : un one-hot exige des modalites figées "
                 f"(sinon le contrat A2→A3 est indéterminé)."
             )
+        # ⚠️⚠️ UNE REFERENCE QUI N'EST PAS UNE MODALITE N'EN ECARTE AUCUNE.
+        # `colonnes_produites` saute la modalite EGALE a la reference ; une
+        # reference absente de l'enumeration n'en egale aucune, et le facteur
+        # produit alors k colonnes pour k modalites au lieu de k-1. Avec la
+        # constante du GLM, la matrice de conception devient colineaire.
+        # Mesure du 11/09/2026 : `modalites=('A','B','C'), reference='Z'` est
+        # ACCEPTE et rend ('zone_a','zone_b','zone_c') — une colonne DE TROP.
+        # ⚠️ LE FILET DU DESSOUS NE PEUT PAS LE VOIR : il n'attrape que la
+        # production de ZERO colonne, or ici on en produit une de TROP.
+        # ⚠️ Le prix, lui, ne bouge pas — statsmodels resout par pseudo-inverse.
+        # Ce qui bouge, ce sont les RELATIVITES exp(beta) PUBLIEES : la constante
+        # s'y repartit arbitrairement.
+        if (self.encodage == "one_hot" and self.reference is not None
+                and self.reference not in (self.modalites or ())):
+            raise ValueError(
+                f"'{self.nom}' : reference={self.reference!r} n'est pas une "
+                f"modalite declaree ({list(self.modalites or ())}). Une "
+                f"reference qui n'existe pas n'ecarte aucune modalite : le "
+                f"facteur produirait {len(self.modalites or ())} colonnes au "
+                f"lieu de {max(len(self.modalites or ()) - 1, 0)}, et la "
+                f"matrice de conception serait colineaire avec la constante."
+            )
 
         # ── ③ LE FILET : un facteur déclaré qui ne produit RIEN est un défaut ──
         # ⚠️⚠️ Les contrôles ci-dessus nomment les causes que j'ai mesurées. Ce
@@ -1180,7 +1202,7 @@ class PlanTarifaire:
         empreinte sans préfixe est HÉRITÉE, non revalidable — voir
         `comparer_empreinte`.
         """
-        payload = json.dumps({
+        charge = {
             "schema": EMPREINTE_SCHEMA,
             "lob": self.lob, "version": self.version, "auteur": self.auteur,
             "exposition": self.exposition,
@@ -1267,7 +1289,27 @@ class PlanTarifaire:
                 for f in self.facteurs
             ],
             "interactions": [list(i) for i in self.interactions],
-        }, sort_keys=True, ensure_ascii=False)
+        }
+        # ⚠️⚠️ LE SCEAU NE COUVRAIT PAS LE CAS QU'IL ANNONCE. Le commentaire
+        # d'`EMPREINTE_SCHEMA` affirme qu'<< une derive de structure SANS bump
+        # fait rougir la gate >>. Mesure du 11/09/2026 : la charge est ECRITE A LA
+        # MAIN (ni `asdict`, ni `fields`), donc un 21e champ ajoute au plan et
+        # OUBLIE ici ne change pas la charge -> golden inchange -> aucun bump
+        # requis -> **rien ne rougit**. Le champ deciderait d'un prix et ne
+        # signerait pas : c'est ce que neuf bumps ont ete faits pour empecher.
+        # ⚠️ ON NE REVIENT PAS A `asdict` — le commentaire ci-dessus l'ecarte a
+        # raison : une signature opposable ne doit pas dependre de la facon dont
+        # une bibliotheque traite un NamedTuple imbrique. On ECRIT la charge, et
+        # on VERIFIE qu'elle couvre tout. Les deux cibles y entrent sous `cibles`.
+        _couvert = set(charge) | {"cible_frequence", "cible_cout"}
+        _oublies = sorted({f.name for f in dataclasses.fields(PlanTarifaire)}
+                          - _couvert)
+        if _oublies:
+            raise ValueError(
+                f"empreinte() ne hache pas {_oublies} : ce(s) champ(s) du plan "
+                f"signe n'entrerai(en)t pas dans la signature opposable. "
+                f"Ajoutez-le(s) a la charge ET bumpez EMPREINTE_SCHEMA.")
+        payload = json.dumps(charge, sort_keys=True, ensure_ascii=False)
         digest = hashlib.sha256(payload.encode()).hexdigest()[:16]
         return f"s{EMPREINTE_SCHEMA}:{digest}"
 

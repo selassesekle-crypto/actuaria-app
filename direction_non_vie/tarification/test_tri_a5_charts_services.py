@@ -60,7 +60,6 @@ propres controles. *Ne pas l'empiler dans une passe de tri.*
 from __future__ import annotations
 
 import ast
-import glob
 import inspect
 import pathlib
 import re
@@ -73,6 +72,29 @@ from direction_non_vie.tarification.a5_deep_learning.agent import (
     COLS_CONTAMINEES,
 )
 from direction_non_vie.tarification.services.excel_helpers import _kpi
+
+
+# ⚠️⚠️ CONSTAT `CWD-1` — L'ASSIETTE NE PEUT PLUS DEPENDRE DU REPERTOIRE
+# COURANT. `glob.glob('plans/*.yaml')` est RELATIF : lance d'ailleurs que la
+# racine du depot il rend `[]`, la liste de victimes est vide, et
+# `assertEqual(victimes, [])` PASSE en n'ayant regarde AUCUN plan. Mesure du
+# 11/09/2026 : cinq controles VERTS affichant litteralement << 0 / 0 plans >>,
+# et une violation plantee (une colonne produite ajoutee a la liste noire)
+# restait invisible. *Un controle dont l'assiette peut devenir vide atteste
+# sans surveiller.*
+def _plans_du_depot():
+    """Les YAML de plans, resolus depuis `__file__` et JAMAIS vides."""
+    import glob as _glob
+    import os as _os
+    racine = _os.path.dirname(_os.path.dirname(_os.path.dirname(
+        _os.path.abspath(__file__))))
+    trouves = sorted(_glob.glob(_os.path.join(racine, 'plans', '*.yaml')))
+    if not trouves:
+        raise AssertionError(
+            f"aucun plan sous {_os.path.join(racine, 'plans')} : l'assiette "
+            f"du controle est VIDE, il attesterait sans rien surveiller")
+    return trouves
+
 
 _RACINE = pathlib.Path(__file__).resolve().parents[2]
 
@@ -180,7 +202,7 @@ class TestZoneA5(unittest.TestCase):
         """
         noir = set(COLS_A_EXCLURE)
         victimes = []
-        for fichier in sorted(glob.glob('plans/*.yaml')):
+        for fichier in _plans_du_depot():
             plan = PlanTarifaire.depuis_yaml(fichier)
             for col in plan.colonnes_produites():
                 if col in noir or any(m in col for m in COLS_CONTAMINEES):
@@ -190,7 +212,7 @@ class TestZoneA5(unittest.TestCase):
             f"{len(victimes)} colonne(s) DECLAREE(S) au plan seraient "
             f"supprimee(s) EN SILENCE par A5 : {victimes}. Le defaut latent "
             f"vient de devenir ACTIF -- voir l'en-tete de ce fichier.")
-        print(f"    TRI-7 a5/C8 : 0 / {len(glob.glob('plans/*.yaml'))} plans "
+        print(f"    TRI-7 a5/C8 : 0 / {len(_plans_du_depot())} plans "
               f"ne nomment une colonne que la liste noire mangerait")
 
 

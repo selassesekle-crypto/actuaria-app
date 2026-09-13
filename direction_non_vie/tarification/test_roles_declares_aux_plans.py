@@ -44,7 +44,25 @@ from core.plan_tarifaire import PlanTarifaire
 from core.qualite_donnees import controler_qualite
 from direction_non_vie.tarification.test_pipeline_agents import _portefeuille_auto
 
-_PLANS = sorted(pathlib.Path('plans').glob('*.yaml'))
+# ⚠️⚠️ CONSTAT `CWD-1` — LA RACINE SE DERIVE DE `__file__`, JAMAIS DU
+# REPERTOIRE COURANT. `pathlib.Path('plans')` est RELATIF : lance d'ailleurs
+# que la racine du depot, le glob rend `[]`, et SIX controles de ce fichier
+# passent alors a vide (`assertEqual(sans, [])` et trois boucles `for f in
+# _PLANS`). Mesure du 11/09/2026.
+_RACINE_DEPOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+def _plans_du_depot():
+    """Les YAML de plans, resolus depuis `__file__` et JAMAIS vides."""
+    trouves = sorted((_RACINE_DEPOT / 'plans').glob('*.yaml'))
+    if not trouves:
+        raise AssertionError(
+            f"aucun plan sous {_RACINE_DEPOT / 'plans'} : l'assiette du "
+            f"controle est VIDE, il attesterait sans rien surveiller")
+    return trouves
+
+
+_PLANS = _plans_du_depot()
 
 #: Les sept LoB dont l'unite assuree N'EST PAS evidemment « le contrat ».
 #: ⚠️ La cle est le MOT QUI FAIT AUTORITE dans le plan, pas une paraphrase.
@@ -251,7 +269,8 @@ class TestLesVingtPlansSurUnHISTORIQUE(unittest.TestCase):
         self.assertEqual(ko, [], f'{len(ko)} plan(s) perdent des lignes ou ne '
                                  f'signalent pas l ambiguite : {ko}')
         # ⚠️ ET UNE SIGNATURE DEBLOQUE — sinon ce serait un refus deguise.
-        plan = _charge(pathlib.Path('plans/auto.yaml'))
+        plan = _charge(next(f for f in _plans_du_depot()
+                        if f.name == 'auto.yaml'))
         h = _portefeuille_conforme(plan).drop(columns=[plan.echeance])
         r = _controler(h, plan, qualite_validee_par='actuaire test')
         self.assertFalse(r.bloque, 'une confirmation nominative ne debloque pas')
@@ -268,7 +287,8 @@ class TestLeComportementSurUnVRAIFichier(unittest.TestCase):
     """
 
     def setUp(self):
-        self.plan = _charge(pathlib.Path('plans/auto.yaml'))
+        self.plan = _charge(next(f for f in _plans_du_depot()
+                                 if f.name == 'auto.yaml'))
         self.base = _portefeuille_auto(300, seed=3)
 
     def _hist(self, exercices=(2023, 2024, 2025)):

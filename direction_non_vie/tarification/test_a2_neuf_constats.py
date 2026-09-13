@@ -68,7 +68,6 @@ comportement. *Les deux ensemble, dans leur propre lot.*
 
 from __future__ import annotations
 
-import glob
 import inspect
 import logging
 import pathlib
@@ -86,6 +85,29 @@ from direction_non_vie.tarification.test_pipeline_agents import (
     _PLAN_AUTO,
     _portefeuille_auto,
 )
+
+
+# ⚠️⚠️ CONSTAT `CWD-1` — L'ASSIETTE NE PEUT PLUS DEPENDRE DU REPERTOIRE
+# COURANT. `glob.glob('plans/*.yaml')` est RELATIF : lance d'ailleurs que la
+# racine du depot il rend `[]`, la liste de victimes est vide, et
+# `assertEqual(victimes, [])` PASSE en n'ayant regarde AUCUN plan. Mesure du
+# 11/09/2026 : cinq controles VERTS affichant litteralement << 0 / 0 plans >>,
+# et une violation plantee (une colonne produite ajoutee a la liste noire)
+# restait invisible. *Un controle dont l'assiette peut devenir vide atteste
+# sans surveiller.*
+def _plans_du_depot():
+    """Les YAML de plans, resolus depuis `__file__` et JAMAIS vides."""
+    import glob as _glob
+    import os as _os
+    racine = _os.path.dirname(_os.path.dirname(_os.path.dirname(
+        _os.path.abspath(__file__))))
+    trouves = sorted(_glob.glob(_os.path.join(racine, 'plans', '*.yaml')))
+    if not trouves:
+        raise AssertionError(
+            f"aucun plan sous {_os.path.join(racine, 'plans')} : l'assiette "
+            f"du controle est VIDE, il attesterait sans rien surveiller")
+    return trouves
+
 
 _SOURCE = pathlib.Path(_a2mod.__file__).read_text(encoding='utf-8')
 _SOURCE_TEST = (pathlib.Path(_a2mod.__file__).parent
@@ -234,7 +256,7 @@ class TestLesHuitPhrases(unittest.TestCase):
         """⚠️⚠️ ON RE-DERIVE l'orphelinat : le marquer sans le verifier serait
         recopier une mesure d'hier."""
         orpheline = 'log_cout_total_sinistres'
-        producteurs = [f for f in sorted(glob.glob('plans/*.yaml'))
+        producteurs = [f for f in _plans_du_depot()
                        if orpheline in
                        set(PlanTarifaire.depuis_yaml(f).colonnes_produites())]
         self.assertEqual(producteurs, [],

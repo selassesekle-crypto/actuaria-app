@@ -77,7 +77,6 @@ sont opposables.
 from __future__ import annotations
 
 import dataclasses
-import glob
 import logging
 import unittest
 import warnings
@@ -101,6 +100,29 @@ from direction_non_vie.tarification.test_pipeline_agents import (
     _PLAN_AUTO,
     _portefeuille_auto,
 )
+
+
+# ⚠️⚠️ CONSTAT `CWD-1` — L'ASSIETTE NE PEUT PLUS DEPENDRE DU REPERTOIRE
+# COURANT. `glob.glob('plans/*.yaml')` est RELATIF : lance d'ailleurs que la
+# racine du depot il rend `[]`, la liste de victimes est vide, et
+# `assertEqual(victimes, [])` PASSE en n'ayant regarde AUCUN plan. Mesure du
+# 11/09/2026 : cinq controles VERTS affichant litteralement << 0 / 0 plans >>,
+# et une violation plantee (une colonne produite ajoutee a la liste noire)
+# restait invisible. *Un controle dont l'assiette peut devenir vide atteste
+# sans surveiller.*
+def _plans_du_depot():
+    """Les YAML de plans, resolus depuis `__file__` et JAMAIS vides."""
+    import glob as _glob
+    import os as _os
+    racine = _os.path.dirname(_os.path.dirname(_os.path.dirname(
+        _os.path.abspath(__file__))))
+    trouves = sorted(_glob.glob(_os.path.join(racine, 'plans', '*.yaml')))
+    if not trouves:
+        raise AssertionError(
+            f"aucun plan sous {_os.path.join(racine, 'plans')} : l'assiette "
+            f"du controle est VIDE, il attesterait sans rien surveiller")
+    return trouves
+
 
 #: ⚠️⚠️ LE PLAN AUTO **SANS SON REGIME FISCAL** -- et il faut dire pourquoi.
 #: `plans/auto.yaml` declare depuis le 08/09/2026 `regime_fiscal:
@@ -263,12 +285,12 @@ class TestPorte2Bornes(unittest.TestCase):
         r = t.tarifer({**_CONTRAT, 'bonus_malus': -999})
         self.assertTrue(r['success'], "un plan SANS borne refuse desormais : "
                                       "un euro a bouge sur l'existant")
-        declarants = [f for f in sorted(glob.glob('plans/*.yaml'))
+        declarants = [f for f in _plans_du_depot()
                       if any(fa.bornes for fa in
                              PlanTarifaire.depuis_yaml(f).facteurs)]
         self.assertEqual(declarants, [])
         print(f"    PTE-6 sans borne : prime rendue comme hier ; "
-              f"0 / {len(glob.glob('plans/*.yaml'))} plans declarent")
+              f"0 / {len(_plans_du_depot())} plans declarent")
 
     def test_l_absence_de_domaine_est_DITE_et_se_TAIT_quand_tout_est_borne(self):
         """⚠️⚠️ SANS CETTE PHRASE LA FERMETURE SERAIT A MOITIE. La porte
@@ -381,7 +403,7 @@ class TestAucunEuroSurLExistant(unittest.TestCase):
         """⚠️⚠️ C'EST LA PREUVE D'AUCUN EURO. Le jour ou un plan declarera sa
         vraie taxe, l'euro bougera -- jusqu'a -22 % sur la RC -- et ce sera un
         ARBITRAGE, pas un effet de bord."""
-        fichiers = sorted(glob.glob('plans/*.yaml'))
+        fichiers = _plans_du_depot()
         plans = {f: PlanTarifaire.depuis_yaml(f) for f in fichiers}
         avec_ch = [f for f, p in plans.items() if p.chargements is not None]
         avec_bo = [f for f, p in plans.items()

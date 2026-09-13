@@ -55,7 +55,6 @@ monte la garde : 0 / 20 plans ne nomme l'une d'elles.
 from __future__ import annotations
 
 import ast
-import glob
 import logging
 import pathlib
 import re
@@ -79,6 +78,29 @@ from direction_non_vie.tarification.test_pipeline_agents import (
     _PLAN_AUTO,
     _portefeuille_auto,
 )
+
+
+# ⚠️⚠️ CONSTAT `CWD-1` — L'ASSIETTE NE PEUT PLUS DEPENDRE DU REPERTOIRE
+# COURANT. `glob.glob('plans/*.yaml')` est RELATIF : lance d'ailleurs que la
+# racine du depot il rend `[]`, la liste de victimes est vide, et
+# `assertEqual(victimes, [])` PASSE en n'ayant regarde AUCUN plan. Mesure du
+# 11/09/2026 : cinq controles VERTS affichant litteralement << 0 / 0 plans >>,
+# et une violation plantee (une colonne produite ajoutee a la liste noire)
+# restait invisible. *Un controle dont l'assiette peut devenir vide atteste
+# sans surveiller.*
+def _plans_du_depot():
+    """Les YAML de plans, resolus depuis `__file__` et JAMAIS vides."""
+    import glob as _glob
+    import os as _os
+    racine = _os.path.dirname(_os.path.dirname(_os.path.dirname(
+        _os.path.abspath(__file__))))
+    trouves = sorted(_glob.glob(_os.path.join(racine, 'plans', '*.yaml')))
+    if not trouves:
+        raise AssertionError(
+            f"aucun plan sous {_os.path.join(racine, 'plans')} : l'assiette "
+            f"du controle est VIDE, il attesterait sans rien surveiller")
+    return trouves
+
 
 _SOURCE = pathlib.Path(_a3mod.__file__).read_text(encoding='utf-8')
 _SOURCE_TEST = (pathlib.Path(_a3mod.__file__).parent
@@ -226,13 +248,13 @@ class TestLesCinqAutres(unittest.TestCase):
                         'des entrees ont ete retirees : un fichier client les '
                         'ferait entrer dans le modele')
         victimes = [(pathlib.Path(f).name, c)
-                    for f in sorted(glob.glob('plans/*.yaml'))
+                    for f in _plans_du_depot()
                     for c in PlanTarifaire.depuis_yaml(f).colonnes_produites()
                     if c in noir]
         self.assertEqual(victimes, [],
                          f'{len(victimes)} colonne(s) DECLAREE(S) seraient '
                          f'supprimees en silence : {victimes}')
-        print(f"    A3-8 0 / {len(glob.glob('plans/*.yaml'))} plans ne nomme "
+        print(f"    A3-8 0 / {len(_plans_du_depot())} plans ne nomme "
               f"une des {len(noir)} entrees de la liste noire")
 
     def test_C12_le_seuil_vient_de_sa_SOURCE_UNIQUE(self):
