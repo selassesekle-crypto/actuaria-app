@@ -1903,9 +1903,29 @@ def synthese_exemptions_effet(exemptees) -> str | None:
 
     ⚠️ LE TON N'EST PAS CELUI D'UNE EXCLUSION : ces colonnes sont CONSERVÉES,
     délibérément, par une décision écrite au plan. Ce qui se demande à
-    l'actuaire n'est pas de les rétablir, c'est de VÉRIFIER que l'antériorité
-    déclarée est vraie — une colonne nommée « antérieure » mais remplie avec
-    la période observée est exactement la fuite que le contrôle cherchait.
+    l'actuaire n'est pas de les rétablir, c'est de VÉRIFIER que la valeur est
+    bien FIXÉE À LA DATE D'EFFET — une colonne exemptée mais remplie avec la
+    période observée est exactement la fuite que le contrôle cherchait.
+
+    ⚠️⚠️ CONSTAT `EFF-1` — L'INSTRUCTION N'ÉTAIT PAS RÉPONDABLE POUR LA MOITIÉ
+    DES CAS QUE CE CHAMP REÇOIT. Elle disait « vérifiez que chacune porte bien
+    sur LE PASSÉ ». Or `synthese_exclusions` invite explicitement à déclarer
+    ici une variable de VOLUME : « en RC Pro, l'effectif joue le rôle que
+    l'exposition joue en auto […] déclarez-la au plan comme exemptée
+    (`anteriorite=True`) ». Mesuré le 11/09 sur `flotte_automobile.yaml` : sur
+    un portefeuille de flottes de 5 à 100 véhicules (~9,8 sinistres/police/an),
+    `taille_flotte` ET `log_taille_flotte` sont écartées, signal Spearman
+    0,837. Le remède fonctionne — mais l'actuaire qui l'applique lit ensuite
+    qu'il doit vérifier une antériorité que sa colonne n'a pas, et conclut que
+    l'exemption est injustifiée.
+    *Une instruction erronée est pire qu'un silence* — c'est le BLOQUANT B7,
+    établi par ce module lui-même (voir `motif_mot_metrique`).
+
+    ⚠️ CE QUI N'EST PAS CHANGÉ, ET C'EST VOLONTAIRE : ni le seuil, ni le
+    mécanisme, ni le nom du champ `anteriorite`. Renommer le champ casserait
+    les 18 plans signés qui le portent ; poser un seuil par nature serait
+    inventer un chiffre actuariel que personne n'a signé. Seul le TEXTE
+    change — pour que la question posée puisse recevoir une réponse.
     """
     exc = exemptees or {}
     if not exc:
@@ -1917,9 +1937,15 @@ def synthese_exemptions_effet(exemptees) -> str | None:
         f"sont CONSERVÉES — leur valeur est connue à la date d'effet du "
         f"contrat, et leur corrélation avec la cible est alors un symptôme "
         f"d'hétérogénéité persistante (Buhlmann-Straub), pas une fuite. "
-        f"⚠ VÉRIFIEZ que chacune porte bien sur le PASSÉ et non, par erreur de "
-        f"mapping, sur la période observée : c'est le seul cas où cette "
-        f"exemption ferait entrer une vraie fuite."
+        f"⚠ VÉRIFIEZ, pour chacune, que sa valeur est bien FIXÉE À LA DATE "
+        f"D'EFFET et non alimentée, par erreur de mapping, avec la période "
+        f"observée : c'est le seul cas où cette exemption ferait entrer une "
+        f"vraie fuite. Deux natures passent par ce champ, et la question ne "
+        f"se pose pas de la même façon : une variable d'EXPÉRIENCE PASSÉE "
+        f"(sinistres antérieurs) doit porter sur une période CLOSE AVANT "
+        f"l'effet ; une variable de VOLUME (taille de flotte, effectif, "
+        f"surface, chiffre d'affaires) doit être celle DÉCLARÉE À LA "
+        f"SOUSCRIPTION, et non un volume recalculé après coup."
     )
 
 def synthese_modele_dl(modele_production: Optional[dict],
