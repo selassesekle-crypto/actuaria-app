@@ -1007,6 +1007,11 @@ def sensibilite_tarifaire(plan, df, etat, variations=VARIATIONS_DEFAUT,
     _declare_au_plan = _ch_plan is not None and all(
         getattr(_ch_plan, _c, None) is not None
         for _c in ('frais', 'commission', 'marge'))
+    # ⚠️⚠️ INITIALISÉ AVANT LA GARDE, JAMAIS DEDANS. Une variable
+    # affectée seulement dans une branche et lue en dehors lève
+    # `NameError` sur les autres chemins — c'est le défaut `A6-1` de
+    # ce dépôt, et il ne se reproduit pas ici.
+    _ch_devines = False
     if chargements is not None:
         ch = dict(chargements)
         _origine_ch = "fournis explicitement a l'appel"
@@ -1021,6 +1026,13 @@ def sensibilite_tarifaire(plan, df, etat, variations=VARIATIONS_DEFAUT,
     else:
         ch = dict(CHARGEMENTS_DEFAUT)
         _origine_ch = "conventions du module — aucun texte n'en fixe"
+        # ⚠️⚠️ UN DRAPEAU EXPLICITE PLUTÔT QU'UNE CHAÎNE COMPARÉE. Le
+        # refus ci-dessous doit savoir que les trois taux sont DEVINÉS ;
+        # le déduire en relisant `_origine_ch` ferait dépendre un garde-fou
+        # d'une phrase d'affichage, qu'une reformulation casserait en
+        # silence. *Un contrôle qui lit une PROSE ne surveille pas un
+        # comportement.*
+        _ch_devines = True
     conventions = {
         'chargements': ch,
         'centiles_domaine': [CENTILE_DOMAINE_BAS, CENTILE_DOMAINE_HAUT],
@@ -1052,6 +1064,36 @@ def sensibilite_tarifaire(plan, df, etat, variations=VARIATIONS_DEFAUT,
     if not converge:
         return {**vide, 'motif': (
             "L'ajustement n'a pas convergé au moment de tracer la courbe.")}
+
+    # ⛔⛔ CONSTAT `ELA-2` — L'OPTIMUM DE MARGE REPOSAIT SUR TROIS TAUX QUE
+    # PERSONNE N'AVAIT DÉCLARÉS. `core/chargements_declares.py` écrit en
+    # en-tête la règle arbitrée le 08/09/2026 : *« la prime commerciale
+    # n'existe QUE si le client a déclaré ses trois chargements. Sans
+    # déclaration, elle n'est pas calculée et LE REFUS EST PUBLIÉ — jamais
+    # un repli muet. »* La prime pure refusait de deviner ces nombres ; la
+    # marge, elle, les devinait encore — et l'OPTIMUM en était tiré.
+    #   Le lot `EL-D1` du 12/09 avait fermé la moitié du problème en
+    #   PUBLIANT l'origine ; il restait le repli lui-même.
+    # ⚠️ MESURE DU 13/09/2026, ET ELLE DIT QUE C'EST LATENT : 0 plan sur 20
+    # déclare un bloc `comportement`, 0 sur 20 déclare ses `chargements` —
+    # aucun chiffre publié aujourd'hui ne bouge. Ce qui se ferme ici est la
+    # CONTRADICTION, avant qu'un client ne déclare ses taux : sur un plan
+    # déclarant frais 5 % / commission 25 %, la marge au tarif actuel passe
+    # de 637 489,65 à 473 455,32 EUR — **−164 034,33 EUR (−25,73 %)**.
+    # ⚠️ ON REFUSE TOUT, ET C'EST L'OBJET QUI LE COMMANDE : cette fonction
+    # existe pour trouver l'OPTIMUM DE MARGE. Sans taux déclarés il n'y a
+    # pas d'optimum, seulement une devinette. Le refus réemploie l'idiome
+    # déjà présent ici (`vide` + `motif`), et `synthese_elasticite` sait
+    # déjà le publier : « SENSIBILITE TARIFAIRE : non disponible. »
+    if _ch_devines:
+        return {**vide, 'motif': (
+            "Aucune sensibilité tarifaire : l'optimum de marge se "
+            "calcule sur les chargements commerciaux, et ce plan n'en "
+            "déclare aucun. Ces trois taux dépendent du client et de son "
+            "réseau de distribution — le système ne peut pas les deviner "
+            "à sa place. DÉCLAREZ `chargements` (frais, commission, "
+            "marge) au plan signé, ou passez-les explicitement à "
+            "`sensibilite_tarifaire(chargements=...)`, puis relancez.")}
 
     # ── LE PORTEFEUILLE RÉEL — jamais 450 EUR et 10 000 contrats ────────────
     primes = np.asarray(reg['primes'], dtype=float)

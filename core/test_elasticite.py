@@ -809,6 +809,20 @@ class T_La_Sensibilite_Ne_Reproduit_Aucun_Defaut_De_L_Ancienne(
         from core.elasticite import etat_elasticite, sensibilite_tarifaire
         df = self.df if df is None else df
         plan = self.p if plan is None else plan
+        # ⚠️⚠️ LES TAUX SONT DÉCLARÉS ICI DEPUIS LE 13/09/2026, CONSTAT
+        # `ELA-2`. Ces contrôles mesurent la FORME de la courbe de marge ;
+        # ils la mesuraient jusqu'ici sur les trois taux par défaut du
+        # module, que personne n'avait déclarés. Or l'arbitrage du
+        # 08/09/2026 dit, dans `core/chargements_declares.py` : *« sans
+        # déclaration, la prime commerciale n'est pas calculée et LE REFUS
+        # EST PUBLIÉ — jamais un repli muet »*. `sensibilite_tarifaire`
+        # publie désormais ce refus, et ces contrôles l'auraient reçu à la
+        # place de la courbe qu'ils examinent.
+        #   *Aucune assertion n'est touchée : ce qui change est la
+        #   DÉCLARATION que la fixture omettait — exactement ce que le
+        #   correctif exige d'un client.*
+        kw.setdefault('chargements', {'frais': 0.15, 'commission': 0.10,
+                                      'marge': 0.03, 'taxes': None})
         return sensibilite_tarifaire(plan, df, etat_elasticite(plan, df), **kw)
 
     def test_elle_ne_se_publie_QUE_sur_ESTIMEE(self):
