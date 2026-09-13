@@ -109,7 +109,14 @@ def _avec(plan, chargements=None):
 
 def _charges(frais=0.05, commission=0.25, marge=0.03):
     return Chargements(frais=frais, commission=commission, marge=marge,
-                       taxes=None, declare_par='Client Test',
+                       taxes=None,
+                       # ⚠️⚠️ UN ROLE, JAMAIS UN NOM. Le sceau `RD-7` a rougi sur
+                       # `'Client Test'` : deux mots capitalises dont un
+                       # hors du vocabulaire des roles, c'est la FORME d'un
+                       # etat civil dans un depot PUBLIC. *Un garde-fou RGPD
+                       # ne se desserre pas pour faire passer son propre
+                       # lot.* Les voisins emploient deja cet intitule.
+                       declare_par='Direction Technique',
                        declare_le='2026-09-13')
 
 

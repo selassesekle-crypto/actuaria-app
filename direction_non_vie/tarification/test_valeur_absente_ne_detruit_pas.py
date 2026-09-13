@@ -100,6 +100,13 @@ def _publie(**trous):
         },
         'chargements': None, 'regime_fiscal': None,
         'validation_hypothese': None,
+        # ⚠️⚠️ AJOUTEE LE 13/09/2026 PAR LE SCEAU `WD-5` LUI-MEME. Le lot
+        # `VAL-1` a ajoute cette cle a `tarif_publie` ; sans elle ici, les
+        # controles de ce fichier tourneraient sur un payload qui ne
+        # ressemble plus a la vraie sortie. *Le garde-fou qui surveille le
+        # surveillant a mordu sur mon propre lot, et c'est pour cela qu'il
+        # existe.*
+        'validation_mentions': (),
         'origine': 'GLM Gamma, modele recommande',
         'plan_empreinte': '7fe1c1a952d57c2a',
     }
