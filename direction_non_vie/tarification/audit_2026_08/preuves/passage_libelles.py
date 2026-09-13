@@ -426,6 +426,17 @@ CHAMPS = ([f'fiche.{k}' for k in fiche_marquee()] +
            'hypotheses.h1', 'audit_trail.profil_ponderation'])
 
 
+#: A QUEL EMPLACEMENT chaque resultat d'agent doit entrer -- constat `PL-1`.
+#: `export_html(result_a3, result_a4, result_a6, *, result_a5=None)` : passer un
+#: resultat A6 en PREMIER le fait entrer dans `result_a3`, et le document se
+#: construit avec `result_a6=None`. Mesure du 11/09/2026 : le banc comptait
+#: 2 marqueurs sur 24 la ou l'emplacement correct en publie 3, sur un document
+#: 3 074 caracteres plus long. *Un banc qui se trompe d'emplacement sous-compte,
+#: et il sous-compte vers l'alarme.*
+_EMPLACEMENT = {'A3': 'result_a3', 'A4': 'result_a4',
+                'A5': 'result_a5', 'A6': 'result_a6'}
+
+
 def main() -> None:
     from direction_non_vie.tarification.services import rapport_equipe_tarif as RE
     from direction_non_vie.tarification.services import rapport_modeles_tarif as RM
@@ -437,8 +448,8 @@ def main() -> None:
         ('excel A6',     lambda: export_excel_a6(res, audit_id='A6-PASSAGE')),
         ('html equipe',  lambda: RE.export_html_equipe({'a6': res}, branche='auto')),
         ('word equipe',  lambda: RE.export_word_equipe({'a6': res}, branche='auto')),
-        ('html modeles', lambda: RM.export_html(res)),
-        ('word modeles', lambda: RM.export_word(res)),
+        ('html modeles', lambda: RM.export_html(None, None, res)),
+        ('word modeles', lambda: RM.export_word(None, None, res)),
     ):
         try:
             livrables[nom] = texte_livrable(appel())
@@ -553,8 +564,8 @@ def main() -> None:
     for appel in (lambda: export_excel_a6(res2, audit_id='X'),
                   lambda: RE.export_html_equipe({'a6': res2}, branche='auto'),
                   lambda: RE.export_word_equipe({'a6': res2}, branche='auto'),
-                  lambda: RM.export_html(res2),
-                  lambda: RM.export_word(res2)):
+                  lambda: RM.export_html(None, None, res2),
+                  lambda: RM.export_word(None, None, res2)):
         try:
             tout += texte_livrable(appel())
         except Exception:
@@ -602,7 +613,8 @@ def temoin_croise_par_agent() -> None:
                 getattr(TE, e)(m, audit_id=a)),
             ('html equipe', lambda m=marque, a=agent:
                 RE.export_html_equipe({a.lower(): m}, branche='auto')),
-            ('html modeles', lambda m=marque: RM.export_html(m)),
+            ('html modeles', lambda m=marque, a=agent: RM.export_html(
+                **{_EMPLACEMENT[a]: m})),
         ):
             try:
                 textes[nom] = texte_livrable(appel())
