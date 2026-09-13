@@ -263,13 +263,116 @@ _BALISE = re.compile(r'<(script|style)\b.*?</\1>|<[^>]+>',
                      re.DOTALL | re.IGNORECASE)
 
 
-def contenu_html(octets: bytes) -> list[str]:
-    """Le texte visible d'une page, ligne à ligne, balises retirées."""
+#: Ce qui PORTE une figure dans une page produite par ce module :
+#: - la voie NOMINALE : <img src="data:image/png;base64,...">
+#:   (`rapport_modeles_tarif._figure_statique`, L1785-1787) ;
+#: - la voie de REPLI : <script>Plotly.newPlot(...)</script>
+#:   (`rapport_modeles_tarif._fragment_interactif`, L1792-1794).
+_DATA_URI = re.compile(
+    r"""src\s*=\s*["']data:([^;"']+);base64,([A-Za-z0-9+/=\s]+)["']""",
+    re.IGNORECASE)
+_SCRIPT = re.compile(r'<script\b[^>]*>(.*?)</script>', re.DOTALL | re.IGNORECASE)
+#: ⚠️⚠️ ET LE SVG INLINE, LA VOIE PREFEREE DE `rendre_figure` DES QUE
+#: `kaleido` EST PRESENT : `_svg_propre` rend le balisage BRUT, pas un
+#: `data:`. Mesure du 13/09/2026 sur les documents signes : 11 figures dans
+#: `a6 HTML`, 13 dans `rapport_modeles HTML`. *La forme la plus probable
+#: etait la seule que ni la mesure ni son correctif ne regardaient.*
+_SVG_INLINE = re.compile(r'<svg\b.*?</svg>', re.DOTALL | re.IGNORECASE)
+#: ⚠️⚠️ ET LE SVG PORTE SON PROPRE ALEA, QUI N'EST PAS UN UUID. Plotly tire
+#: un SEL de quelques caracteres hexadecimaux PAR FIGURE et le pose dans
+#: `id="defs-712aaa"`, `id="clip712aaax"`, `url(#clip712aaaxyplot)`.
+#: Mesure du 13/09/2026, deux productions du meme jeu : les 11 figures
+#: d'`a6 HTML` et les 13 de `rapport_modeles HTML` different TOUTES, pour
+#: 13 488 caracteres identiques de part et d'autre -- seul le sel change.
+#: *Hacher le balisage brut aurait rendu le gel ROUGE A CHAQUE RUN, et un
+#: avertissement permanent est un avertissement qu'on cesse de lire.*
+#: ⚠️⚠️ ON NEUTRALISE LES IDENTIFIANTS, PAS LE CONTENU, et la distinction
+#: est la seule qui tienne. Courir apres les prefixes un par un ne marche
+#: pas : mesure du 13/09, neutraliser `defs-` et `clip` fait tomber les
+#: figures instables de 11/11 a 6/11, et il restait `legend<sel>` puis
+#: `class="... trace<hex>"`. *Une liste de prefixes est une liste a tenir ;
+#: la REGLE, elle, est qu'un identifiant genere n'est pas une donnee.*
+#: Ce qui porte la mesure -- coordonnees, valeurs, couleurs, textes --
+#: n'est pas touche, et `FG-2` le prouve : un `<rect>` ajoute reste vu.
+_SVG_ID = re.compile(r'\bid="[^"]*"', re.IGNORECASE)
+_SVG_REF = re.compile(r'url\(#[^)]*\)', re.IGNORECASE)
+_SVG_TRACE = re.compile(r'\btrace[0-9a-f]{3,}\b', re.IGNORECASE)
+
+
+def _svg_sans_identifiants(svg: str) -> str:
+    """Le SVG debarrasse de ses identifiants generes a chaque rendu."""
+    svg = _SVG_ID.sub('id="<id>"', svg)
+    svg = _SVG_REF.sub('url(#<id>)', svg)
+    return _SVG_TRACE.sub('trace<id>', svg)
+#: ⚠️⚠️ L'IDENTIFIANT DE DIV DE PLOTLY EST TIRE AU HASARD A CHAQUE RENDU.
+#: Mesure du 11/09/2026 : deux `to_html` de LA MEME figure different
+#: (`d599714a-...` puis `6d6c45fb-...`). Hacher le script BRUT rendrait le gel
+#: ROUGE A CHAQUE EXECUTION — *un avertissement permanent est un avertissement
+#: qu'on cesse de lire.* On neutralise donc les UUID avant de hacher : ce qui
+#: reste est LA CHARGE DE LA FIGURE.
+_UUID = re.compile(
+    r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+    re.IGNORECASE)
+
+
+def _empreintes_figures_html(texte: str) -> dict:
+    """Les empreintes des figures d'une page — jamais leur contenu.
+
+    ⚠️⚠️ CONSTAT `gel/C1`, MESURE LE 11/09/2026 EN TROMPANT L'INSTRUMENT.
+    `contenu_html` retirait TOUTE balise et TOUT `<script>` avant de comparer.
+    Deux pages au texte visible IDENTIQUE et a la courbe de lift INVERSEE
+    ([0,05...0,31] contre [9,90...1,10]) rendaient **0 ecart** ; une valeur
+    injectee dans un `<script>` aussi. La MEME falsification en docx est, elle,
+    ATTRAPEE — `contenu_docx` hache `word/media/` sous la cle `<figures>`.
+      *La meme tromperie etait vue en Word et invisible en HTML.*
+
+    ⚠️ CLE A PART, comme pour le docx : un ecart de figure ne doit pas se
+    confondre avec un ecart de texte.
+    """
+    empreintes: dict[str, str] = {}
+    for i, (mime, charge) in enumerate(_DATA_URI.findall(texte), 1):
+        brut = ''.join(charge.split()).encode('ascii', 'ignore')
+        empreintes[f'image {i} ({mime})'] = hashlib.sha256(brut).hexdigest()
+    for i, corps in enumerate(_SCRIPT.findall(texte), 1):
+        stable = _UUID.sub('<id>', corps).strip()
+        if stable:
+            empreintes[f'script {i}'] = hashlib.sha256(
+                stable.encode('utf-8', 'replace')).hexdigest()
+    # ⚠️⚠️ LA TROISIEME VOIE, ET C'EST LA PLUS EMPRUNTEE — 13/09/2026.
+    # `gel/C1b` etait ne du constat << mon assiette laissait dehors la figure
+    # la plus probable, le SVG inline >>, et la correction posait `data:` et
+    # `<script>` sans poser `<svg>`. *Le meme defaut, reconduit dans le
+    # correctif qui le denoncait.* Trois mesures :
+    #   . `rendre_figure` -> `_svg_propre` rend le BALISAGE BRUT, jamais un
+    #     `data:` : la voie est preferee des que `kaleido` est present ;
+    #   . le module ne portait AUCUN motif `svg` -- zero occurrence du mot ;
+    #   . sur les documents signes reellement produits, falsifier un SVG
+    #     inline rendait 0 ecart quand un caractere de TEXTE en rendait 1 :
+    #         a6 HTML               11 SVG inline   0 ecart
+    #         rapport_modeles HTML  13 SVG inline   0 ecart
+    # *Vingt-quatre figures de deux rapports signes restaient invisibles.*
+    for i, corps in enumerate(_SVG_INLINE.findall(texte), 1):
+        stable = _UUID.sub('<id>', _svg_sans_identifiants(corps)).strip()
+        empreintes[f'svg {i}'] = hashlib.sha256(
+            stable.encode('utf-8', 'replace')).hexdigest()
+    return empreintes
+
+
+def contenu_html(octets: bytes) -> dict:
+    """Le texte visible d'une page, ligne a ligne — ET ses figures.
+
+    ⚠️ LE TEXTE ET LES FIGURES SONT DEUX CLES, jamais un melange : c'est la
+    forme que `contenu_docx` emploie deja, et pour la meme raison.
+    """
     texte = octets.decode('utf-8', 'replace')
-    texte = _BALISE.sub('\n', texte)
-    texte = _desechapper(texte).replace('&nbsp;', ' ')
-    return [neutraliser(ligne.strip()) for ligne in texte.split('\n')
-            if ligne.strip()]
+    figures = _empreintes_figures_html(texte)
+    visible = _BALISE.sub('\n', texte)
+    visible = _desechapper(visible).replace('&nbsp;', ' ')
+    lu: dict = {'<texte>': [neutraliser(l.strip())
+                            for l in visible.split('\n') if l.strip()]}
+    if figures:
+        lu['<figures>'] = figures
+    return lu
 
 
 def contenu_pdf(octets: bytes) -> list[str]:
