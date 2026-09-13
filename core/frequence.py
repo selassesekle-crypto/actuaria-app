@@ -45,7 +45,11 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
+# ⚠️ `numpy` n'est plus importe ici : son seul usage etait le `np.ones` de
+# la branche dupliquee de `_matrice`, partie avec elle le 13/09. *Un import
+# qui survit a son usage devient une piste fausse pour qui cherche ou la
+# matrice est construite* -- meme motif que `families` et `math` dans
+# `pipeline_tarifaire`.
 import pandas as pd
 import statsmodels.api as sm
 from statsmodels.genmod import families as _familles
@@ -57,14 +61,40 @@ def _matrice(df: pd.DataFrame, colonnes: list[str]) -> pd.DataFrame:
     ⚠️ ``has_constant='add'`` : sans lui, une colonne déjà constante ferait
     taire l'intercept, et le modèle changerait de spécification en silence.
     """
-    if colonnes:
-        return sm.add_constant(df[colonnes].fillna(0), has_constant='add')
-    # ⚠️ Aucune variable : le modèle à la SEULE CONSTANTE. Il est légitime —
-    # c'est un tarif qui ne segmente pas — et il se dit (voir
-    # `phrase_puissance_selection`).
-    return sm.add_constant(
-        pd.DataFrame({'intercept': np.ones(len(df))}, index=df.index),
-        has_constant='add')
+    # ⚠️⚠️ UNE SEULE ECRITURE, ET C'EST LA REPARATION DU 13/09/2026. Le cas
+    # « aucune colonne » avait sa PROPRE construction — une colonne
+    # `intercept` de uns, PUIS `add_constant(..., has_constant='add')` qui
+    # en ajoutait une SECONDE. Mesure :
+    #
+    #     _matrice(df, ['x1','x2'])  ->  (n, 3)  ['const','x1','x2']
+    #     _matrice(df, [])           ->  (n, 2)  ['const','intercept']  <-
+    #     ce que l'appelant bati au predict ->  (n, 1)  ['const']
+    #
+    # L'ajustement portait donc DEUX parametres et la prediction n'offrait
+    # QU'UNE colonne : `ValueError: shapes (500,1) and (2,) not aligned`.
+    # Mesure sur la gate complete du 13/09 : le repli a tire **7 fois**, il
+    # a produit **6 desaccords**, et **2 seulement** etaient visibles — les
+    # quatre autres etaient absorbes en silence.
+    #
+    # ⚠️ ET LES DEUX COLONNES ETAIENT IDENTIQUES — des uns contre des uns.
+    # La matrice etait donc COLINEAIRE avec sa propre constante :
+    # statsmodels resout par pseudo-inverse et COUPE l'intercept en deux
+    # moities arbitraires (mesure : -2,3026 devient -1,1509 et -1,1509).
+    # *Le predicteur lineaire ne bouge pas ; les COEFFICIENTS PUBLIES si.*
+    #
+    # ⚠️ LE DEFAUT A HUIT JOURS, et il vient d'un refactor qui annoncait
+    # reproduire le geste « mot pour mot » : `a82f450` (05/09) a ajoute
+    # `has_constant='add'`, juste pour la branche qui en avait besoin, et
+    # l'a applique AUSSI a celle qui portait deja sa constante. La forme
+    # d'avant rendait (n, 1) et un seul parametre.
+    #
+    # *La cause profonde n'est pas le parametre : c'est qu'un meme geste
+    # etait ecrit DEUX FOIS.* Une seule ecriture, et l'ajustement et la
+    # prediction ne PEUVENT plus diverger — `df[[]]` rend un cadre vide qui
+    # garde l'index, et `add_constant` y pose la seule constante. Le modele
+    # a la SEULE CONSTANTE reste legitime : c'est un tarif qui ne segmente
+    # pas, et il se dit (voir `phrase_puissance_selection`).
+    return sm.add_constant(df[colonnes].fillna(0), has_constant='add')
 
 
 def ajuster_glm_frequence(df: pd.DataFrame, colonnes: list[str], cible: str,
