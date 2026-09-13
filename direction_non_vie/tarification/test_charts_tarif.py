@@ -195,8 +195,26 @@ class TestChartsTarifCasLimites(unittest.TestCase):
         self.assertIsInstance(fig, go.Figure)
 
     def test_residus_insuffisants(self):
-        fig = ct.chart_residus_qq([0.3])   # n<2 → figure thémée sans points
+        # ⚠️⚠️ CE CONTRÔLE NOMMAIT LE DÉFAUT ET LE BÉNISSAIT. Sa rédaction
+        # d'origine commentait « n<2 → figure thémée sans points » et
+        # n'affirmait que `isinstance(fig, go.Figure)` : il donnait le vert
+        # à une figure qui ne dessine RIEN et ne le dit pas — le constat
+        # `CHT-1`. *Un contrôle qui atteste le défaut est pire qu'un
+        # contrôle absent : il rassure.*
+        fig = ct.chart_residus_qq([0.3])
         self.assertIsInstance(fig, go.Figure)
+        # ⚠️ `t.x` est un ndarray : `or ()` le ferait passer par son test de
+        # vérité et lèverait « truth value is ambiguous » dès qu'il porte
+        # plus d'un point. On teste donc `is not None`, jamais la vérité.
+        points = max([0 if getattr(t, 'x', None) is None else len(t.x)
+                      for t in fig.data], default=0)
+        self.assertEqual(points, 0,
+                         'un QQ-plot à un point ne devrait rien tracer')
+        textes = ' '.join(a.text or '' for a in
+                          (fig.layout.annotations or ()))
+        self.assertIn(
+            'au moins 2 points', textes,
+            f'la figure ne dit pas POURQUOI elle est vide : {textes!r}')
 
     def test_lift_un_seul_decile(self):
         fig = ct.chart_lift_decile([0.25], lift_ratio=None)

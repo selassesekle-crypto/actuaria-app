@@ -861,6 +861,26 @@ def chart_residus_qq(
     fig.update_layout(showlegend=False)
     fig.update_xaxes(title='Quantiles théoriques (normale)')
     fig.update_yaxes(title='Quantiles observés (résidus)')
+    # ⛔⛔ CONSTAT `CHT-1` — LE COMPTEUR ETAIT CELUI DE L'ENTREE, PAS DU
+    # DESSIN. `traces=int(r.size)` compte les residus FINIS ; le trace, lui, est
+    # garde par `n >= 2` quinze lignes plus haut — un QQ-plot n'existe pas a un
+    # seul point. Avec UN residu fini la figure ne se declarait donc NI vide NI
+    # tronquee, et ne dessinait rien : « visuellement indiscernable d'une figure
+    # pleine », exactement le constat `charts/C3` que ce garde-fou ferme.
+    # Pire pour `[0.5, nan]` : elle publiait « 1 residus sur 2 », une phrase
+    # FAUSSE sur une figure qui ne trace aucun point.
+    #   *Ce qu'une figure declare doit se compter sur ce qu'elle DESSINE.*
+    # ⚠️ C'est la SEULE des sept a porter un seuil minimal (mesure : les cinq
+    # autres dessinent bien leur point unique) — le correctif reste donc ici et
+    # ne touche pas `_declarer_assiette`, qui est juste.
+    n_traces = n if n >= 2 else 0
+    # ⚠️ LA CAUSE VOYAGE AVEC L'ABSENCE : « aucune donnee » tout court ferait
+    # croire a un portefeuille vide alors qu'un residu EXISTE. Le lecteur doit
+    # pouvoir distinguer « rien a tracer » de « pas assez pour ce graphique ».
+    quoi = 'résidus'
+    if 0 < n < 2:
+        quoi = (f'résidus — un QQ-plot exige au moins 2 points finis, '
+                f'{n} disponible')
     _declarer_assiette(fig, fournis=int(np.size(np.asarray(residus))),
-                       traces=int(r.size), quoi='résidus')
+                       traces=n_traces, quoi=quoi)
     return fig
