@@ -702,6 +702,74 @@ def _bloc_reserves_html(reserves: tuple) -> str:
             f'</div>\n')
 
 
+TITRE_FIGURES_ABSENTES = 'FIGURES ATTENDUES ET NON PRODUITES'
+
+
+def figures_absentes(result_a3, result_a4, result_a6, *,
+                     result_a5=None) -> tuple:
+    """Les figures du CATALOGUE que la chaîne n'a pas rendues, et qu'aucune
+    condition ne prévoit.
+
+    ⛔⛔ CONSTAT `FIG-1` — LE REMÈDE POSÉ ÉTAIT UN `logger.warning`. Le
+    lecteur du document signé n'en voit rien, et `numeroter` referme la
+    numérotation sur le trou « par construction ». Mesuré le 11/09/2026 :
+    un document privé d'une figure NON conditionnelle et un document privé
+    d'une figure CONDITIONNELLE sont **indiscernables** — même compte (14),
+    même suite 1..14, aucune mention. *Une absence attendue et un défaut se
+    lisent pareil.*
+
+    ⚠️ Et le module sait DÉJÀ déclarer une non-production sur la surface
+    signée : il le fait pour les HYPOTHÈSES (« Hypothèse non produite par la
+    chaîne — »), pas pour les figures.
+
+    ⚠️ L'ordre vient de `SOURCES_FIGURES`, jamais d'un ensemble : deux
+    exécutions doivent produire le même document. Tuple vide quand rien ne
+    manque — pas une ligne de bruit.
+    """
+    resultats = {'a3': result_a3 or {}, 'a4': result_a4 or {},
+                 'a5': result_a5 or {}, 'a6': result_a6 or {}}
+    # ⚠️⚠️ UNE FIGURE N'EST ATTENDUE QUE SI LE RÉSULTAT DE SON AGENT A ÉTÉ
+    # FOURNI — seule déviation de ce lot par rapport au correctif reçu, et
+    # elle a été posée APRÈS trois mesures, pas avant :
+    #   ① lecture — `a4 Word` recevait un bloc de SEPT figures, dont SIX ont
+    #     pour source `('a6', …)` dans `SOURCES_FIGURES` ;
+    #   ② chronologie — A4 écrit son document AVANT qu'A6 n'ait tourné, et
+    #     `a4_ml/agent.py` ne passe ni `result_a5` ni `result_a6` : ces six
+    #     figures ne PEUVENT pas exister à cet instant ;
+    #   ③ exécution — le gel, mesuré le 13/09/2026 : 7 lignes publiées sur
+    #     `a4 Word`, 1 seule après cette garde — `overfitting_train_test`,
+    #     qui est bien celle d'A4 et qui manque bien.
+    # *Un résultat qu'on ne fournit pas n'est pas une défaillance de la
+    # chaîne : c'est un document qui ne couvre pas cet agent. Publier
+    # « attendue et non produite » pour une figure qu'aucune chaîne ne
+    # pouvait produire là serait une instruction erronée sur un document
+    # signé — exactement ce que `EFF-1` ferme ailleurs.*
+    # ⚠️ LA GARDE ÉTEND, ELLE NE RÉTRÉCIT PAS : sur la surface que l'auditeur
+    # a mesurée — le rapport complet, quatre résultats fournis — elle ne
+    # change rien, et `a6 HTML`/`a6 Word` gardent les DEUX figures qui sont
+    # les leurs et qui manquent vraiment.
+    fournis = {source for source, resultat in resultats.items() if resultat}
+    return tuple(
+        cle for cle, (agent, dictionnaire) in SOURCES_FIGURES.items()
+        if cle not in FIGURES_CONDITIONNELLES
+        and agent in fournis
+        and ((resultats.get(agent) or {}).get(dictionnaire)
+             or {}).get(cle) is None)
+
+
+def _bloc_figures_html(absentes: tuple) -> str:
+    """Les figures attendues et absentes, en HTML. Vide quand il n'y a rien."""
+    if not absentes:
+        return ''
+    puces = '\n'.join(
+        f'      <li><b>{TITRES_FIGURES.get(c, c)}</b> — au catalogue, non '
+        f'produite par la chaîne</li>' for c in absentes)
+    return (f'<div class="raisons-plafond">\n'
+            f'  <div class="raisons-titre">⚠️ {TITRE_FIGURES_ABSENTES}</div>\n'
+            f'    <ul>\n{puces}\n    </ul>\n'
+            f'</div>\n')
+
+
 def _bloc_raisons_html(raisons: tuple[str, ...]) -> str:
     """Le bloc des causes, en HTML. Vide quand il n'y a rien à dire."""
     if not raisons:
@@ -2746,7 +2814,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_tarif_html(_tarif_publie)}{_bloc_conditions_html(conditions_mesure)}{_bloc_comparaison_html(comparaison_prix)}{_bloc_decision_html(_dec_publie, divergence_actuaire(_dec))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_bloc_controle_effet_html(controle_effet_publie(result_a6))}{_ouvrir_chapitre(1)}    <table>
+{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_mapping_html(mapping_publie(result_a6))}{_bloc_tarif_html(_tarif_publie)}{_bloc_conditions_html(conditions_mesure)}{_bloc_comparaison_html(comparaison_prix)}{_bloc_decision_html(_dec_publie, divergence_actuaire(_dec))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_bloc_figures_html(figures_absentes(result_a3, result_a4, result_a6, result_a5=result_a5))}{_bloc_controle_effet_html(controle_effet_publie(result_a6))}{_ouvrir_chapitre(1)}    <table>
       {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
@@ -3367,6 +3435,23 @@ def export_word(
         # qui n'atteint pas le document signé ne réserve rien.
         # ⚠️ Même source que le HTML (`reserves_arbitrage`) : deux rendus,
         # ce seraient deux vérités possibles pour le même fait.
+        # ⛔⛔ CONSTAT `FIG-1` — LES FIGURES ATTENDUES ET ABSENTES, DANS LES
+        # DEUX FORMATS AUSSI. Même source que le HTML (`figures_absentes`) :
+        # deux rendus, ce seraient deux vérités possibles pour le même fait.
+        _fig_w = figures_absentes(result_a3, result_a4, result_a6,
+                                  result_a5=result_a5)
+        if _fig_w:
+            p = doc.add_paragraph()
+            _run(p, '⚠ ' + TITRE_FIGURES_ABSENTES, bold=True, sz=10,
+                 col=AR).add_break()
+            for _i, _c_w in enumerate(_fig_w):
+                _passage = _run(
+                    p, f'   · {TITRES_FIGURES.get(_c_w, _c_w)} — au '
+                       f'catalogue, non produite par la chaîne',
+                    sz=9, col=NR)
+                if _i < len(_fig_w) - 1:
+                    _passage.add_break()
+
         _res_w = reserves_arbitrage(result_a6)
         if _res_w:
             p = doc.add_paragraph()
