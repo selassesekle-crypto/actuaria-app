@@ -426,8 +426,36 @@ def valeur_audit(valeur, cle=None) -> str:
     """
     if cle == 'modele_production':
         return nom_modele(valeur)
+    # ⚠️⚠️ CONSTAT `rmt/C1` — LA PISTE D'AUDIT PUBLIEE ETAIT AMPUTEE.
+    # Les deux surfaces filtraient `isinstance(v, (str, int, float, bool))` :
+    # toute valeur LISTE, DICT ou `None` faisait disparaitre LA LIGNE ENTIERE.
+    # Mesure du 11/09/2026 sur une piste d'audit A6 de forme reelle a 18 cles :
+    # **5 perdues**. Mesure du 13/09/2026 sur la chaine REELLEMENT produite,
+    # meme 18 cles : **3 perdues sur 18** — l'ecart tient a l'assiette, pas au
+    # mecanisme, et les deux se disent. Les trois perdues ici sont :
+    #   `raisons_plafond`  (list) POURQUOI le statut a ete plafonne --
+    #                      << Gini = 0.1034 < 0.15 >> disparaissait ;
+    #   `poids_criteres`   (dict) les poids qui ont DESIGNE le modele de
+    #                      production ;
+    #   `valide_par_actuaire_dl` (None) -- << personne n'a valide >> devenait
+    #                      indiscernable de << ce champ n'existe pas >>.
+    # *Ce qui disparaissait est exactement ce qu'un commissaire aux comptes
+    # vient chercher : le POURQUOI d'un plafonnement et ce qui a DESIGNE le
+    # modele signe.*
+    #   La docstring de `libelle_audit` l'ecrit deja : *une piste d'audit amputee
+    #   ne serait plus une piste d'audit.* Elle le promettait pour le LIBELLE ;
+    #   le filtre effacait la LIGNE.
+    # ⚠️ `None` se dit << non renseigne >> ET RIEN DE PLUS : selon la cle il
+    # signifie << non mesure >> ou << non declare >>, et trancher ici inventerait
+    # une cause. Le LIBELLE porte le sens, la valeur porte l'absence.
+    if valeur is None:
+        return 'non renseigne'
     if isinstance(valeur, bool):
         return 'oui' if valeur else 'non'
+    if isinstance(valeur, (list, tuple, set)):
+        return ' ; '.join(str(x) for x in valeur) if valeur else 'aucune'
+    if isinstance(valeur, dict):
+        return ' · '.join(f'{k} {v}' for k, v in valeur.items()) or 'aucun'
     texte = str(valeur)
     h = _HORODATAGE.match(texte)
     if h:
@@ -2912,9 +2940,10 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
     # ⚠️ « Ae Ratio », « Stabilite Wf », « Gouvernance Ok : True » — la
     # substitution mécanique `.title()` produisait des noms de variables
     # capitalisés, pas du français.
+    # ⚠️ AUCUN FILTRE — constat `rmt/C1`. `valeur_audit` sait desormais dire
+    # une liste, un dict et une absence : plus aucune ligne ne disparait.
     for k, v in at.items():
-        if isinstance(v, (str, int, float, bool)):
-            html += _row([libelle_audit(k), valeur_audit(v, k)])
+        html += _row([libelle_audit(k), valeur_audit(v, k)])
     html += f"""    </table>
   </div>
 </div>
@@ -3644,8 +3673,10 @@ def export_word(
 
         # ── CHAPITRE 8 : PISTE D'AUDIT ───────────────────────────────────────
         _h(chapitre(8)); _sep()
+        # ⚠️ AUCUN FILTRE ICI NON PLUS — les deux surfaces doivent publier la
+        # MEME piste d'audit, sinon l'une des deux ment (constat `rmt/C1`).
         rows_at = [[libelle_audit(k), valeur_audit(v, k)]
-                   for k, v in at.items() if isinstance(v, (str,int,float,bool))]
+                   for k, v in at.items()]
         if rows_at:
             _tbl(titres('audit'), rows_at, ws=[5.5,10.5])
 
