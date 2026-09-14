@@ -155,19 +155,39 @@ class TestLAbsenceNEstPasUnAccord(unittest.TestCase):
         self.assertFalse(divergence(None))
         print("    DA-5 SCEAU : l'absence est DITE, et elle nie l'accord")
 
-    def test_DA6_les_TROIS_etats_produisent_TROIS_textes_distincts(self):
+    def test_DA6_les_QUATRE_etats_produisent_QUATRE_textes_distincts(self):
         """⚠️ Deux etats qui rendraient le meme texte seraient indiscernables
-        pour le lecteur du document signe."""
+        pour le lecteur du document signe.
+
+        ⚠️⚠️ CE CONTROLE EPINGLAIT LE DEFAUT `CORE-4`, ET IL A ETE ELARGI, PAS
+        AFFAIBLI. Il exigeait `SUIT` dans un etat << accord >> mesure SANS
+        verdict systeme -- c'est-a-dire dans le cas ou la comparaison n'a PAS
+        PU avoir lieu. C'est exactement ce que `DA-13c` interdit trois classes
+        plus bas, mot pour mot : << NE PAS POUVOIR COMPARER N'EST PAS
+        CONCORDER >>. *Un garde-fou peut exiger la moitie fausse d'un fait.*
+
+        L'etat << accord >> se dedouble donc, et c'est la vraie forme du
+        sujet : un accord ENREGISTRE n'est pas un accord ETABLI. `SUIT` est
+        desormais epingle la ou il est LEGITIME -- verdict remis ET
+        concordant -- et interdit partout ailleurs. Quatre etats, quatre
+        textes."""
         textes = {
             'aucune': synthese_decision(None, 'AMBRE'),
-            'accord': synthese_decision(_d('AMBRE', ACCORD)),
+            'accord non etabli': synthese_decision(_d('AMBRE', ACCORD)),
+            'accord etabli': synthese_decision(_d('AMBRE', ACCORD), 'AMBRE'),
             'desaccord': synthese_decision(
                 _d('AMBRE', PASSE_OUTRE, 'motif declare')),
         }
-        self.assertEqual(len(set(textes.values())), 3, textes)
-        self.assertIn('SUIT', textes['accord'].upper())
+        self.assertEqual(len(set(textes.values())), 4, textes)
+        self.assertIn('SUIT', textes['accord etabli'].upper())
+        self.assertNotIn(
+            'SUIT', textes['accord non etabli'].upper(),
+            "un accord dont le verdict n'a pas ete remis n'est pas un accord "
+            "ETABLI : ecrire << l'actuaire SUIT >> atteste un accord que rien "
+            "ne permet de verifier")
         self.assertIn('DESACCORD', textes['desaccord'].upper())
-        print("    DA-6 trois etats, trois textes")
+        print("    DA-6 quatre etats, quatre textes ; `SUIT` seulement sur "
+              "l'accord ETABLI")
 
     def test_DA7_le_bloc_ne_se_tait_JAMAIS(self):
         """⚠️⚠️ SEULE SECTION DU RAPPORT DANS CE CAS, ET C'EST DELIBERE. Les
@@ -463,6 +483,104 @@ class TestLeVerdictCiteEstCeluiRendu(unittest.TestCase):
                 f"publiaient alors un verdict systeme FAUX sans signalement")
         print(f"    DA-13e les deux exportateurs passent le verdict reel "
               f"({sorted(vus)})")
+
+
+class TestUnAccordNeSAttesteQueSIlEstEtabli(unittest.TestCase):
+    """DA-15 — constat `CORE-4` du 2e audit, ferme le 14/09/2026.
+
+    Le document attestait, DANS LA MEME PHRASE, un accord qui n'avait pas
+    eu lieu :
+
+        /!\\ CE VERDICT N'EST PAS CELUI DU SYSTEME [...] n'est pas
+        opposable en l'etat. L'actuaire SUIT le verdict du systeme.
+
+    Les deux avertissements avaient ete AJOUTES ; l'affirmation fausse
+    n'avait pas ete RETIREE. Le lecteur -- un commissaire aux comptes --
+    recevait deux phrases contradictoires signees, et la seconde est
+    celle qui rassure.
+
+    ⚠️⚠️ L'ASSIETTE EST DE DOUZE COUPLES, ET LE CONSTAT RECU EN NOMMAIT UN.
+    Mesure du 14/09/2026 sur `3 statuts cites x (3 statuts rendus + verdict
+    ABSENT)`, decision = `ACCORD` :
+
+        famille << discordant >>   6 couples
+        famille << non remis >>    6 couples
+        legitimes (cite == rendu)  3 couples
+
+    ⚠️ LA SECONDE FAMILLE EST CELLE QUE `DA-13c` DECLARE FERMER, mot pour
+    mot. Son controle verifie que l'avertissement est PRESENT, jamais que
+    l'affirmation contraire est ABSENTE. *Un garde-fou peut attester la
+    moitie d'un fait ; c'est pourquoi `DA-15` mesure les DEUX SENS.*
+    """
+
+    SUIT = "L'actuaire SUIT le verdict du systeme."
+
+    def test_DA15_SCEAU_SUIT_n_apparait_QUE_sur_un_accord_ETABLI(self):
+        """⚠️⚠️ LE PREMIER SENS : la phrase d'accord est INTERDITE partout
+        ou l'accord n'a pas pu etre etabli -- 9 couples sur 12."""
+        fautifs = []
+        for cite in sorted(STATUTS_ADMIS):
+            for rendu in sorted(STATUTS_ADMIS) + [None, '']:
+                with self.subTest(cite=cite, rendu=rendu):
+                    phrase = synthese_decision(_d(cite, ACCORD), rendu)
+                    etabli = bool(rendu) and rendu == cite
+                    if (self.SUIT in phrase) and not etabli:
+                        fautifs.append((cite, rendu))
+        self.assertEqual(
+            fautifs, [],
+            f"{len(fautifs)} couple(s) attestent un accord non etabli dans un "
+            f"document signe : {fautifs}")
+        print(f"    DA-15 SCEAU : 0 accord atteste sans l'etre, sur "
+              f"{len(STATUTS_ADMIS) * (len(STATUTS_ADMIS) + 2)} couples")
+
+    def test_DA15b_SECOND_SENS_les_trois_couples_etablis_la_gardent(self):
+        """⚠️⚠️ ET LE SECOND SENS, SANS LEQUEL << retirer la phrase partout >>
+        passerait pour une fermeture. Un correctif qui supprimerait l'accord
+        du document serait aussi faux que celui qui l'inventait : l'actuaire
+        QUI SUIT doit le lire noir sur blanc."""
+        for statut in sorted(STATUTS_ADMIS):
+            with self.subTest(statut=statut):
+                phrase = synthese_decision(_d(statut, ACCORD), statut)
+                self.assertIn(
+                    self.SUIT, phrase,
+                    f"({statut}, {statut}) est un accord ETABLI et le "
+                    f"document ne le dit plus : le correctif a efface un "
+                    f"fait au lieu d'en retirer un faux")
+        print(f"    DA-15b second sens : les {len(STATUTS_ADMIS)} couples "
+              f"etablis gardent leur phrase")
+
+    def test_DA15c_le_document_DIT_qu_il_n_atteste_aucun_accord(self):
+        """⚠️⚠️ SE TAIRE N'EST PAS FERMER. Ce module ecrit lui-meme qu'un
+        << document muet se lit comme un accord >> : retirer la phrase sans
+        la remplacer aurait recree le defaut `DA-5` a un autre endroit."""
+        muets = []
+        for cite in sorted(STATUTS_ADMIS):
+            for rendu in sorted(STATUTS_ADMIS) + [None, '']:
+                if bool(rendu) and rendu == cite:
+                    continue
+                phrase = synthese_decision(_d(cite, ACCORD), rendu)
+                if 'AUCUN accord' not in phrase:
+                    muets.append((cite, rendu))
+        self.assertEqual(
+            muets, [],
+            f"{len(muets)} couple(s) retirent la phrase d'accord SANS DIRE "
+            f"qu'aucun accord n'est atteste : {muets}")
+        print("    DA-15c l'absence d'accord etabli est DITE, pas tue")
+
+    def test_DA15d_le_DESACCORD_motive_n_est_PAS_touche(self):
+        """⚠️ L'assiette du correctif s'arrete a `divergence == False`. Un
+        desaccord reste un desaccord, verdict remis ou non, et son motif
+        reste publie."""
+        for dec in (PASSE_OUTRE, REFUS):
+            for rendu in sorted(STATUTS_ADMIS) + [None, '']:
+                with self.subTest(decision=dec, rendu=rendu):
+                    d = _d('VERT', dec, motif='motif declare pour la mesure')
+                    phrase = synthese_decision(d, rendu)
+                    self.assertIn('DESACCORD', phrase.upper())
+                    self.assertIn(d.motif, phrase)
+                    self.assertNotIn(self.SUIT, phrase)
+                    self.assertNotIn('AUCUN accord', phrase)
+        print("    DA-15d desaccord : motif publie, assiette inchangee")
 
 
 if __name__ == '__main__':

@@ -235,8 +235,39 @@ def synthese_decision(decision: DecisionActuaire | None,
         tete += (" (Le verdict du systeme n'a pas ete remis a la redaction : "
                  "ce document ne peut pas confirmer que la decision porte sur "
                  "le bon verdict.)")
+    # ⚠️⚠️ LA PHRASE D'ACCORD S'AJOUTAIT MEME QUAND LE DOCUMENT VENAIT DE DIRE
+    # QU'IL N'Y AVAIT PAS D'ACCORD. Les deux avertissements ci-dessus ont ete
+    # AJOUTES le 10/09/2026 ; l'affirmation fausse, elle, n'a pas ete RETIREE.
+    # Le lecteur recevait donc deux phrases contradictoires SIGNEES, et la
+    # seconde est celle qui rassure :
+    #
+    #     /!\ CE VERDICT N'EST PAS CELUI DU SYSTEME [...] n'est pas opposable
+    #     en l'etat. L'actuaire SUIT le verdict du systeme.
+    #
+    # ⚠️⚠️ L'ASSIETTE EST DE DOUZE COUPLES, PAS D'UN. Le constat recu en
+    # nommait UN. Mesure du 14/09/2026 sur les 3 statuts x (3 statuts + verdict
+    # absent), decision = ACCORD :
+    #     famille << discordant >>  6 couples -- l'accord porte sur un AUTRE
+    #                               verdict que celui du document ;
+    #     famille << non remis >>   6 couples -- on n'a PAS PU comparer.
+    # Seuls les 3 couples `cite == rendu` etablissent un accord.
+    #
+    # ⚠️ LA SECONDE FAMILLE EST CELLE QUE `DA-13c` DECLARE FERMER, mot pour
+    # mot : << NE PAS POUVOIR COMPARER N'EST PAS CONCORDER >>. Son controle
+    # verifie que l'avertissement est PRESENT, jamais que l'affirmation
+    # contraire est ABSENTE. *Un garde-fou peut attester la moitie d'un fait.*
+    #
+    # ⚠️ ON NE TOUCHE PAS AUX TROIS COUPLES CONCORDANTS : `DA-13b` fige leur
+    # phrase mot pour mot, et c'est la contre-epreuve de ce correctif.
+    _accord_etabli = (bool(verdict_systeme)
+                      and not verdict_discordant(decision, verdict_systeme))
     if not divergence(decision):
-        return tete + " L'actuaire SUIT le verdict du systeme."
+        if _accord_etabli:
+            return tete + " L'actuaire SUIT le verdict du systeme."
+        return tete + (" Ce document n'atteste donc AUCUN accord sur le "
+                       "verdict rendu : la decision enregistree est un "
+                       "accord, mais rien ici n'etablit qu'il porte sur ce "
+                       "verdict-ci.")
     return (
         tete
         + f" /!\\ DESACCORD : l'actuaire s'ECARTE du verdict du systeme. "
