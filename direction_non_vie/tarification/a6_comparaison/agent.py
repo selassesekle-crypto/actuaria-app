@@ -1097,6 +1097,66 @@ class AgentA6Comparaison:
                 except Exception as _e_ap:                 # noqa: BLE001
                     logger.warning("[%s] Assiette de publication non "
                                    "resolue : %s", audit_id, _e_ap)
+
+            # ══════════════════════════════════════════════════════════
+            #  LE PRIX QU'A6 A BATI, RELAYE A SES APPELANTS — 14/09/2026
+            # ══════════════════════════════════════════════════════════
+            # ⚠️⚠️ A6 BATISSAIT UN TARIF, LE METTAIT DANS SON PROPRE
+            # DOCUMENT, ET NE LE DONNAIT A PERSONNE. Mesure du 14/09 :
+            # ses 53 cles de sortie n'en portaient aucune liee au prix.
+            # Un appelant qui REGENERE un document — c'est ce que fait
+            # `scripts/rapport_tarif_local.py` — ne pouvait pas le
+            # reconstituer, et publiait un second document SANS PRIX :
+            #
+            #     document d'A6        prime pure PRESENTE, 409,22 EUR
+            #     document regenere    prime pure ABSENTE, 0,00 EUR seul
+            #
+            # *Le calcul atteignait une surface et une seule.* C'est le
+            # patron que `PUBLICATION-1` prescrit : A6 RELAIE, a cote de
+            # `anti_selection_a3` et `reserve_gini_a3` qui font deja
+            # exactement cela.
+            #
+            # ⚠️ DEUX EXPRESSIONS DEVIENNENT DES VARIABLES, ET C'EST LE
+            # POINT. `portefeuille` et `conditions_mesure` etaient
+            # calcules DANS l'appel au generateur : les relayer aurait
+            # voulu dire ecrire leur calcul une SECONDE fois. Une
+            # definition, deux lecteurs — l'appel ci-dessous et les deux
+            # dicts de sortie lisent desormais LA MEME valeur.
+            # ⚠️⚠️ `is not None`, JAMAIS `or` : `_assiette_pub` est un
+            # DataFrame, et `or` en teste la valeur de verite — « The truth
+            # value of a DataFrame is ambiguous ». Une version anterieure l'a
+            # fait, et A6 a perdu SES DEUX documents signes. *L'idiome `or`
+            # vaut pour un dict ou un None, pas pour un DataFrame.* Cet
+            # avertissement vit ici, a LA definition, et non plus au site
+            # d'appel : il n'y a plus qu'un endroit ou se tromper.
+            _portefeuille_pub = (_assiette_pub if _assiette_pub is not None
+                                 else (result_a2 or {}).get('dataframe'))
+            _conditions_pub = [(r or {}).get('conditions_mesure')
+                               for r in (result_a3, result_a4, result_a5)]
+
+            # ⚠️⚠️ `_tmp_a6` EST ENRICHI ICI, PAS RECONSTRUIT. Il est bati
+            # l.938, AVANT que le tarif existe (l.1029-1049) ; c'est le
+            # meme geste que `_tmp_a6['publication_reglementaire']` cent
+            # lignes plus haut, et pour la meme raison ecrite la-bas :
+            # *une cle posee seulement dans le dictionnaire de retour
+            # n'atteint AUCUN livrable signe.*
+            #
+            # ⚠️ ET LES TROIS SURFACES QUE `_tmp_a6` ALIMENTE NE BOUGENT
+            # PAS. Releve du 14/09, lectures DIRECTES par AST : l'Excel A6
+            # (30 cles lues), le rapport modeles (20) et le rapport
+            # d'equipe (25) ne lisent AUCUNE de ces cinq cles sur le dict
+            # d'A6 — le generateur les recoit en PARAMETRES, pas par le
+            # dict. Les poser n'ajoute donc rien a leur rendu : le
+            # document reste inchange, octet pour octet.
+            _relais_prix = {
+                'tarif':             _tarif_publiable,
+                'portefeuille_tarife': _portefeuille_pub,
+                'comparaison_prix':  _comparaison,
+                'conditions_mesure': _conditions_pub,
+                'decision_actuaire': decision_actuaire,
+            }
+            _tmp_a6.update(_relais_prix)
+
             _excel_a6 = b''
             _word_a6  = b''
             _html_a6  = b''
@@ -1133,9 +1193,11 @@ class AgentA6Comparaison:
                         # relais, le document range trois Gini cote a cote sans
                         # dire sur quelles lignes ils ont ete mesures, ni
                         # qu'aucun plan ne declare cette decoupe.
-                        conditions_mesure=[
-                            (r or {}).get('conditions_mesure')
-                            for r in (result_a3, result_a4, result_a5)],
+                        # ⚠️ LA VARIABLE, PAS L'EXPRESSION : la meme valeur
+                        # part au document ET aux deux dicts de sortie.
+                        # L'ecrire deux fois les ferait diverger au premier
+                        # agent ajoute.
+                        conditions_mesure=_conditions_pub,
                         # ⚠️ L'ARRETE VIENT DE L'APPELANT, JAMAIS DE L'HORLOGE.
                         arrete=arrete,
                         audit_id=audit_id, formats=['html','word'],
@@ -1170,9 +1232,12 @@ class AgentA6Comparaison:
                         #   a perdu SES DEUX documents signes. *L'idiome `or`
                         #   vaut pour un dict ou un None, pas pour un
                         #   DataFrame.*
-                        portefeuille=(
-                            _assiette_pub if _assiette_pub is not None
-                            else (result_a2 or {}).get('dataframe')),
+                        #   ⚠️ LA VARIABLE, PAS L'EXPRESSION -- meme raison
+                        #   que `conditions_mesure` plus haut. L'avertissement
+                        #   ci-dessus sur `is not None` vaut toujours : il vit
+                        #   desormais A LA DEFINITION de `_portefeuille_pub`,
+                        #   un seul endroit au lieu de deux.
+                        portefeuille=_portefeuille_pub,
                         decision_actuaire=decision_actuaire,
                         comparaison_prix=_comparaison,
                     )
@@ -1312,6 +1377,12 @@ class AgentA6Comparaison:
                 # publie une de moins, EN SILENCE.
                 'sensibilite_profils': self._sensibilite_profils(
                     classement, _nom_profil_retenu),
+                # ⚠️⚠️ LE RELAIS DU PRIX, LES MEMES CINQ CLES QUE `_tmp_a6`.
+                # `**_relais_prix` et non cinq lignes recopiees : deux
+                # ecritures de la meme liste divergeraient au premier ajout,
+                # et c'est precisement ce que `EP-1` epingle a cote.
+                # *Un relais s'ecrit une fois et se pose deux fois.*
+                **_relais_prix,
                 'modele_production':  modele_production,
                 'backtest':           backtest,
                 'lift_ratio':         backtest.get('lift_ratio'),
