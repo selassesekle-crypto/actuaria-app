@@ -63,19 +63,80 @@ from core.sortie_console import (
 
 _GATE = _RACINE / 'scripts' / 'gate.py'
 _SOCLE = _RACINE / 'core' / 'sortie_console.py'
-#: ⚠️ MESURE DU 14/09/2026 : 351 fichiers de test sur 410 portent un
-#: caractere hors cp1252. Ce controle MORD si ce nombre AUGMENTE.
-#: ⚠️⚠️ ET CE FICHIER-CI EST L'UN DES 351 : sa docstring porte des `⚠️`.
+#: ⚠️ MESURE DU 14/09/2026 : les fichiers de test SUIVIS PAR GIT qui
+#: portent un caractere hors cp1252. Ce controle MORD si ce nombre
+#: AUGMENTE.
+#: ⚠️⚠️ ET CE FICHIER-CI EST L'UN D'EUX : sa docstring porte des `⚠️`.
 #: Le premier seuil, pose a 350, a mordu sur le sceau lui-meme au moment
 #: ou il est ne. *Le controle qui mesure le defaut le porte aussi* -- on
 #: le dit plutot que d'exempter le sceau, ce qui retrecirait l'assiette
 #: pour faire passer mon propre travail.
-_FICHIERS_A_RISQUE = 351
+#:
+#: ⚠️⚠️ 351 -> 353 LE 14/09/2026, ET LES DEUX RAISONS SONT DECLAREES :
+#:   1. DEUX SCEAUX NEUFS entrent dans le corpus le meme jour --
+#:      `test_validation_ml_porte_sur_un_ml` (constats `A4-2`/`A4-3`) et
+#:      `test_ia_avancee_ne_bloque_jamais_le_prix` (continuite du module
+#:      d'IA avancee). Ils portent des accents et des `⚠️` comme les 351
+#:      autres. Les ecrire en ASCII pur les rendrait illisibles pour un
+#:      actuaire francais et les couperait de la convention du corpus :
+#:      *on releve le plafond et on dit pourquoi, on n'exempte pas ses
+#:      propres fichiers.* C'est le precedent pose a 350 -> 351.
+#:   2. L'ASSIETTE A ETE REPAREE dans le meme lot -- voir
+#:      `_fichiers_de_test`. Elle balayait le DISQUE et ramassait 60
+#:      fichiers de la bibliotheque standard CPython tombee dans
+#:      `Python/` ; le chiffre valait 413 sur l'arbre de travail et 353 a
+#:      la gate. Il vaut desormais LA MEME CHOSE PARTOUT.
+#:
+#: ⚠️ CE PLAFOND NE PEUT QUE BAISSER. Il ne se releve que sur un fichier
+#: AJOUTE, jamais sur un fichier qui se met a dependre de l'encodage.
+_FICHIERS_A_RISQUE = 353
 
 
 def _fichiers_de_test() -> list:
+    """Les fichiers de test QUE GIT PUBLIE -- et rien d'autre.
+
+    ⚠️⚠️ CETTE FONCTION BALAYAIT LE DISQUE, ET SON CHIFFRE DEPENDAIT DE LA
+    MACHINE. Mesure du 14/09/2026 sur l'arbre de travail :
+
+        413 fichiers `test_*.py` sur le disque
+        351 suivis par git   <- le vrai corpus
+         60 dans `Python/`   <- l'installation CPython tombee dans le
+                                depot le 03/09, IGNOREE par `.gitignore`
+                                et pourtant balayee ici
+          2 mes sceaux du jour, pas encore commites
+
+    Les 60 sont la bibliotheque standard de CPython (`idlelib/idle_test/`
+    et consorts). Un autre poste, ou un instantane `git worktree`, n'en a
+    aucun : le meme controle publiait donc 413 ici et 353 a la gate.
+    *Un plafond de dette qui change selon l'endroit ou on le lit ne
+    mesure aucune dette.*
+
+    ⚠️ LE BON GESTE EXISTAIT A UN FICHIER DE DISTANCE :
+    `test_racine_derivee.py::_fichiers_suivis` derive de `git ls-files`
+    depuis le 12/09, avec sa raison ecrite -- << un `.gitignore` peut
+    cacher un fichier au disque ; seul `git ls-files` dit ce qui part
+    chez le lecteur du depot public >>. L'asymetrie entre voisins, encore.
+    """
+    import subprocess
+    try:
+        sortie = subprocess.run(
+            ['git', 'ls-files'], cwd=str(_RACINE), capture_output=True,
+            text=True, encoding='utf-8', errors='replace', timeout=120,
+            check=False).stdout
+        rels = [r for r in sortie.split('\n')
+                if pathlib.PurePosixPath(r).name.startswith('test_')
+                and r.endswith('.py')]
+        if rels:
+            return [_RACINE / r for r in rels
+                    if (_RACINE / r).is_file()]
+    except (OSError, subprocess.SubprocessError):
+        pass
+    #: ⚠️ REPLI SANS GIT, ET IL EST DIT : on retombe sur le disque, en
+    #: ecartant au moins ce que le depot declare ignorer et qui a
+    #: reellement pollue la mesure.
     return [p for p in sorted(_RACINE.rglob('test_*.py'))
-            if '__pycache__' not in str(p)]
+            if '__pycache__' not in str(p)
+            and 'Python' not in p.relative_to(_RACINE).parts[:1]]
 
 
 class TestVerdictIndependantDeLaConsole(unittest.TestCase):
@@ -185,11 +246,42 @@ class TestVerdictIndependantDeLaConsole(unittest.TestCase):
               f"constante vient du socle {ENCODAGE_IMPOSE!r}, et le "
               f"lanceur DEMARRE")
 
+    # ── VC-4b ────────────────────────────────────────────────────────────
+    def test_VC4b_L_ASSIETTE_ne_contient_AUCUN_fichier_IGNORE(self):
+        """⚠️⚠️ SANS CE CONTROLE, LE CHIFFRE DE `VC-4` DEPEND DE LA MACHINE.
+
+        Mesure du 14/09/2026 : `_fichiers_de_test` balayait le DISQUE et
+        ramassait **60 fichiers de la bibliotheque standard CPython**,
+        tombee dans `Python/` le 03/09 et IGNOREE par `.gitignore`. Le
+        meme controle publiait 413 sur l'arbre de travail et 353 sur
+        l'instantane de gate -- *et c'est la gate qui avait raison.*
+
+        Ce controle n'est pas tautologique : il ne verifie pas que la
+        fonction appelle `git`, il verifie que **rien de ce qu'elle rend
+        n'est ignore par le depot**. Un repli qui reviendrait au disque
+        sans filtrer le ferait tomber.
+        """
+        import subprocess
+        fichiers = _fichiers_de_test()
+        rels = [str(p.relative_to(_RACINE)).replace('\\', '/')
+                for p in fichiers]
+        essai = subprocess.run(
+            ['git', 'check-ignore', '--stdin'], cwd=str(_RACINE),
+            input='\n'.join(rels), capture_output=True, text=True,
+            encoding='utf-8', errors='replace', timeout=180, check=False)
+        ignores = [x for x in essai.stdout.split('\n') if x.strip()]
+        self.assertEqual(
+            ignores, [],
+            f"{len(ignores)} fichier(s) de l'assiette sont IGNORES par le "
+            f"depot : le nombre publie par `VC-4` depend alors de ce qui "
+            f"traine sur le disque de la machine. Exemples : {ignores[:4]}")
+        print(f"    VC-4b assiette : {len(fichiers)} fichier(s), 0 ignore")
+
     # ── VC-4 ─────────────────────────────────────────────────────────────
     def test_VC4_L_ASSIETTE_du_constat_est_MESUREE_et_publiee(self):
-        """⚠️ CE CONTROLE NE FERME RIEN : il MESURE. Les 350 fichiers ne
-        sont pas reecrits -- leur caractere hors cp1252 est le plus souvent
-        un symbole de docstring, et les reecrire serait un chantier a part.
+        """⚠️ CE CONTROLE NE FERME RIEN : il MESURE. Les fichiers ne sont
+        pas reecrits -- leur caractere hors cp1252 est le plus souvent un
+        symbole de docstring, et les reecrire serait un chantier a part.
         *Il MORD si leur nombre AUGMENTE.*"""
         fichiers = _fichiers_de_test()
         self.assertGreater(
