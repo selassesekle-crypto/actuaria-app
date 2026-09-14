@@ -274,6 +274,27 @@ def figer() -> int:
         print(f'  ⛔ SURFACES ILLISIBLES, REFERENCE NON ECRITE : '
               f'{emp.non_lues}', flush=True)
         return 2
+    # ⚠️⚠️ CE QUE CETTE REFERENCE COUVRE VRAIMENT — constat `D4`, report du
+    # round 4, confirme le 14/09/2026. `figer()` ecrivait les 32 surfaces
+    # sans distinguer, alors que QUINZE d'entre elles valent `ABSENT` : leur
+    # sha256 est celui de la chaine `<livrable absent>`, identique pour
+    # toutes (`sha256:cc62197f13e6...`). La sentinelle publiait ensuite
+    # « 32 surfaces signees, contenu inchange » — *une phrase quinze fois
+    # trop genereuse sur sa propre couverture.*
+    #   Son JUMEAU `deposer()` distingue depuis toujours : il calcule
+    #   `reelles` et l'annonce. Deux fonctions du meme fichier ne disaient
+    #   pas la meme chose de la meme mesure.
+    # ⚠️ ON NE RETIRE RIEN : une surface absente qui DEVIENDRAIT reelle est
+    # un ecart qu'il faut voir. On NOMME, pour que le compte cesse de
+    # mentir.
+    # ⚠️ ET LA CAUSE N'EST PAS TOUJOURS WEASYPRINT : mesure du 14/09, sur
+    # les 15 absentes, HUIT sont des PDF (weasyprint non installe) et SEPT
+    # ne le sont pas — `a1 Word`, `a2 Word`, `a3 Word`, les trois
+    # `a6 Rapport equipe *` et `rapport_modeles Excel`. Leur producteur
+    # rend zero octet, et rien ne dit pourquoi. *Constat NOMME, non traite
+    # ici.*
+    absentes = sorted(nom for nom, contenu in emp.contenus.items()
+                      if contenu == G.ABSENT)
     charge = {
         '_doctrine': (
             "REFERENCE DE CONTENU DES LIVRABLES SIGNES. Elle ne porte AUCUNE "
@@ -283,6 +304,18 @@ def figer() -> int:
             "--figer`, et TOUTE regeneration se justifie dans le message de "
             "commit -- c'est ce qui fait d'un instrument une sentinelle."),
         '_assiette_non_couverte': ASSIETTE_NON_COUVERTE,
+        '_surfaces_absentes': {
+            'doctrine': (
+                "Ces surfaces figurent dans `surfaces` mais leur producteur "
+                "a rendu ZERO octet : leur sha256 est celui de la chaine "
+                f"{G.ABSENT!r}, le MEME pour toutes. La reference ne couvre "
+                "donc PAS leur contenu -- elle couvre leur ABSENCE. Un "
+                "« 0 ecart » ne dit rien d'elles, et c'est pour cela "
+                "qu'elles sont nommees ici."),
+            'noms': absentes,
+            'nb_absentes': len(absentes),
+            'nb_reelles': len(emp.contenus) - len(absentes),
+        },
         'jeu': {'graine': GRAINE, 'taille': TAILLE, 'arrete': ARRETE,
                 'annees': list(ANNEES)},
         'surfaces': {nom: _condense(contenu)
@@ -292,7 +325,13 @@ def figer() -> int:
         json.dump(charge, fichier, ensure_ascii=False, indent=2)
         fichier.write('\n')
     print(f'  reference figee   : {CHEMIN_REFERENCE}', flush=True)
-    print(f'  surfaces          : {len(charge["surfaces"])}', flush=True)
+    # ⚠️ LE MEME COMPTE QUE `deposer()`, ET DANS LES MEMES MOTS : une
+    # surface ABSENTE se dit, elle ne se compte pas comme signee.
+    print(f'  surfaces          : {len(charge["surfaces"])} dont '
+          f'{len(emp.contenus) - len(absentes)} REELLES et '
+          f'{len(absentes)} ABSENTES', flush=True)
+    if absentes:
+        print(f'  absentes          : {", ".join(absentes)}', flush=True)
     print(f'  tete git          : {_tete_git()}', flush=True)
     print(f'  duree             : {time.time() - depart:.0f} s', flush=True)
     print('  ⚠️ JUSTIFIEZ CETTE REGENERATION DANS LE MESSAGE DE COMMIT.',

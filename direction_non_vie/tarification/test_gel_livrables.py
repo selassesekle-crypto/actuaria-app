@@ -877,7 +877,28 @@ class TestLaReferenceDeContenu(unittest.TestCase):
             f'--figer` et JUSTIFIEZ-LE dans le message de commit. Pour voir '
             f'ce qui a bouge, ecart par ecart : `--sortie A`, `--sortie B` '
             f'de part et d autre, puis `--comparer A B`.')
-        print(f'    GEL-15b {len(actuel)} surfaces signees, contenu inchange')
+        # ⚠️⚠️ CE QUE CETTE REFERENCE COUVRE VRAIMENT — constat `D4`. Cette
+        # phrase annoncait « 32 surfaces signees » alors que QUINZE d'entre
+        # elles valent `ABSENT` : leur producteur rend zero octet, et leur
+        # sha256 est celui de la chaine `<livrable absent>`, IDENTIQUE pour
+        # toutes. *Un « 0 ecart » ne disait rien de ces quinze, et la phrase
+        # qui l'accompagnait etait quinze fois trop genereuse.*
+        #   Le jumeau `deposer()` distinguait depuis toujours : il calcule
+        #   `reelles` et l'annonce. Deux fonctions du meme fichier ne
+        #   disaient pas la meme chose de la meme mesure.
+        absentes = sorted(n for n, c in emp.contenus.items()
+                          if c == G.ABSENT)
+        declarees = (ref.get('_surfaces_absentes') or {})
+        self.assertEqual(
+            sorted(declarees.get('noms') or []), absentes,
+            f'la reference ne declare pas les surfaces ABSENTES qu elle '
+            f'porte. mesurees={absentes} declarees='
+            f'{sorted(declarees.get("noms") or [])}. Re-figer, et '
+            f'justifier : une surface qui cesse d etre absente -- ou qui le '
+            f'devient -- change ce que cette reference COUVRE.')
+        print(f'    GEL-15b {len(actuel)} surfaces, dont '
+              f'{len(actuel) - len(absentes)} REELLES et {len(absentes)} '
+              f'ABSENTES ; contenu des reelles inchange')
 
 
 if __name__ == '__main__':

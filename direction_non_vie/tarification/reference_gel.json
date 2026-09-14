@@ -1,6 +1,28 @@
 {
   "_doctrine": "REFERENCE DE CONTENU DES LIVRABLES SIGNES. Elle ne porte AUCUNE donnee : seulement, par surface, le sha256 de son empreinte NORMALISEE (horodatages d'impression neutralises, dates metier conservees). Regeneree par `py scripts/gel_avant_apres.py --figer`, et TOUTE regeneration se justifie dans le message de commit -- c'est ce qui fait d'un instrument une sentinelle.",
   "_assiette_non_couverte": "un seul plan (auto), une seule graine, AUCUN mapping client declare, aucun modele de Deep Learning si torch est absent ; cote provisionnement, UN SEUL triangle (RAA, 7x7, cumule, annuel, une seule LoB) : ni triangle d engagements — donc Munich Chain Ladder inerte —, ni granularite infra-annuelle, ni Best Estimate negatif, ni geometrie irreguliere, ni narration LLM (aucune cle d API dans la mesure)",
+  "_surfaces_absentes": {
+    "doctrine": "Ces surfaces figurent dans `surfaces` mais leur producteur a rendu ZERO octet : leur sha256 est celui de la chaine '<livrable absent>', le MEME pour toutes. La reference ne couvre donc PAS leur contenu -- elle couvre leur ABSENCE. Un « 0 ecart » ne dit rien d'elles, et c'est pour cela qu'elles sont nommees ici.",
+    "noms": [
+      "a1 PDF",
+      "a1 Word",
+      "a2 PDF",
+      "a2 Word",
+      "a3 PDF",
+      "a3 Word",
+      "a4 PDF",
+      "a6 PDF",
+      "a6 Rapport equipe Excel",
+      "a6 Rapport equipe HTML",
+      "a6 Rapport equipe PDF",
+      "a6 Rapport equipe Word",
+      "rapport_equipe PDF",
+      "rapport_modeles Excel",
+      "rapport_modeles PDF"
+    ],
+    "nb_absentes": 15,
+    "nb_reelles": 17
+  },
   "jeu": {
     "graine": 7,
     "taille": 1200,
