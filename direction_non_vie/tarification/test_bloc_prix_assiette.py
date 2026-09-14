@@ -57,6 +57,59 @@ if _RACINE not in sys.path:
 
 from core.plan_tarifaire import PlanTarifaire
 from core.prix_compares import assiette_du_tarif
+
+
+def source_aplatie(noeud: ast.AST, arbre: ast.AST, profondeur: int = 6) -> str:
+    """L'expression d'un argument, SES VARIABLES LOCALES SUBSTITUÉES.
+
+    ⚠️⚠️ CE MÉCANISME A UNE HISTOIRE, ET ELLE COÛTE CHER À REPERDRE.
+    Un contrôle qui lit le TEXTE d'un argument devient aveugle dès que
+    quelqu'un extrait ce texte dans une variable — et l'extraction est
+    le BON geste quand la valeur sert à deux endroits. Mesuré le
+    14/09/2026 : `portefeuille=` est passé de l'expression complète à
+    `_portefeuille_pub`, et `BP-4` est tombé sur un refactor qui ne
+    changeait RIEN au comportement.
+
+    Deux défauts de l'ancienne version, corrigés ici :
+
+      . LA RÉSOLUTION ÉTAIT D'UN SEUL NIVEAU. Elle substituait
+        `_portefeuille_pub` -> `_assiette_pub if ... else ...` et
+        s'arrêtait là, sans jamais atteindre
+        `_assiette_pub = assiette_du_tarif(...)`. On itère désormais
+        jusqu'au POINT FIXE (`profondeur` bornée : une définition
+        circulaire ne doit pas boucler).
+      . ELLE APPARIAIT PAR SOUS-CHAÎNE (`if nom in source`), donc un nom
+        court comme `att` déclenchait sur n'importe quel mot le
+        contenant : la source ramassait
+        `round(obs / att, 4) if att and ...`, du bruit pur. On apparie
+        désormais sur les NOMS AST réellement présents.
+
+    *Le contrôle exige toujours la même chose ; il sait seulement la
+    suivre à travers une variable.*
+    """
+    assignations = {
+        cible.id: n.value
+        for n in ast.walk(arbre) if isinstance(n, ast.Assign)
+        for cible in n.targets if isinstance(cible, ast.Name)}
+    morceaux = [ast.unparse(noeud)]
+    vus: set[str] = set()
+    a_resoudre = [noeud]
+    for _ in range(profondeur):
+        suivants = []
+        for courant in a_resoudre:
+            for x in ast.walk(courant):
+                if not (isinstance(x, ast.Name) and isinstance(x.ctx, ast.Load)):
+                    continue
+                if x.id in vus or x.id not in assignations:
+                    continue
+                vus.add(x.id)
+                valeur = assignations[x.id]
+                morceaux.append(ast.unparse(valeur))
+                suivants.append(valeur)
+        if not suivants:
+            break
+        a_resoudre = suivants
+    return ' || '.join(morceaux)
 from direction_non_vie.tarification import test_plan_invariants as T
 from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
 from direction_non_vie.tarification.a2_preprocessing.agent import (
@@ -157,10 +210,6 @@ class TestLAssietteDuBlocPrix(unittest.TestCase):
         a6 = (pathlib.Path(_RACINE) / 'direction_non_vie' / 'tarification'
               / 'a6_comparaison' / 'agent.py').read_text(encoding='utf-8')
         arbre = ast.parse(a6)
-        assignations = {
-            cible.id: ast.unparse(n.value)
-            for n in ast.walk(arbre) if isinstance(n, ast.Assign)
-            for cible in n.targets if isinstance(cible, ast.Name)}
         vus = []
         for n in ast.walk(arbre):
             if not (isinstance(n, ast.Call)
@@ -170,11 +219,7 @@ class TestLAssietteDuBlocPrix(unittest.TestCase):
             for mot in n.keywords:
                 if mot.arg != 'portefeuille':
                     continue
-                source = ast.unparse(mot.value)
-                for nom, valeur in assignations.items():
-                    if nom in source:
-                        source += ' || ' + valeur
-                vus.append(source)
+                vus.append(source_aplatie(mot.value, arbre))
         self.assertTrue(vus, "A6 ne transmet plus de portefeuille")
         for source in vus:
             self.assertIn('assiette_du_tarif', source,

@@ -59,6 +59,15 @@ from direction_non_vie.tarification.services.rapport_modeles_tarif import (
     _bloc_conditions_html,
 )
 
+#: ⚠️ LE MECANISME VIT CHEZ `BP-4`, QUI L'A PAYE LE PREMIER. Deux
+#: controles ont besoin de suivre une variable jusqu'a sa definition ;
+#: en ecrire deux versions les ferait diverger au premier ajout. Meme
+#: patron que `test_derivations` important ses fixtures de
+#: `test_plan_invariants`.
+from direction_non_vie.tarification.test_bloc_prix_assiette import (
+    source_aplatie,
+)
+
 _AGENTS = {
     'A3': 'direction_non_vie/tarification/a3_glm/agent.py',
     'A4': 'direction_non_vie/tarification/a4_ml/agent.py',
@@ -167,7 +176,19 @@ class TestLaDeclarationDesConditions(unittest.TestCase):
                    if isinstance(n, ast.Call)
                    for k in n.keywords if k.arg == 'conditions_mesure']
         self.assertTrue(valeurs, "A6 ne transmet pas les conditions")
-        source = ' '.join(ast.unparse(v) for v in valeurs)
+        # ⚠️⚠️ LES VARIABLES LOCALES SONT SUBSTITUÉES, ET C'EST UNE
+        # RÉPARATION. Ce contrôle lisait `ast.unparse(v)` tel quel : le
+        # jour ou A6 a extrait la collecte dans `_conditions_pub` — pour
+        # la passer au document ET la relayer a ses appelants, une
+        # definition au lieu de deux — la source est devenue
+        # `_conditions_pub` et les trois agents ont disparu du relevé.
+        # *Le controle est tombe sur un refactor qui ne changeait RIEN au
+        # comportement.* Il exige toujours la meme chose ; il sait
+        # desormais la suivre a travers une variable.
+        #   ⚠️ L'ASSIETTE NE S'ELARGIT PAS POUR AUTANT : on ne substitue
+        # que ce que l'argument REFERENCE, jamais l'appel entier — la
+        # lecon du plant X4 rappelee juste au-dessus.
+        source = ' '.join(source_aplatie(v, arbre) for v in valeurs)
         for agent in ('result_a3', 'result_a4', 'result_a5'):
             self.assertIn(agent, source,
                           f"A6 oublie {agent} dans la COLLECTE : le bloc "
