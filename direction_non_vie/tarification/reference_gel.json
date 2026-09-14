@@ -47,16 +47,16 @@
     "a3 Word": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
     "a4 Excel": "sha256:086e577aa9e9b85c7450014dff9865fdfb942f88142ffe3b4f258d3aa0fccc83",
     "a4 PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
-    "a4 Word": "sha256:aa9490aeef6a646d49196885d2194fe81367a1dc637212b850ba82633283ca4a",
+    "a4 Word": "sha256:f9f024d917e8cd712dfd8da25ac84e4ede8eb532dec75bb7d959cbb06f1863b1",
     "a5 Excel": "sha256:fb243e6a17277ff9257d875436b55318f82a9a30d20f0f812229f1eee3dfb02f",
     "a6 Excel": "sha256:52ee4e353d31a7e024531c24f24e739be69a583b40f619f3a5da83c6ca4a52bf",
-    "a6 HTML": "sha256:80f34ab07d821cc5e51e72e0bf00e04373f5c9b1110fdf2cf07c3932f4fab6b0",
+    "a6 HTML": "sha256:b063e98c4951564190dd45c97aa42cd0ce33477e142e446210c6a4989706ec7b",
     "a6 PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
     "a6 Rapport equipe Excel": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
     "a6 Rapport equipe HTML": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
     "a6 Rapport equipe PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
     "a6 Rapport equipe Word": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
-    "a6 Word": "sha256:b1afcacd216cdde46fc1c3ae4f9d83bd74d51fabb7da9d88626e606c1637beef",
+    "a6 Word": "sha256:47988fb5aed10dc1eb1acc05d27a070237e62c8ca943b1c92455cade651637a5",
     "a7 Excel": "sha256:de4be1beb212607348ed12f136e3f01c6ddce1ca4cc2ff0083eafeced22b26f7",
     "a7 HTML": "sha256:4de86eb4b9c5d5eedb6d7782c3ce039878c33b5bdf14c9ddea4b2902e07bef34",
     "a7 Word": "sha256:2fbd13a7a0316a6cdbe7eb9b127c004632eed4f9afd222da5ad8f8a17be01e5c",
@@ -65,8 +65,8 @@
     "rapport_equipe PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
     "rapport_equipe Word": "sha256:8e0ea1182b47c7e51df03c3b7fc42cb1deee92c2540251b02d343cada46c2813",
     "rapport_modeles Excel": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
-    "rapport_modeles HTML": "sha256:51e1ed613a5238b287e5fd58fb3e2e5d36a7676a284ac84734eba350b7aabe02",
+    "rapport_modeles HTML": "sha256:e0b51866cc0edaa10fb23aa928bd623d22794ff5d5495b58aae9e6cf0f3e37da",
     "rapport_modeles PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
-    "rapport_modeles Word": "sha256:26ec92cccd509700dde6c002a8fef95bd008efd905f872e35f1827633a385c13"
+    "rapport_modeles Word": "sha256:975a29fe5de9a1e8c0da6308becb2d8f680f5bd0d4c0d8514b210af8b3d375e4"
   }
 }

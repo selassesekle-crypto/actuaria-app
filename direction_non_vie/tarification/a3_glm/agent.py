@@ -3025,9 +3025,18 @@ class AgentA3GLM:
         try:
             freq = (self.predictions or {}).get('frequence_annuelle')
             if freq is not None and len(freq):
+                # ⚠️ LA GRANDEUR SE DÉCLARE — constat `D3`. Ce site passait
+                # `unite=''` sous un titre de FRÉQUENCES, et la figure
+                # écrivait « Prime prédite () » sur son axe, avec des
+                # quantiles tous arrondis à « 0 ».
+                # ⚠️ LE COMMENTAIRE VIT AVANT LA LIGNE, PAS APRÈS SON `\` :
+                # un commentaire derrière une continuation est une
+                # SyntaxError. Mon premier essai a casse ce fichier, et
+                # c'est `FQ-5` — qui PARSE le site vivant — qui l'a vu.
                 graphiques['chart_distribution_predictions'] = \
                     chart_distribution_predictions(
                         freq, unite='',
+                        grandeur='Fréquence annuelle prédite',
                         titre='Distribution des fréquences prédites')
         except Exception as e:
             logger.debug(f"chart_distribution_predictions non produit : {e}")

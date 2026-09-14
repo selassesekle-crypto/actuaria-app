@@ -788,36 +788,88 @@ def chart_shap_summary(
 # ════════════════════════════════════════════════════════════════════════════
 # 6. DISTRIBUTION DES PRÉDICTIONS
 # ════════════════════════════════════════════════════════════════════════════
+def _decimales_lisibles(valeurs: Sequence[float]) -> int:
+    """Assez de décimales pour que la plus petite valeur NON NULLE se
+    distingue de zéro.
+
+    ⚠️ CE N'EST PAS UNE VALEUR DEVINÉE, c'est une règle d'AFFICHAGE, et
+    elle est écrite ici plutôt que répartie sur les appelants. *Une
+    fréquence annuelle de 0,12 écrite « 0 » n'est pas un arrondi, c'est
+    une autre grandeur.*
+    """
+    #: ⚠️ `np.isfinite` PLUTOT QUE `v == v` : l'idiome NaN classique est
+    #: signale par `proprete` (PLR0124, comparaison d'un nom avec lui-meme)
+    #: et il ne couvre pas l'infini. Un seul predicat pour les deux.
+    finies = [float(v) for v in valeurs if np.isfinite(float(v))]
+    non_nulles = [abs(v) for v in finies if v != 0.0]
+    if not non_nulles:
+        return 0
+    plus_petite = min(non_nulles)
+    for n in range(7):
+        #: (1) la plus petite valeur ne doit pas s'ecrire « 0 »
+        if plus_petite < 100 and round(plus_petite, n) == 0:
+            continue
+        #: (2) ⚠️ ET DEUX VALEURS DIFFERENTES NE DOIVENT PAS S'ECRIRE
+        #: PAREIL. Trois quantiles a 0,101 / 0,102 / 0,103 affiches
+        #: « 0.1 » trois fois ne disent rien de plus que « 0 ».
+        if len({round(v, n) for v in finies}) == len(set(finies)):
+            return n
+    return 6
+
+
 def chart_distribution_predictions(
     predictions: Sequence[float],
     *,
     quantiles: Sequence[float] = (0.5, 0.9, 0.99),
     unite: str = '€',
     titre: str = 'Distribution des primes prédites',
+    grandeur: str = 'Prime prédite',
 ) -> go.Figure:
     """
     predictions : array des primes/prédictions du portefeuille. Histogramme +
                   lignes de quantiles annotées (ligne prédite vert lumineux).
+
+    ⚠️⚠️ LA GRANDEUR SE DÉCLARE, ELLE NE SE SUPPOSE PAS — constat `D3`,
+    report du round 4, confirmé le 14/09/2026. L'axe des abscisses portait
+    `'Prime prédite ({unite})'` EN DUR, et les quantiles étaient formatés à
+    ZÉRO décimale. Or cette figure est appelée — site vivant,
+    `a3_glm/agent.py:3029` — avec `unite=''` et le titre
+    « Distribution des FRÉQUENCES prédites ».
+
+    *Le lecteur voyait donc « Prime prédite () » sous un titre de
+    fréquences, et des quantiles tous écrits « 0 » sur des fréquences
+    annuelles inférieures à 1.* Le titre disait une grandeur, l'axe en
+    disait une autre, et les valeurs n'en disaient aucune.
+
+    `grandeur` nomme ce qui est mesuré ; `unite` ne s'affiche que si elle
+    existe ; les décimales sont dérivées de la DONNÉE par
+    `_decimales_lisibles`.
     """
     p = np.asarray(predictions, dtype=float)
     p = p[np.isfinite(p)]
     fig = go.Figure(go.Histogram(
-        x=p, nbinsx=50, name='Primes',
+        x=p, nbinsx=50, name=grandeur,
         marker=dict(color=BARRE_OR, line=dict(color=BARRE_BORDURE, width=1)),
         hovertemplate='%{x}<br>%{y} contrats<extra></extra>',
     ))
     _appliquer_theme(fig, titre)
     fig.update_layout(showlegend=False)
     if p.size:
-        for q in quantiles:
-            qv = float(np.quantile(p, q))
+        #: ⚠️ LES DECIMALES VIENNENT DE LA DONNEE, pas d'un litteral. Sur des
+        #: frequences annuelles, `:.0f` ecrivait « Q50 = 0 » trois fois.
+        _valeurs = [float(np.quantile(p, q)) for q in quantiles]
+        _dec = _decimales_lisibles(_valeurs)
+        for q, qv in zip(quantiles, _valeurs):
             fig.add_vline(
                 x=qv, line=dict(color=COULEURS['ligne_predite'], dash='dash', width=1.5),
-                annotation_text=f'Q{int(round(q * 100))} = {qv:,.0f}{unite}',
+                annotation_text=(f'Q{int(round(q * 100))} = '
+                                 f'{qv:,.{_dec}f}{unite}'),
                 annotation_position='top',
                 annotation_font=dict(family=POLICE, color=COULEURS['ligne_predite'], size=11),
             )
-    fig.update_xaxes(title=f'Prime prédite ({unite})')
+    #: ⚠️ L'UNITE NE S'AFFICHE QUE SI ELLE EXISTE : « (…) » vide est une
+    #: parenthese qui promet une unite et n'en donne aucune.
+    fig.update_xaxes(title=f'{grandeur} ({unite})' if unite else grandeur)
     fig.update_yaxes(title='Nombre de contrats')
     _declarer_assiette(fig, fournis=int(np.size(np.asarray(predictions))),
                        traces=int(p.size), quoi='prédictions')
