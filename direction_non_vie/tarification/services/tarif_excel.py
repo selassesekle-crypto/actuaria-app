@@ -401,10 +401,29 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "", arrete: Optional[str] =
             # ce n'est ni une alerte ni un OK.
             alerte = ("non évaluable" if m.get('overfit_alerte') is None
                       else "⚠ Overfit" if m.get('overfit_alerte') else "✓ OK")
+            # ⚠️⚠️ UN ZÉRO FABRIQUÉ SUR CHAQUE LIGNE D'UN CLASSEUR SIGNÉ —
+            # constat `TE-D1`, 12/09/2026. `round(m.get('score_global',0),4)`
+            # publiait `0.0000` sous l'en-tête « Score global », dans une
+            # section intitulée « CLASSEMENT MULTICRITÈRES (Gini 40 % ·
+            # Stabilité 30 % · Interprét. 20 % · RMSE 10 %) ». *Le classeur
+            # que l'actuaire signe affirmait donc que TOUS les candidats
+            # scorent zéro sur une grille qu'aucun d'eux n'a passée.*
+            #   A4 ne pose JAMAIS `score_global` : relevé AST du 14/09,
+            #   0 occurrence dans ses 4 132 lignes. Mesure du 14/09 sur le
+            #   classeur réellement produit : colonne 7, 3 lignes sur 3 à
+            #   `0` formaté `0.0000`.
+            # ⚠️ ET LE FORMAT SUIT LA VALEUR : un mot ne se formate pas en
+            # `0.0000`. C'est ce même fichier qui condamne le zéro fabriqué
+            # quatre fois ailleurs — `mesure_arrondie`, `gini_arrondi`, et
+            # le commentaire « Audit V7 IMPORTANT : garde NA — jamais
+            # 0.0000 », appliqué au rapport d'équipe et pas ici.
+            _score = mesure_arrondie(m.get('score_global'), 4)
             vals = [rank, m.get('modele',''), m.get('famille',''),
                     _dec(m.get('gini_test')), mesure_arrondie(m.get('rmse_test'), 4),
-                    _dec(m.get('overfit_ratio'), 3), round(m.get('score_global',0),4), alerte]
-            fmts = [None,None,None,FMT_DEC4,FMT_DEC4,FMT_DEC4,FMT_DEC4,None]
+                    _dec(m.get('overfit_ratio'), 3), _score, alerte]
+            fmts = [None,None,None,FMT_DEC4,FMT_DEC4,FMT_DEC4,
+                    FMT_DEC4 if isinstance(_score, (int, float)) else None,
+                    None]
             for j, (v, f) in enumerate(zip(vals, fmts), 1):
                 _cell(ws2, r, j, v, cf=NOIR, fill=bg, fmt=f,
                       ah="right" if isinstance(v,(int,float)) else "left",
@@ -1316,7 +1335,23 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
              "n'est invoquée : ils ne remplacent pas la revue de l'actuaire.",
              wrap=True); r += 1
         _section(ws2, r, "▶ ANOMALIES DÉTECTÉES"); r += 1
-        aberrants = qualite.get('aberrants', {})
+        # ⚠️⚠️ « AUCUNE » N'EST VERT QUE SI QUELQU'UN A CHERCHÉ — constat
+        # `TE-D2`, 12/09/2026. Sur un `result_a1` DÉPOURVU de bloc
+        # `qualite`, l'onglet 1 publiait « non transmis » NEUF fois en
+        # AMBRE, et CET onglet publiait « ✓ Aucune anomalie détectée » et
+        # « Alertes : Aucune » avec DEUX pastilles VERTES (fond 2ECC71).
+        # *Deux onglets du même classeur signé se contredisaient sur la
+        # MÊME absence ; un lecteur y voyait un fichier parfait, et il n'y
+        # avait pas de fichier.*
+        #   La garde `_absente` — dont le commentaire de l'onglet 1 dit
+        #   exactement cela — avait atteint l'onglet 1 et pas celui-ci.
+        # Mesure du 14/09 sur le classeur réellement produit, `qualite`
+        # vide : onglet 1 « non transmis » x9, 0 pastille verte ; onglet 2
+        # « non transmis » x0, 2 pastilles VERTES.
+        if _absente:
+            _kpi(ws2, r, "Anomalies détectées", NON_TRANSMIS,
+                 statut="AMBRE"); r += 1
+        aberrants = {} if _absente else qualite.get('aberrants', {})
         if aberrants:
             for col, txt, w in [(1, "Type d'anomalie", 30), (2, "Nombre de valeurs", 18)]:
                 _header(ws2, r, col, txt, width=w)
@@ -1326,17 +1361,20 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
                 _cell(ws2, r, 2, val, cf=NOIR, ah="right", fmt=FMT_NB)
                 r += 1
             r += 1
-        else:
+        elif not _absente:
             _kpi(ws2, r, "Statut", "✓ Aucune anomalie détectée", statut="VERT"); r += 1
             r += 1
 
         _section(ws2, r, "▶ ALERTES DÉTAILLÉES"); r += 1
-        for alerte in qualite.get('alertes_aberrants', []):
+        for alerte in ([] if _absente
+                       else qualite.get('alertes_aberrants', [])):
             _cell(ws2, r, 1, f"• {alerte}", cf=NOIR, wrap=True)
             ws2.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
             ws2.row_dimensions[r].height = 30
             r += 1
-        if not qualite.get('alertes_aberrants'):
+        if _absente:
+            _kpi(ws2, r, "Alertes", NON_TRANSMIS, statut="AMBRE"); r += 1
+        elif not qualite.get('alertes_aberrants'):
             _kpi(ws2, r, "Alertes", "Aucune", statut="VERT"); r += 1
 
         # ── Onglet 3 : Coercition de Types ────────────────────────────────────
@@ -1344,8 +1382,18 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
         _bandeau(ws3, "Coercition de Types", "Forçage explicite des types de données",
                  "A1 — Coercition", aid, arrete)
         r = 7
+        # ⚠️⚠️ LE MÊME DÉFAUT, SUR UN TROISIÈME ONGLET — et l'auditeur ne
+        # nomme que le deuxième. Mesure du 14/09 sur le même classeur, sur
+        # le même `result_a1` vide : l'onglet 3 publiait lui aussi
+        # « ✓ Aucune coercition nécessaire (types déjà corrects) » et
+        # « Alertes : Aucune » avec DEUX pastilles VERTES.
+        # *Affirmer que les types étaient déjà corrects sur un rapport qui
+        # n'est jamais arrivé, c'est la même faute que l'onglet 2.*
+        # Constat de ce chantier, traité par la MÊME doctrine.
+        _coercition_absente = not coercition
         _section(ws3, r, "▶ COLONNES FORCÉES"); r += 1
-        cols_forcees = coercition.get('colonnes_forcees', [])
+        cols_forcees = ([] if _coercition_absente
+                        else coercition.get('colonnes_forcees', []))
         if cols_forcees:
             _kpi(ws3, r, "Nb colonnes forcées", len(cols_forcees), fmt=FMT_NB); r += 1
             r += 1
@@ -1357,17 +1405,22 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
                 _cell(ws3, r, 1, col_nom, cf=NOIR, fill=GRIS_L)
                 _cell(ws3, r, 2, n_perdu, cf=NOIR, ah="right", fmt=FMT_NB)
                 r += 1
+        elif _coercition_absente:
+            _kpi(ws3, r, "Statut", NON_TRANSMIS, statut="AMBRE"); r += 1
         else:
             _kpi(ws3, r, "Statut", "✓ Aucune coercition nécessaire (types déjà corrects)",
                  statut="VERT"); r += 1
         r += 1
         _section(ws3, r, "▶ ALERTES"); r += 1
-        for alerte in coercition.get('alertes', []):
+        for alerte in ([] if _coercition_absente
+                       else coercition.get('alertes', [])):
             _cell(ws3, r, 1, f"• {alerte}", cf=NOIR, wrap=True)
             ws3.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
             ws3.row_dimensions[r].height = 30
             r += 1
-        if not coercition.get('alertes'):
+        if _coercition_absente:
+            _kpi(ws3, r, "Alertes", NON_TRANSMIS, statut="AMBRE"); r += 1
+        elif not coercition.get('alertes'):
             _kpi(ws3, r, "Alertes", "Aucune", statut="VERT"); r += 1
 
         # ── Onglet 4 : Audit Trail ─────────────────────────────────────────────
