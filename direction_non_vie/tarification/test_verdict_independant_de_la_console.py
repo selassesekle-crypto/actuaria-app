@@ -118,9 +118,16 @@ _SOCLE = _RACINE / 'core' / 'sortie_console.py'
 #: *on releve le plafond et on dit pourquoi, on n'exempte pas ses propres
 #: fichiers.*
 #:
+#: ⚠️ 355 -> 356 : `test_assiette_ciblee`, le sceau de l'outil de gate
+#: ciblee, entre dans le corpus. **Cette hausse-ci est posee DANS LE MEME
+#: LOT que le fichier qui la cause, et AVANT sa gate** -- c'est exactement
+#: la lecon ci-dessus, appliquee des le lot suivant plutot que constatee un
+#: lot trop tard. *Une lecon qu'on ecrit sans changer le geste suivant n'est
+#: pas une lecon.*
+#:
 #: ⚠️ CE PLAFOND NE PEUT QUE BAISSER. Il ne se releve que sur un fichier
 #: AJOUTE, jamais sur un fichier qui se met a dependre de l'encodage.
-_FICHIERS_A_RISQUE = 355
+_FICHIERS_A_RISQUE = 356
 
 
 def _fichiers_de_test() -> list:
