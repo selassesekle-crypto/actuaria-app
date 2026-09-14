@@ -1034,6 +1034,89 @@ TITRE_TARIF = 'Tarif calcule (prime pure, et prime commerciale si declaree)'
 LIGNES_DETAIL_TARIF = 10
 
 
+def _coefficient_ht(valeurs: dict) -> float:
+    """Le coefficient qui porte la prime pure a la prime commerciale HT.
+
+    ⚠️ UNE SEULE DEFINITION : la formule vivait en ligne dans `tarif_publie`
+    et devait desormais servir a plusieurs taux. Deux ecritures de la meme
+    formule finissent par en dire deux choses.
+    """
+    return ((1 + valeurs['frais']) * (1 + valeurs['marge'])
+            / (1 - valeurs['commission']))
+
+
+def _coefficients_du_portefeuille(plan, portefeuille):
+    """Un coefficient de chargement PAR CONTRAT — constat `D2`.
+
+    Rend ``(coefficients, n_derogatoires, phrase_reserve)`` :
+      • ``coefficients``  un scalaire si un seul taux s'applique, une SERIE
+        alignee sur le portefeuille des qu'une exception mord ;
+      • ``n_derogatoires`` combien de contrats ne portent PAS le general ;
+      • ``phrase_reserve`` ce qui n'a PAS pu s'appliquer, DIT — ou ``None``.
+
+    ⚠️⚠️ VECTORISE, PAS BOUCLE. Une exception par CRITERE ne depend que de
+    la modalite d'un axe : il y a donc au plus ``1 + len(cas)`` triplets
+    DISTINCTS, quel que soit le nombre de contrats. On les calcule une fois
+    et on les applique par `map`. *Le depot a deja paye la boucle `iloc` :
+    3,13 s sur 3 000 lignes, 12,55 s sur 12 000, pour le meme resultat.*
+
+    ⚠️⚠️ LA TABLE PAR CONTRAT NE PEUT PAS S'APPLIQUER ICI, ET ON LE DIT.
+    `TableExceptionsContrat` est une DECLARATION : la table elle-meme vit
+    HORS DEPOT — un identifiant de contrat dans un YAML versionne
+    publiquement serait une donnee personnelle publiee. `tarif_publie` ne
+    la recoit pas. *On declare, on ne certifie pas* : la reserve est
+    publiee au document plutot que passee sous silence.
+    """
+    general = chargements_du_contrat(plan)[0]
+    if general is None:
+        return 1.0, 0, None
+    base = _coefficient_ht(general)
+    _ch = getattr(plan, 'chargements', None)
+    table = getattr(_ch, 'exceptions_par_contrat', None)
+    reserve = None
+    if table is not None:
+        reserve = (
+            f"/!\\ CHARGEMENTS PAR CONTRAT NON APPLIQUES AU TOTAL. Le plan "
+            f"declare une table d'exceptions par contrat "
+            f"({table.nb_contrats} contrat(s), source « {table.source} », "
+            f"declaree par {table.declare_par} le {table.declare_le}). "
+            f"Cette table vit HORS DEPOT et n'est pas remise a ce service : "
+            f"le total ci-dessus applique donc le taux general ou "
+            f"l'exception par critere, jamais le taux propre a un contrat "
+            f"nomme. Le montant publie peut differer de celui facture.")
+    exceptions = getattr(_ch, 'exceptions', None)
+    axe = getattr(exceptions, 'selon', None) if exceptions else None
+    colonnes = getattr(portefeuille, 'columns', ())
+    if not axe:
+        return base, 0, reserve
+    if axe not in colonnes:
+        # ⚠️ L'AXE DECLARE MANQUE AU PORTEFEUILLE : on ne devine pas, on
+        # DIT. Appliquer le general en silence ferait passer une derogation
+        # signee pour une absence de derogation.
+        manque = (
+            f"/!\\ EXCEPTIONS DE CHARGEMENT NON APPLIQUEES : le plan les "
+            f"declare selon « {axe} », et le portefeuille remis ne porte pas "
+            f"cette colonne. Le total applique le taux general a tous les "
+            f"contrats.")
+        return base, 0, ' '.join(x for x in (reserve, manque) if x)
+    #: au plus `1 + len(cas)` triplets DISTINCTS -- calcules UNE fois
+    modalites = [m for m in portefeuille[axe].dropna().unique()]
+    coefficient_par_modalite, derogatoires = {}, set()
+    for modalite in modalites:
+        #: ⚠️ `[:2]` PLUTOT QU'UN TROISIEME NOM : `proprete.py` compte les
+        #: locales assignees et jamais relues, et il ne pardonne PAS le
+        #: prefixe `_` -- c'est son angle mort declare sur `F841`.
+        valeurs, origine = chargements_du_contrat(plan, {axe: modalite})[:2]
+        coefficient_par_modalite[modalite] = (
+            base if valeurs is None else _coefficient_ht(valeurs))
+        if origine != 'general':
+            derogatoires.add(modalite)
+    coefficients = portefeuille[axe].map(
+        coefficient_par_modalite).fillna(base)
+    n_derogatoires = int(portefeuille[axe].isin(derogatoires).sum())
+    return coefficients, n_derogatoires, reserve
+
+
 def tarif_publie(tarif, portefeuille=None, modele_recommande=None) -> dict:
     """Le prix, aux DEUX niveaux, tel qu'il ira dans le document signe.
 
@@ -1160,6 +1243,25 @@ def tarif_publie(tarif, portefeuille=None, modele_recommande=None) -> dict:
     # applique sont deja rediges par `synthese_chargements`, plus bas, source
     # unique. Les relire pour les reformater ferait deux redactions du meme
     # fait -- et deux redactions finissent par en dire deux choses.
+    # ⚠️⚠️ LE TAUX GÉNÉRAL NE S'APPLIQUE PLUS À TOUT LE MONDE — constat
+    # `D2`, report du round 4, confirmé le 14/09/2026. Cette ligne appelait
+    # `chargements_du_contrat(plan)` avec le PLAN SEUL, alors que sa
+    # signature est `(plan, contrat, table)` : sans `contrat`, l'exception
+    # PAR CRITÈRE ne peut pas s'appliquer, et un triplet unique était
+    # multiplié à toute la série. *Pendant que le DÉTAIL, trente lignes
+    # plus haut, tarife contrat par contrat — donc le même bloc signé
+    # pouvait afficher un prix dérogatoire à la ligne 3 et l'ignorer dans
+    # son total.*
+    #   Mesure du 14/09, plan `auto` + exception « commission 25 % sur
+    #   Tiers », 2 000 contrats dont 824 dérogatoires :
+    #       publié (taux général partout)  857 017,78 EUR
+    #       vrai   (taux par contrat)      917 525,53 EUR
+    #       écart                          -60 507,75 EUR  (-6,59 %)
+    # ⚠️ LE CONSTAT EST LATENT AUJOURD'HUI, et on le dit plutôt que de
+    # l'enfler : **0 des 20 plans livrés ne déclare de chargements**, donc
+    # `ch` vaut `None` et aucune prime commerciale ne sort. Il se
+    # produira le jour où un client en déclarera — c'est exactement ce que
+    # le bump `s9 -> s10` de l'empreinte a préparé.
     ch = chargements_du_contrat(plan)[0]
     # ⚠️⚠️ COMBIEN DE CONTRATS DU TOTAL PORTENT UNE VALEUR IMPUTEE. Le DETAIL
     # passe par `tarifer()`, qui REFUSE un facteur absent ou illisible ; le
@@ -1203,8 +1305,15 @@ def tarif_publie(tarif, portefeuille=None, modele_recommande=None) -> dict:
             + (' ...' if len(_imputes) > 20 else '') + '.')),
     }
     if ch is not None:
-        _ht = pure * (1 + ch['frais']) * (1 + ch['marge']) / (1 - ch['commission'])
+        _coef, _n_derog, _reserve_ch = _coefficients_du_portefeuille(
+            plan, portefeuille)
+        _ht = pure * _coef
         total['somme_prime_commerciale_ht'] = round(float(_ht.sum()), 2)
+        total['n_contrats_chargement_derogatoire'] = _n_derog
+        # ⚠️ LA PHRASE VOYAGE AVEC LE CHIFFRE, et par le canal qui existe
+        # deja (`phrase_imputes`) : un fait calcule qui n'atteint aucun
+        # livrable n'existe pas. Elle est lue par l'HTML ET par le Word.
+        total['phrase_chargements'] = _reserve_ch
     return {
         'detail': lignes,
         'total': total,
@@ -1281,6 +1390,9 @@ def _bloc_tarif_html(publie: dict) -> str:
     phrases = '\n'.join(
         f'      <li>{p}</li>' for p in
         (publie.get('origine'), publie['total'].get('phrase_imputes'),
+         # ⚠️ Constat `D2` : ce que les chargements n'ont PAS pu appliquer.
+         # Meme canal que `phrase_imputes`, et LU PAR LES DEUX FORMATS.
+         publie['total'].get('phrase_chargements'),
          publie.get('chargements'),
          publie.get('regime_fiscal'),
          publie.get('validation_hypothese'),
@@ -3383,6 +3495,12 @@ def export_word(
             # modele recommande n'est pas celui qui l'a produit.
             for _phrase in (_tar_w.get('origine'),
                             _tar_w['total'].get('phrase_imputes'),
+                            # ⚠️ Constat `D2` : ce que les chargements n'ont
+                            # PAS pu appliquer. MEME canal, MEME rang que
+                            # dans l'HTML -- un fait publie a un endroit et
+                            # tu a l'autre est exactement ce que ce chantier
+                            # ferme depuis le debut.
+                            _tar_w['total'].get('phrase_chargements'),
                             _tar_w.get('chargements'),
                             _tar_w.get('regime_fiscal'),
                             _tar_w.get('validation_hypothese'),
