@@ -170,7 +170,37 @@ def phrase_conditions_de_mesure(conditions) -> str:
             f"sur autant de donnees. Un modele a besoin d'une part de "
             f"validation pour son arret anticipe ; les autres n'en reservent "
             f"pas. ")
-    if not any(c.declaree_au_plan for c in lignes):
+    # ⚠️⚠️ UNE DECLARATION A MOITIE FAITE ETEIGNAIT L'ALARME AU LIEU DE LA
+    # LEVER — constat `D5`, report du round 4, confirme le 14/09/2026.
+    # Le predicat etait `if not any(c.declaree_au_plan for c in lignes)` :
+    # il suffisait qu'UN SEUL agent declare sa decoupe pour que la phrase
+    # disparaisse — POUR TOUS LES AUTRES.
+    #   Mesure du 14/09, trois agents, meme jeu :
+    #       0 / 3 declarees  -> alarme LEVEE    (785 caracteres)
+    #       1 / 3 declarees  -> alarme ETEINTE  (396 caracteres)
+    #       2 / 3 declarees  -> alarme ETEINTE
+    #       3 / 3 declarees  -> alarme ETEINTE  (legitime)
+    # *Le classement met cote a cote des scores dont certains reposent sur
+    # une hypothese signee et d'autres non, et le document se taisait
+    # dessus.*
+    # ⚠️ LA DOCTRINE ETAIT DEJA APPLIQUEE A COTE : le bloc juste au-dessus
+    # sait dire une divergence PARTIELLE des assiettes d'apprentissage, en
+    # nommant chaque agent. On lui emprunte sa forme.
+    _declarees = [c.agent for c in sorted(lignes, key=lambda x: x.agent)
+                  if c.declaree_au_plan]
+    _non_declarees = [c.agent for c in sorted(lignes, key=lambda x: x.agent)
+                      if not c.declaree_au_plan]
+    if _declarees and _non_declarees:
+        tete += (
+            f"/!\\ DECLARATION PARTIELLE DE LA DECOUPE : "
+            f"{len(_declarees)} agent(s) sur {len(lignes)} la declarent au "
+            f"plan ({', '.join(_declarees)}), "
+            f"{', '.join(_non_declarees)} non. Les scores ranges cote a "
+            f"cote ne reposent donc PAS tous sur une hypothese signee, et "
+            f"c'est le premier de ce classement qui devient le modele de "
+            f"production. Declarez `decoupe_validation` au plan pour "
+            f"{', '.join(_non_declarees)} aussi. ")
+    if not _declarees:
         tete += (
             "/!\\ CETTE DECOUPE N'EST DECLAREE DANS AUCUN PLAN. Elle decide "
             "pourtant du modele retenu pour la production. Mesure du "

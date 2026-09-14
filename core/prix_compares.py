@@ -384,16 +384,40 @@ def synthese_comparaison(resultats, bande=None, nature=None) -> str:
     # nature la ou il y en a deux especes.
     par_critere = [r for r in ecartes if r.cause == CAUSE_CRITERE]
     sans_prix = [r for r in ecartes if r.cause == CAUSE_SANS_PRIX]
+    # ⚠️⚠️ UN ECARTE SANS CAUSE N'ENTRAIT DANS AUCUN COMPTE — constat `D6`,
+    # report du round 4, confirme le 14/09/2026. La tete ne comptait que
+    # `CAUSE_CRITERE` et `CAUSE_SANS_PRIX` ; or `ResultatCandidat.cause`
+    # vaut `''` PAR DEFAUT, et un ecarte construit sans cause explicite
+    # disparaissait de la ventilation.
+    #   Mesure du 14/09 :
+    #       3 ecartes, causes nommees  -> 2 + 1 = 3 comptes   (juste)
+    #       2 ecartes, une cause vide  -> 1 + 0 = 1 compte    (1 perdu)
+    #       2 ecartes, toutes vides    -> 0 + 0 = 0 compte    (2 perdus)
+    # *Le titre annoncait bien << COMPARAISON DE 2 CANDIDAT(S) >> et sa
+    # ventilation en comptait zero : le total et son detail ne portaient
+    # pas sur la meme assiette.*
+    # ⚠️ ON NE LES RANGE PAS DANS UN SEAU EXISTANT : un ecarte sans cause
+    # n'est ni un echec de critere ni une absence de prix, c'est une
+    # LACUNE DE DECLARATION. La confondre avec l'une des deux ferait lire
+    # une espece d'echec pour une autre -- ce que le commentaire ci-dessus
+    # interdit deja pour les deux premieres.
+    sans_cause = [r for r in ecartes
+                  if r.cause not in (CAUSE_CRITERE, CAUSE_SANS_PRIX)]
     tete = (
         f"COMPARAISON DE {len(resultats)} CANDIDAT(S) de nature "
         f"{nature or '?'} : {len(survivants)} retenu(s), "
         f"{len(par_critere)} ecarte(s) par le critere de niveau, "
-        f"{len(sans_prix)} sans prix publiable. Ce qui est compare : la "
-        f"FREQUENCE de "
-        f"chaque candidat, multipliee par un modele de cout PARTAGE -- il "
-        f"n'existe qu'un seul modele de severite dans la chaine. Les "
-        f"candidats sont REAJUSTES sur la decoupe declaree au plan, et non "
-        f"repris d'A4, qui ajuste sur une decoupe qui lui est propre.")
+        f"{len(sans_prix)} sans prix publiable"
+        + (f", {len(sans_cause)} ecarte(s) SANS CAUSE DECLAREE"
+           if sans_cause else "")
+        # ⚠️ LE `f` TOMBE AVEC LES SUBSTITUTIONS : ces fragments etaient
+        # dans la MEME f-string que le titre ; les separer leur a fait
+        # perdre leur raison d'etre des `f`, et `proprete` l'a vu (F541).
+        + ". Ce qui est compare : la FREQUENCE de "
+        "chaque candidat, multipliee par un modele de cout PARTAGE -- il "
+        "n'existe qu'un seul modele de severite dans la chaine. Les "
+        "candidats sont REAJUSTES sur la decoupe declaree au plan, et non "
+        "repris d'A4, qui ajuste sur une decoupe qui lui est propre.")
     if bande is None:
         tete += (
             " /!\\ AUCUNE BANDE DE NIVEAU DECLAREE : le critere E2 est MESURE "
@@ -403,6 +427,17 @@ def synthese_comparaison(resultats, bande=None, nature=None) -> str:
         tete += (f" Bande de niveau declaree : [{bande[0]:.4g} ; "
                  f"{bande[1]:.4g}] sur le holdout, coefficient gele sur le "
                  f"train.")
+    if sans_cause:
+        # ⚠️ LA LACUNE SE DIT, ELLE NE SE DEVINE PAS. Sans cette phrase, le
+        # lecteur du document ne peut pas savoir POURQUOI le compte des
+        # deux causes ne fait pas le compte des ecartes.
+        tete += (
+            f" /!\\ {len(sans_cause)} CANDIDAT(S) ECARTE(S) SANS CAUSE "
+            f"DECLAREE ({', '.join(r.candidat.nom for r in sans_cause)}) : "
+            f"leur exclusion n'est ni un echec du critere de niveau, ni une "
+            f"absence de prix publiable. Le champ `cause` vaut sa valeur par "
+            f"defaut. Sans elle, le total des candidats et la ventilation "
+            f"ci-dessus ne portent pas sur la meme assiette.")
     for r in ecartes:
         niveau = ('non mesurable' if r.niveau_holdout != r.niveau_holdout
                   else f"{r.niveau_holdout:.4f}")
