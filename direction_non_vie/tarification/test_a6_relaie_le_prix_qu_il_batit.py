@@ -102,7 +102,20 @@ class _Chaine:
                 result_a1=r1, result_a2=r2, result_a3=r3, result_a4=r4,
                 result_a5=None, col_cible='nb_sinistres', plan=plan,
                 generer_graphiques=False, generer_rapport_equipe=False,
-                environnement='production', profil_valide_par='Sceau TR')
+                environnement='production',
+                # ⚠️⚠️ `'Sceau TR'` A FAIT ROUGIR `RD-7`, ET LE GARDE AVAIT
+                # RAISON : deux mots capitalisés dont aucun n'est un mot de
+                # rôle, c'est la FORME exacte d'un « Prénom Nom ». Le
+                # détecteur ne connaît aucun nom d'avance — il ne peut que
+                # lire la forme, et cette forme-là était la mauvaise.
+                # ⚠️ `'Sceau TR9'` serait passé, par la clause qui exempte
+                # les jetons portant un chiffre. *Utiliser cette clause pour
+                # faire taire le garde serait le contourner, pas le
+                # satisfaire* — et affaiblir un garde-fou RGPD pour faire
+                # passer son propre travail est ce qui est interdit ici en
+                # premier. La valeur dit donc ce qu'elle est.
+                profil_valide_par=(
+                    'SCEAU AUTOMATISE TR - aucun actuaire responsable'))
 
         cls._cache = _sans_bruit(_jouer)
         return cls._cache

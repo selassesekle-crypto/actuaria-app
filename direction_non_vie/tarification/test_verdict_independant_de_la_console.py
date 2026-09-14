@@ -87,9 +87,40 @@ _SOCLE = _RACINE / 'core' / 'sortie_console.py'
 #:      `Python/` ; le chiffre valait 413 sur l'arbre de travail et 353 a
 #:      la gate. Il vaut desormais LA MEME CHOSE PARTOUT.
 #:
+#: ⚠️⚠️⚠️ 353 -> 355 LE 14/09/2026 AU SOIR, ET LA VRAIE LECON N'EST PAS LE
+#: CHIFFRE : C'EST POURQUOI LA GATE NE L'AVAIT PAS VU.
+#:
+#: Le plafond 353 a ete dépassé au commit `18be214`, et sa gate etait
+#: VERTE. Mesure, corpus suivi par git a chaque commit :
+#:
+#:     6dc09ee   351 suivis   plafond pose a 353 (anticipant 2 sceaux)
+#:     34f9824   352 suivis   ok
+#:     95dcc37   353 suivis   ok, a la limite
+#:     18be214   354 suivis   *** DEPASSE, et deja POUSSE
+#:
+#: ⛔⛔ UN FICHIER DE TEST NEUF EST INVISIBLE AUX SCEAUX QUI DERIVENT DE
+#: `git ls-files` PENDANT LA GATE DE SON PROPRE LOT. Il n'est pas encore
+#: SUIVI : ni ce controle-ci, ni `RD-7`, ne le voient. Il ne mord qu'a la
+#: gate SUIVANTE -- un lot trop tard, et sur du code deja pousse. Les deux
+#: rouges de la gate du 14/09 au soir ont cette seule et meme cause, et
+#: ils ont ete trouves par DEUX sceaux independants.
+#:
+#: ⚠️ LA PARADE EST DANS LA METHODE, PAS DANS CE CHIFFRE : on `git add` le
+#: lot DANS l'instantane avant de lancer la gate. `git ls-files` lit
+#: l'index, donc les sceaux balayeurs voient alors exactement ce que
+#: l'etat commite portera. *Une assiette qui ignore le travail en cours
+#: mesure l'avant-veille.*
+#:
+#: Les DEUX unites de la hausse : `test_a6_relaie_le_prix_qu_il_batit`
+#: (le 354e, deja suivi, non anticipe par le plafond de `6dc09ee`) et
+#: `test_radar_survit_a_une_mesure_absente` (constat `RADAR-1`, suivi des
+#: ce commit). Tous deux portent accents et `⚠️` comme les 353 autres :
+#: *on releve le plafond et on dit pourquoi, on n'exempte pas ses propres
+#: fichiers.*
+#:
 #: ⚠️ CE PLAFOND NE PEUT QUE BAISSER. Il ne se releve que sur un fichier
 #: AJOUTE, jamais sur un fichier qui se met a dependre de l'encodage.
-_FICHIERS_A_RISQUE = 353
+_FICHIERS_A_RISQUE = 355
 
 
 def _fichiers_de_test() -> list:

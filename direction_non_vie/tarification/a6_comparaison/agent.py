@@ -4337,10 +4337,31 @@ class AgentA6Comparaison:
                 # `None` laisse Plotly interrompre le trace sur cet axe.
                 retenu.get('score_stabilite'),
                 retenu.get('score_interpretabilite', 0),
-                retenu.get('score_rmse', 0),
+                # ⚠️⚠️ MEME REGLE, ET LE DEFAUT `0` NE PROTEGEAIT DE RIEN.
+                # `score_rmse` nait `None` exactement comme la stabilite
+                # (a6:1802, meme commentaire « NON MESUREE »). Or un defaut
+                # de `.get` ne s'applique qu'a une cle ABSENTE, et celle-ci
+                # est toujours POSEE : `{'k': None}.get('k', 0)` rend `None`.
+                # Le `0` rassurait sans rien garder. *Un filet qui ne peut
+                # pas se declencher est pire qu'une absence de filet : il
+                # fait croire que le cas est traite.*
+                retenu.get('score_rmse'),
                 retenu.get('score_global', 0),
             ]
-            vals_radar = [min(max(v, 0), 1) for v in vals_radar]
+            # ⚠️⚠️ LE BORNAGE EPARGNE CE QUI N'A PAS ETE MESURE — CONSTAT
+            # `RADAR-1`. `max(None, 0)` leve `TypeError`, le `try` du bloc
+            # l'avale, et l'affectation de la figure — qui vit APRES cette
+            # ligne — n'a jamais lieu. La figure ne devenait pas fausse :
+            # elle DISPARAISSAIT du document signe, sans autre temoin qu'un
+            # « G3 radar : ... » dans le journal. Mesure du 14/09/2026, meme
+            # catalogue : 4 figures en nominal, 3 des qu'une composante
+            # manque. *Deux gestes voisins, l'un annulant l'autre, et la
+            # contradiction n'etait visible qu'a l'execution.*
+            # ⚠️ Plotly accepte `None` et le serialise en `null` : verifie
+            # par execution avant d'ecrire cette ligne, sinon le plantage
+            # aurait seulement glisse de trois lignes.
+            vals_radar = [None if v is None else min(max(v, 0), 1)
+                          for v in vals_radar]
 
             fig3 = go.Figure(go.Scatterpolar(
                 r=vals_radar + [vals_radar[0]],
