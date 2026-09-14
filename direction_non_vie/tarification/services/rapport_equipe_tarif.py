@@ -48,10 +48,14 @@ from typing import Dict, List, Optional, Any
 # ⚠️ Constat `services/C7` — la cause du plafond n'atteignait que deux
 # surfaces sur six. La SOURCE reste `rapport_modeles_tarif` (elle y vit
 # avec `raisons_plafond`) : on l'importe, on ne la reconstitue pas.
+# ⚠️ `NOTE_CLASSEMENT` VIENT DE LA MÊME SOURCE, et pour la même raison :
+# elle explique que l'ordre suit le SCORE GLOBAL et non le Gini. La
+# recopier ici créerait la seconde rédaction qui finit par diverger.
 try:
-    from .rapport_modeles_tarif import synthese_raisons_plafond
+    from .rapport_modeles_tarif import NOTE_CLASSEMENT, synthese_raisons_plafond
 except ImportError:
     from direction_non_vie.tarification.services.rapport_modeles_tarif import (
+        NOTE_CLASSEMENT,
         synthese_raisons_plafond,
     )
 
@@ -609,8 +613,32 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         if geo.get('applique'):
             _kpi(ws4, r, "Méthode", geo.get('methode', '')); r += 1
         r += 1
-        cl4 = r4.get('classement', [])
-        _section(ws4, r, "▶ MACHINE LEARNING — CLASSEMENT (A4)"); r += 1
+        # ⚠️⚠️ LE CLASSEMENT SCORÉ VIENT D'A6 — constat `RET-D2`, 12/09/2026.
+        # A4 ne produit JAMAIS `score_global` : relevé AST du 14/09 sur ses
+        # 4 132 lignes — la clé y est posée 0 fois, lue 0 fois, absente du
+        # texte. Les trois dicts d'entrée de son classement portent dix clés,
+        # et aucune n'est celle-là. La grille multicritères est calculée par
+        # A6 (`a6_comparaison/agent.py:1767`, seul site qui la pose).
+        #   Mesure du 14/09, mêmes données, les trois formats produits :
+        #   colonne « Score » vide sur 7 lignes sur 7, en Excel, en HTML et
+        #   en Word. Le jumeau `rapport_modeles_tarif` avait corrigé
+        #   exactement cela à ses trois sites, avec sa mesure inscrite ; le
+        #   correctif n'a pas atteint CE fichier — *et c'est le rapport
+        #   d'ÉQUIPE qui circule.*
+        # ⚠️ ET LE DOCUMENT SE CONTREDISAIT : son §5 publie « Score global :
+        # 0.8741 », venu d'A6, pendant que son tableau affiche « — » sur la
+        # ligne du MÊME modèle. Deux vérités sur le même modèle, dans le
+        # même document signé.
+        # ⚠️ LE REPLI SUR A4 RESTE : sans A6, la table est ce qu'elle était.
+        cl4 = ((r6 or {}).get('classement')
+               or (r4 or {}).get('classement', []))
+        # ⚠️⚠️ LE TITRE SE RELIT QUAND SA TABLE CHANGE DE SOURCE. Il disait
+        # « MACHINE LEARNING — CLASSEMENT (A4) » ; la table porte désormais
+        # le classement d'A6, qui score TOUS les candidats — mesuré sur le
+        # jeu réel du gel : `GLM_POISSON` et `DL_CANN` y figurent, un GLM et
+        # un réseau de neurones sous un titre qui promettait du ML d'A4.
+        _section(ws4, r, "▶ CLASSEMENT MULTICRITÈRES DES MODÈLES (A6)")
+        r += 1
         if cl4:
             for col, txt, w in [(1,"Modèle",22),(2,"Gini",12),(3,"Score",12),(4,"Overfit",12)]:
                 _header(ws4, r, col, txt, width=w)
@@ -623,6 +651,10 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
                       cf=NOIR_HEX, ah="right", fmt=FMT_DEC4 if 'score_global' in m else None)
                 _cell(ws4, r, 4, gini_arrondi(m.get('overfit_ratio'), 3), cf=NOIR_HEX, ah="right", fmt=FMT_DEC4)
                 r += 1
+            # ⚠️ L'ORDRE N'EST PAS CELUI DU GINI, et rien ne le disait ici.
+            # Même phrase que les deux autres formats et que le jumeau.
+            _kpi(ws4, r, "Lecture du classement", NOTE_CLASSEMENT,
+                 wrap=True); r += 1
         r += 1
         _section(ws4, r, "▶ DEEP LEARNING (A5)"); r += 1
         _kpi(ws4, r, "Statut", r5.get('statut_rag', 'N/A') if r5 else 'Non exécuté',
@@ -909,7 +941,11 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
         met3 = r3.get('metriques', {})
         cred = r3.get('credibilite', {})
         geo  = r3.get('lissage_geo', {})
-        cl4  = r4.get('classement', [])
+        # ⚠️⚠️ MÊME SOURCE QUE L'EXCEL — constat `RET-D2`. Le classement
+        # SCORÉ d'A6 en premier ; A4 ne pose jamais `score_global`. Le repli
+        # sur A4 reste, et sans A6 la table est ce qu'elle était.
+        cl4  = ((r6 or {}).get('classement')
+                or (r4 or {}).get('classement', []))
         section_a3_a5 = f"""
         <div class="kpi-grid">
           <div class="kpi"><b>Poisson Gini</b><br>{gini_texte(met3.get('poisson',{}).get('gini'))}</div>
@@ -919,7 +955,7 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
           <div class="kpi"><b>Lissage géo</b><br>{'✓ Appliqué' if geo.get('applique') else '○ N/A'}</div>
           <div class="kpi"><b>Deep Learning</b><br>{r5.get('statut_rag','Non exécuté') if r5 else 'Non exécuté'}</div>
         </div>
-        <table>{_row(['Modèle ML','Gini','Score','Overfit'], header=True)}
+        <table>{_row(['Modèle','Gini','Score','Overfit'], header=True)}
         """
         for m in cl4[:8]:
             # Audit V7 IMPORTANT : garde NA cohérent avec les autres formats.
@@ -929,6 +965,13 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
                 gini_texte(m.get('overfit_ratio'), 3)
             ])
         section_a3_a5 += '</table>'
+        # ⚠️ L'en-tête disait « Modèle ML » et la colonne porte désormais un
+        # GLM et un réseau de neurones. Et l'ordre suit le SCORE, pas le
+        # Gini : la phrase vient du jumeau, jamais d'une seconde rédaction.
+        if cl4:
+            section_a3_a5 += (
+                f'<p style="margin-top:6px; font-size:10px; '
+                f'font-style:italic;">✦ {NOTE_CLASSEMENT}</p>')
 
         # Section 5 — Décision finale A6
         prod = r6.get('modele_production', {})
@@ -1248,7 +1291,11 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
         doc.add_paragraph(
             f"Lissage géographique : {'appliqué (' + geo.get('methode','') + ')' if geo.get('applique') else 'non applicable'}"
         )
-        cl4 = r4.get('classement', [])
+        # ⚠️⚠️ MÊME SOURCE QUE LES DEUX AUTRES FORMATS — constat `RET-D2`.
+        # Trois formats, une seule source : sans cela, deux d'entre eux
+        # finissent par dire deux choses du même modèle.
+        cl4 = ((r6 or {}).get('classement')
+               or (r4 or {}).get('classement', []))
         if cl4:
             tbl4 = doc.add_table(rows=1, cols=4)
             tbl4.style = 'Light Grid Accent 1'
@@ -1261,6 +1308,8 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
                 # Audit V7 IMPORTANT : garde NA cohérent avec les autres formats.
                 row[2].text = f"{m.get('score_global'):.4f}" if 'score_global' in m else '—'
                 row[3].text = gini_texte(m.get('overfit_ratio'), 3)
+            # ⚠️ MÊME PHRASE QUE LES DEUX AUTRES FORMATS, MÊME SOURCE.
+            doc.add_paragraph('✦ ' + NOTE_CLASSEMENT)
 
         # §5 — Décision finale
         doc.add_heading("§5 — Décision Finale & Gouvernance (A6)", level=1).runs[0].font.color.rgb = NR
