@@ -2566,11 +2566,36 @@ class AgentA4ML:
         amelioration = meilleur_gini_ml - gini_glm
 
         # Overfitting sur le meilleur modèle
-        overfitting = classement_ml[0].get('overfit_alerte', False)
+        # ⚠️⚠️ `overfit_alerte` VAUT `None` QUAND LA STABILITÉ N'A PAS PU ÊTRE
+        # MESURÉE, ET `not None` EST VRAI. Le statut réglementaire lisait donc
+        # une ABSENCE DE MESURE comme un « pas de sur-apprentissage ».
+        # Mesuré le 14/09/2026, même portefeuille, même référence A3 (Gini
+        # 0,10), même gbm (Gini 0,31) — les trois cas, par exécution :
+        #     overfit_ratio = 1.40 (MESURÉ, mauvais)      -> AMBRE
+        #     overfit_ratio = 1.02 (MESURÉ, bon)          -> VERT
+        #     overfit_ratio = None (NON ÉVALUABLE)        -> VERT
+        # *Ne pas mesurer la stabilité était strictement plus favorable que de
+        # la mesurer mauvaise, et exactement aussi favorable que de la mesurer
+        # bonne.* Et la ligne du classement disait, dans le MÊME résultat,
+        # « Sur-apprentissage non évaluable (Gini non mesuré) » — le piège à
+        # un dictionnaire de distance.
+        #
+        # ⚠️ CE MODULE A DÉJÀ TRANCHÉ CE CAS, DEUX FOIS ET DANS CE FICHIER :
+        # `_valider_modele_ml` rend AMBRE sur H1 non mesurable, et
+        # `_monitoring_derive` rend AMBRE sur chaque grandeur non mesurée —
+        # sa docstring l'écrit en toutes lettres. Le statut RAG d'A4 était le
+        # seul des trois à ne pas l'appliquer.
+        # ⚠️ ON PLAFONNE, ON NE DÉGRADE PAS : une stabilité non mesurée n'est
+        # pas une alerte, elle interdit seulement de CERTIFIER. Le ROUGE
+        # reste réservé aux cas mesurés.
+        _alerte_of = classement_ml[0].get('overfit_alerte', False)
+        overfitting = bool(_alerte_of)
+        _stabilite_non_mesuree = _alerte_of is None
 
         # SHAP absent → plafond AMBRE (interprétabilité non vérifiée)
         # Réf. : ACPR-2022-P-01 §4.3 ; AI Act 2025 Art. 13
-        if amelioration > 0.05 and not overfitting and not shap_absent:
+        if (amelioration > 0.05 and not overfitting and not shap_absent
+                and not _stabilite_non_mesuree):
             return 'VERT'
         elif amelioration > 0 or (amelioration <= 0 and meilleur_gini_ml > SEUIL_GINI_ML_EXPLOITABLE):
             return 'AMBRE'
@@ -3416,6 +3441,13 @@ class AgentA4ML:
         """
         Validation complète des hypothèses ML — 4 hypothèses.
 
+        ⚠️ ELLES PORTENT SUR LE MEILLEUR MODÈLE **ML** du classement. La
+        ligne « GLM (référence A3) » que `_classer_modeles` y ajoute est une
+        RÉFÉRENCE, pas un modèle d'A4 : elle est écartée ici comme elle l'est
+        déjà dans `_calculer_statut_rag`. Le modèle réellement évalué est
+        publié (`modele_evalue`), et le cas où le GLM domine le classement
+        l'est aussi (`glm_en_tete`).
+
         H1 — Absence d'overfitting
              Ratio Gini train / Gini test ≤ 1.111 → pas d'overfitting ✅
              Ratio > 1.25 → surapprentissage ❌
@@ -3444,6 +3476,41 @@ class AgentA4ML:
         import numpy as np
 
         # ── H1 — Overfitting ─────────────────────────────────────────────────
+        # ⚠️⚠️ CE BLOC MESURAIT `classement[0]`, ET `classement[0]` PEUT ÊTRE
+        # LA LIGNE DU GLM. `_classer_modeles` ajoute la référence A3 au même
+        # tableau puis trie par Gini décroissant : dès que le GLM discrimine
+        # mieux que tous les modèles ML — c'est-à-dire exactement le cas
+        # qu'A4 nomme « aucun ML n'améliore le GLM » — il passe premier.
+        #
+        # Mesuré le 14/09/2026 par exécution, GLM à 0,31 et gbm à 0,12 :
+        #     h1_overfitting.ratio   : 1.0968   <- la stabilité DU GLM
+        #     h1_overfitting.conseil : « Le modèle GLM Poisson (référence A3)
+        #                               généralise bien »
+        #     h3_gini.gini           : 0.31     <- le Gini DU GLM
+        #     h4_calibration         : « Calibration NON testée » — car
+        #                              `self.modeles` ne contient pas le GLM
+        # Contre-épreuve, MÊME dossier, GLM retiré du classement : le ratio
+        # passe à 1.05, le Gini à 0.12, et le conseil de H3 passe de
+        # « défendable devant l'ACPR » à « Modèle à rejeter ».
+        # *Le bloc s'appelle « Validation complète des hypothèses ML » ; il
+        # certifiait le GLM sous ce titre, et A6 lit ce dictionnaire.*
+        #
+        # ⚠️ `_calculer_statut_rag` FAIT DÉJÀ LE BON GESTE, DANS CE FICHIER :
+        # il écarte les lignes dont le nom contient « GLM » pour trouver le
+        # meilleur ML. La règle est reprise de lui, pas inventée — une
+        # seconde règle divergerait.
+        # ⚠️ ET L'INFORMATION NE SE PERD PAS : le nom du modèle réellement
+        # évalué et le fait que le GLM domine sont PUBLIÉS (`modele_evalue`,
+        # `glm_en_tete`). Une hypothèse ML mesurée sur le GLM n'était pas
+        # seulement fausse, elle était indétectable.
+        # ⚠️ `n_modeles` COMPTERA DÉSORMAIS LES MODÈLES ML. Relevé AST avant
+        # ce lot : **0 lecteur** de cette clé dans tout le dépôt — le contrat
+        # ne change pour personne, et c'est mesuré, pas supposé.
+        classement_ml_h = [c for c in (classement or [])
+                           if 'GLM' not in str(c.get('modele', ''))]
+        _glm_en_tete = bool(classement and classement_ml_h
+                            and classement[0] is not classement_ml_h[0])
+        classement = classement_ml_h
         if classement:
             meilleur   = classement[0]
             gini_test  = meilleur.get('gini_test', meilleur.get('gini'))
@@ -3792,10 +3859,17 @@ class AgentA4ML:
         # a montre la MEME ligne dans les quatre agents.
         statut_global = statut_le_pire(statuts)
         conclusion = {
-            "VERT":  f"✅ Modèle validé — {classement[0].get('modele','?') if classement else '?'} prêt pour la production",
+            "VERT":  f"✅ Modèle ML validé — {classement[0].get('modele','?') if classement else '?'} prêt pour la production",
             "AMBRE": "⚠️ Modèle utilisable avec précautions — vérifier les points signalés",
             "ROUGE": "❌ Modèle non recommandé pour la production — corriger les problèmes identifiés",
         }[statut_global]
+        # ⚠️ QUAND LE GLM DOMINE, LA CONCLUSION LE DIT. Le cas n'était pas
+        # seulement mal mesuré : il n'était ÉCRIT NULLE PART dans le
+        # dictionnaire que lit A6.
+        if _glm_en_tete:
+            conclusion += (" — le GLM de référence d'A3 discrimine mieux que "
+                           "tous les modèles ML ; ces hypothèses portent sur "
+                           "le meilleur ML, pas sur le modèle de tête")
 
         return {
             "h1_overfitting": {
@@ -3865,7 +3939,18 @@ class AgentA4ML:
             },
             "statut_global":   statut_global,
             "conclusion":      conclusion,
+            # ⚠️ `n_modeles` COMPTE DÉSORMAIS LES MODÈLES ML, et c'est ce que
+            # son nom a toujours annoncé : la ligne du GLM est une référence,
+            # pas un modèle calibré par A4.
             "n_modeles":       len(classement),
+            # ⚠️⚠️ SUR QUI PORTENT H1, H3 ET H4. Sans ce champ, un lecteur ne
+            # peut pas savoir quel modèle a été validé — et c'est précisément
+            # ce qui rendait le défaut invisible.
+            "modele_evalue":   (classement[0].get('modele')
+                                if classement else None),
+            # ⚠️ LE FAIT MÉTIER SE PUBLIE AUSSI : que le GLM batte tous les
+            # modèles ML est une conclusion, pas un détail de tri.
+            "glm_en_tete":     _glm_en_tete,
         }
 
     def _graphiques_validation_ml(
