@@ -69,6 +69,8 @@
 ║  AUTEUR    : ActuarIA                                                        ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
+import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -88,7 +90,34 @@ from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
 from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
-from direction_non_vie.tarification.a5_deep_learning.agent import AgentA5DeepLearning
+
+#: ⚠️⚠️ L'IMPORT DU MODULE D'IA AVANCÉE EST GARDÉ, ET C'EST LE PREMIER DES
+#: TROIS TROUS DE CONTINUITÉ MESURÉS LE 14/09/2026. Il était NU : une
+#: dépendance absente, un `core` déplacé, une erreur de syntaxe — n'importe
+#: quoi qui empêche ce module de s'importer — et `pipeline_agents` LUI-MÊME
+#: devenait inimportable. Mesuré par exécution, en interdisant le module
+#: dans un `meta_path` : `IMPORT MORT -- ImportError`. *Les cinq autres
+#: agents mouraient avec lui, et le prix avec eux.*
+#:   On attrape `Exception` et non `ImportError` : la panne peut venir de
+#: n'importe où dans la chaîne d'import du module (un `core` manquant lève
+#: `ModuleNotFoundError`, un fichier abîmé lève `SyntaxError`). Ce qu'on ne
+#: fait PAS, c'est se taire : le motif est retenu et publié, comme `A1-2`
+#: l'exige pour une configuration illisible.
+try:
+    from direction_non_vie.tarification.a5_deep_learning.agent import (
+        AgentA5DeepLearning,
+    )
+    A5_DISPONIBLE = True
+    #: ⚠️ `str | None` et non `Optional[str]` comme ses voisines : la
+    #: propreté refuse un écart sur une ligne de correction, et l'ancienne
+    #: forme en est un — même arbitrage que `qualite_validee_par`.
+    MOTIF_A5_INDISPONIBLE: str | None = None
+except Exception as _e_a5:          # noqa: BLE001 - la cause est PUBLIEE
+    AgentA5DeepLearning = None      # type: ignore[assignment,misc]
+    A5_DISPONIBLE = False
+    MOTIF_A5_INDISPONIBLE = (
+        f"module d'IA avancee INDISPONIBLE a l'import : "
+        f"{type(_e_a5).__name__} : {_e_a5}")
 from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
 
 __all__ = ["ArbitrageCible", "ResultatAgents", "pipeline_agents", "CIBLE_COUT",
@@ -106,6 +135,29 @@ CIBLE_COUT = "cout_moyen"
 # plan). Même contrat d'appariement de cible côté A6 que CIBLE_COUT.
 CIBLE_PRIME_PURE = "prime_pure"
 
+#: ⚠️⚠️ DÉLAI MAXIMAL DU MODULE D'IA AVANCÉE, ET IL EST MESURÉ, PAS CHOISI.
+#: Troisième trou de continuité : il n'existait AUCUNE limite de temps, nulle
+#: part. Un module qui ne rend jamais bloquait l'arbitrage des trois cibles,
+#: donc le prix, indéfiniment.
+#:   Relevé du 14/09/2026 sur **225 exécutions complètes** d'A5 retrouvées
+#: dans les sorties de gate archivées (200 époques, CANN + TabNet) :
+#:
+#:     min 71 s · médiane 213 s · p90 454 s · max 1 216 s
+#:
+#: et ce max de 1 216 s est lui-même une exécution sous pression mémoire ;
+#: la pire sur machine libre vaut 922 s. Les trois délais envisagés, contre
+#: ces 225 mesures :
+#:
+#:       900 s (15 min) = 0,74x la pire -> couperait  2 / 225
+#:      1800 s (30 min) = 1,48x la pire -> couperait  0 / 225
+#:      3600 s (60 min) = 2,96x la pire -> couperait  0 / 225
+#:
+#: *Un délai calibré sous la pire exécution légitime n'est pas un garde-fou,
+#: c'est un couperet.* On retient 1 800 s : la plus petite valeur qui ne
+#: coupe AUCUNE exécution mesurée. Elle se déclare à l'appelant, qui peut la
+#: baisser quand il sait son portefeuille petit.
+DELAI_MAX_DL_S = 1800.0
+
 
 @dataclass(frozen=True)
 class ArbitrageCible:
@@ -117,6 +169,12 @@ class ArbitrageCible:
     statut_rag: Optional[str]
     n_candidats: int          # modèles réellement en compétition
     erreur:     Optional[str] = None
+    #: ⚠️⚠️ POURQUOI LE MODULE D'IA AVANCÉE N'A PAS CONCOURU. `None` veut dire
+    #: « il a concouru » ; toute autre valeur NOMME la panne. Sans ce champ,
+    #: une IA absente et une IA présente-mais-battue rendraient le même
+    #: `a5=None`, et le document ne saurait pas les distinguer — c'est le
+    #: défaut `... else "VERT"` de ce dépôt, appliqué à une panne.
+    motif_dl:   str | None = None
 
 
 @dataclass(frozen=True)
@@ -292,6 +350,62 @@ def _n_candidats(r6: Optional[Dict[str, Any]]) -> int:
     return len((r6 or {}).get("classement") or [])
 
 
+def _module_avance(fabrique, delai: float) -> tuple:
+    """Lance le module d'IA avancée SOUS FILET ET SOUS DÉLAI.
+
+    Rend ``(resultat, motif)``. Un ``motif`` non nul veut dire que le
+    module n'a pas rendu : il est alors traité comme un CANDIDAT ABSENT,
+    et l'arbitrage continue sans lui.
+
+    ⚠️⚠️ CE HELPER FERME LES DEUX DERNIERS TROUS DE CONTINUITÉ, MESURÉS LE
+    14/09/2026 par exécution :
+
+      . le CONSTRUCTEUR était hors filet — `AgentA5DeepLearning(**_a).run(…)`
+        n'était sous aucun `try`. Mesuré en le faisant lever :
+        ``PIPELINE MORT -- RuntimeError``, les trois cibles perdues.
+        `A5.run` a bien son propre `except Exception`, mais il ne protège
+        que ce qui se passe APRÈS la construction.
+      . AUCUN DÉLAI n'existait. Un module qui ne rend jamais bloquait
+        l'arbitrage indéfiniment.
+
+    ⚠️ LE FIL EST `daemon`, ET C'EST LE POINT DÉLICAT. Python ne sait pas
+    TUER un fil : au-delà du délai, on cesse de l'ATTENDRE, et le fil
+    continue en arrière-plan jusqu'à sa fin naturelle. `daemon=True`
+    garantit qu'il n'empêchera pas le processus de se terminer — ce qu'un
+    `ThreadPoolExecutor` ferait, son `atexit` rejoignant ses fils et
+    rendant la sortie du processus aussi bloquante que l'appel.
+    *La limite est DÉCLARÉE : on borne l'ATTENTE, pas le calcul.*
+
+    ⚠️ ON N'ATTRAPE PAS `BaseException` : un `KeyboardInterrupt` est livré
+    au fil PRINCIPAL, jamais à celui-ci, et avaler un `SystemExit` du
+    module masquerait un arrêt voulu. `MemoryError` et `RecursionError`
+    sont des `Exception` et sont donc couverts.
+    """
+    boite: dict[str, Any] = {}
+
+    def _courir() -> None:
+        try:
+            boite["r"] = fabrique()
+        except Exception as e:          # noqa: BLE001 - la cause est RENDUE
+            boite["e"] = e
+
+    fil = threading.Thread(target=_courir, daemon=True,
+                           name="actuaria.module_avance")
+    debut = time.monotonic()
+    fil.start()
+    fil.join(delai)
+    if fil.is_alive():
+        return None, (f"module d'IA avancee ABANDONNE apres "
+                      f"{delai:.0f} s (delai maximal) : il n'a pas rendu, "
+                      f"l'arbitrage se poursuit sans lui")
+    if "e" in boite:
+        e = boite["e"]
+        return None, (f"module d'IA avancee EN ECHEC apres "
+                      f"{time.monotonic() - debut:.1f} s : "
+                      f"{type(e).__name__} : {e}")
+    return boite.get("r"), None
+
+
 def pipeline_agents(
     dataframe: pd.DataFrame,
     plan: PlanTarifaire,
@@ -316,6 +430,11 @@ def pipeline_agents(
     rapport_mapping: Optional[Any] = None,
     n_epochs_dl: int = 200,
     batch_size_dl: int = 512,
+    #: ⚠️ LE DÉLAI MAXIMAL DU MODULE D'IA AVANCÉE, en secondes. Au-delà,
+    #: il est traité comme un CANDIDAT ABSENT et l'arbitrage se poursuit :
+    #: le prix ne dépend jamais de son succès. Voir `DELAI_MAX_DL_S` pour
+    #: les 225 exécutions sur lesquelles ce défaut est calibré.
+    delai_dl: float = DELAI_MAX_DL_S,
     calcul_shap: bool = True,
     generer_graphiques: bool = False,
     models_path: str = "/tmp",
@@ -455,13 +574,41 @@ def pipeline_agents(
             result_a2=r2_cible, result_a3=r3, plan=plan, col_cible=cible,
             ponderer_par_exposition=ponderer, calcul_shap=calcul_shap,
             generer_graphiques=generer_graphiques)
-        r5 = AgentA5DeepLearning(**_a).run(
-            result_a2=r2_cible, result_a3=r3, result_a4=r4, plan=plan,
-            col_cible=cible, modeles=modeles_dl, n_epochs=n_epochs_dl,
-            batch_size=batch_size_dl, generer_graphiques=generer_graphiques)
+        # ⚠️⚠️ LE MODULE D'IA AVANCÉE EST UN CANDIDAT, JAMAIS UN PASSAGE
+        # OBLIGÉ. Sa construction ET son exécution passent sous filet et
+        # sous délai ; son absence est un motif PUBLIÉ, pas un silence.
+        # Les quatre modes de panne, mesurés le 14/09 :
+        #     dépendance absente  -> A5 rend `success=False`  (déjà absorbé)
+        #     échec déclaré       -> `result_a5=None`         (déjà absorbé)
+        #     exception interne   -> `A5.run` rattrape        (déjà absorbé)
+        #     module inimportable -> l'import gardé ci-dessus (fermé ici)
+        #     constructeur qui lève / module qui ne rend jamais (fermé ici)
+        if not A5_DISPONIBLE:
+            r5, _motif_dl = None, MOTIF_A5_INDISPONIBLE
+        else:
+            r5, _motif_dl = _module_avance(
+                lambda: AgentA5DeepLearning(**_a).run(
+                    result_a2=r2_cible, result_a3=r3, result_a4=r4, plan=plan,
+                    col_cible=cible, modeles=modeles_dl,
+                    n_epochs=n_epochs_dl, batch_size=batch_size_dl,
+                    generer_graphiques=generer_graphiques),
+                delai_dl)
+        # ⚠️⚠️ CE MODULE NE JOURNALISE PAS, IL REND — et ma première version
+        # l'a oublié. J'avais posé ici un `logger.warning(...)` ; il n'existe
+        # AUCUN `logger` dans ce fichier, et la ligne ne tirait que sur les
+        # chemins de PANNE. Résultat mesuré bout en bout : le cas nominal
+        # passait, et **les trois pannes que ce lot devait sauver mouraient
+        # sur un `NameError`** — le correctif de continuité tuait exactement
+        # ce qu'il venait protéger. Le motif voyage dans `motif_dl`, qui est
+        # le contrat de ce module ; c'est là qu'il doit vivre, et nulle part
+        # ailleurs. *Un sceau qui mesure le MÉCANISME ne mesure pas le SITE
+        # où il est câblé : `CT-7` a été ajouté pour ça.*
         r6 = AgentA6Comparaison(**_a).run(
             result_a2=r2_cible, result_a3=r3, result_a4=r4,
-            result_a5=r5 if r5.get("success") else None,
+            # ⚠️ `r5` PEUT ETRE `None` DEPUIS CE LOT : le module d'IA
+            # avancee peut n'avoir jamais rendu. La lecture le suppose
+            # desormais, au lieu d'appeler `.get` sur une absence.
+            result_a5=r5 if (r5 or {}).get("success") else None,
             # ⚠️ LE MÊME CHAÎNON MANQUANT QUE `rapport_qualite` — constat
             # `A6.7`. `A6.run` accepte `result_a1` depuis toujours et le
             # relaie au rapport d'équipe ; **aucun appelant ne le passait**.
@@ -496,7 +643,8 @@ def pipeline_agents(
             generer_graphiques=generer_graphiques, generer_rapport_equipe=False)
         return ArbitrageCible(cible=cible, a4=r4, a5=r5, a6=r6,
                               statut_rag=r6.get("statut_rag"),
-                              n_candidats=_n_candidats(r6))
+                              n_candidats=_n_candidats(r6),
+                              motif_dl=_motif_dl)
 
     # ── CIBLE 1 : FRÉQUENCE — le portefeuille entier, pondéré par l'exposition ─
     # ⚠️⚠️ CONSTAT `agents/C3` — ELLE ÉTAIT LA SEULE DES TROIS SANS FILET.
