@@ -518,7 +518,8 @@ class AgentA2Preprocessing:
         self,
         models_path: str = '/tmp/actuaria',
         audit_path:  str = '/tmp/actuaria',
-        verbose:     bool = True
+        verbose:     bool = True,
+        annee_reference: int | None = None,
     ):
         """
         Initialise l'agent A2.
@@ -540,6 +541,12 @@ class AgentA2Preprocessing:
         self.models_path = Path(models_path)
         self.audit_path  = Path(audit_path)
         self.verbose     = verbose
+        #: ⚠️ L'ANNÉE DE RÉFÉRENCE DES DÉRIVÉES DE MILLÉSIME (`age_logement`).
+        #: `None` → l'horloge, comportement d'aujourd'hui À L'IDENTIQUE, mais
+        #: la source est DITE. Un appelant qui la déclare fige la dérivée :
+        #: deux rejeux du même dossier rendent alors le même facteur.
+        self._annee_reference = annee_reference
+        self._annee_reference_utilisee = None
 
         # ⚠️ INSTANCIER N'ÉCRIT PAS SUR LE DISQUE (jumeau d'`a1/C7`). Ces deux
         # dossiers étaient créés ici : construire A2 suffisait à faire naître
@@ -714,6 +721,12 @@ class AgentA2Preprocessing:
             rapport['transformations']['encodage'] = stats_plan['encodage']
             rapport['features_creees'] = stats_plan['colonnes_produites']
             rapport['colonnes_plan_manquantes'] = stats_plan['manquantes']
+            # ⚠️⚠️ CE QUI N'ATTEINT AUCUN LIVRABLE N'EXISTE PAS. L'année qui a
+            # servi à `age_logement` décide d'un FACTEUR : elle doit voyager
+            # avec le tarif, comme la borne d'exposition et l'arrêté.
+            if self._annee_reference_utilisee is not None:
+                rapport['annee_reference_derivees'] = (
+                    self._annee_reference_utilisee)
 
             # ── ÉTAPE 6 : VALIDATION FINALE ───────────────────────────────────
             logger.info(f"[{audit_id}] Étape 6/6 : Validation finale")
@@ -810,6 +823,10 @@ class AgentA2Preprocessing:
                 'rapport_qualite': _rapport_qualite_expo,
                 # Traçabilité des variables dérivées — ACPR-2022-P-01 §3.2
                 'data_dictionnaire': _dico_a2,
+                # ⚠️ À la RACINE, pas seulement dans `rapport` : c'est là que
+                # A6 et les services regardent (leçon `A1-1` de ce dépôt).
+                'annee_reference_derivees': rapport.get(
+                    'annee_reference_derivees'),
                 'excel_bytes':       _excel_a2,
                 'word_bytes':        b'',
                 'pdf_bytes':         b'',
@@ -866,12 +883,48 @@ class AgentA2Preprocessing:
                 pd.to_numeric(out["valeur_mobilier"], errors="coerce")
                 / np.maximum(pd.to_numeric(out["surface_m2"], errors="coerce"), 1))
         if "annee_construction" in out.columns:
-            # ⚠ CORRECTIF DE BUG (trouvé pendant la migration MRH) : l'ancien A2
-            # codait l'année de référence EN DUR (2024) — un bug de CALENDRIER qui
-            # se dégradait d'un an chaque année (age_logement faux de +1 an à
-            # chaque nouvel an sur les mêmes données). On utilise désormais
-            # l'année d'EXÉCUTION : age_logement est toujours à jour, jamais périmé.
-            _annee_ref = datetime.now().year
+            # ⚠️⚠️ CE CORRECTIF ÉTAIT FAIT À MOITIÉ, ET LA MOITIÉ MANQUANTE EST
+            # CELLE QUI COMPTE. Il a remplacé un 2024 FIGÉ (faux d'un an de
+            # plus chaque année) par l'année d'EXÉCUTION — c'est-à-dire une
+            # année QUI BOUGE. Ni l'un ni l'autre n'est la référence DÉCLARÉE.
+            #
+            # Mesure de l'auditeur (11/09/2026), 3 000 logements construits
+            # entre 1930 et 2020, MÊMES données, MÊME plan, MÊME empreinte :
+            #     age_logement    -> décalé de 1 an pour 100 % des contrats
+            #     logement_ancien -> 35 contrats sur 3 000 (1,17 %) BASCULENT
+            #                        de 0 à 1, cohorte 1976
+            # Re-mesuré ici le 14/09/2026, tirage indépendant, même protocole :
+            #     age_logement    -> 3 000 / 3 000 (100,00 %)
+            #     logement_ancien -> 34 / 3 000 (1,13 %), de 0 à 1, cohorte 1976
+            # *Deux tirages, deux fois la même cohorte : ce n'est pas du bruit.*
+            #
+            # ⚠️⚠️ ET CE NE SONT PAS DES COLONNES DÉCORATIVES : `mrh.yaml`
+            # déclare `age_logement` (l.63) ET `logement_ancien` (l.65) sous
+            # la clé `facteurs:`. Un GLM réajusté le 1er janvier sur un
+            # portefeuille inchangé rend donc un autre tarif.
+            #
+            # ⚠️ LE DÉPÔT PORTE DÉJÀ LA DOCTRINE, MOT POUR MOT (a6_comparaison) :
+            # « L'ARRÊTÉ EST UNE RÉFÉRENCE MÉTIER DÉCLARÉE, PAS UNE LECTURE DE
+            # L'HORLOGE ». Elle était appliquée aux EN-TÊTES et pas aux
+            # FACTEURS — l'endroit où elle coûte un euro.
+            #
+            # ⚠️ ON NE TOUCHE PAS AU SCHÉMA DU PLAN : ajouter une année de
+            # référence au YAML changerait l'empreinte signée des vingt plans.
+            # L'année se déclare donc à l'APPELANT (`annee_reference`), et
+            # à défaut l'horloge reste — mais elle CESSE D'ÊTRE MUETTE :
+            # l'année retenue et sa source sont publiées.
+            _annee_ref = (int(self._annee_reference)
+                          if getattr(self, '_annee_reference', None) is not None
+                          else datetime.now().year)
+            self._annee_reference_utilisee = {
+                'annee': int(_annee_ref),
+                'source': ("déclarée par l'appelant"
+                           if getattr(self, '_annee_reference', None) is not None
+                           else "horloge de la machine (NON déclarée) — "
+                                "`age_logement` et `logement_ancien` "
+                                "changeront au prochain 1er janvier sur les "
+                                "MÊMES données"),
+            }
             out["age_logement"] = (_annee_ref
                                    - pd.to_numeric(out["annee_construction"], errors="coerce"))
             out["logement_ancien"] = (out["age_logement"] > 50).astype(int)
