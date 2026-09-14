@@ -113,13 +113,54 @@ _CHAMPS_IDENTITE = {
 #: `'Marie Durand'` ni `'S. S.'`, tous deux trouves ici le 12/09. Celui-ci
 #: connait le vocabulaire des ROLES et signale ce qui n'en releve pas : un
 #: nom jamais vu devient visible.
+#: ⚠️⚠️ ELARGI LE 14/09/2026, ET LA RAISON EST UNE MESURE. La liste
+#: admettait `direction` et `technique` mais pas `commerciale` : rien ne
+#: distinguait `'Direction Technique'` de `'Direction Commerciale'` sinon
+#: le vocabulaire, et la seconde -- un SERVICE -- etait accusee d'etre un
+#: etat civil. C'est la 15e forme du piege d'assiette de ce depot :
+#: *trop ETROITE, elle ACCUSE, et un controle qui accuse finit desactive.*
+#:
+#: ⚠️ ELARGIR NE REND PAS AVEUGLE, ET C'EST STRUCTUREL : la regle exige
+#: que TOUS les mots capitalises soient des mots de role. Un ajout ne
+#: cree donc de passage que pour des valeurs faites ENTIEREMENT de noms
+#: de FONCTION -- jamais pour un nom de personne. Mesure du 14/09 :
+#:   . 1 014 combinaisons <prenom|nom> x <mot ajoute> -- dont les deux
+#:     jetons de l'identite que `RD-8` protege, essayes HORS DU DEPOT :
+#:     0 devient invisible ;
+#:   . sur les 35 valeurs de signature reellement presentes au depot, UNE
+#:     SEULE change de verdict : `'Direction Commerciale'` ;
+#:   . aucun mot ajoute n'est un prenom ni un patronyme.
+#:
+#: ⚠️ CE QUI ENTRE ICI EST UN NOM DE FONCTION, JAMAIS UN NOM PROPRE. Les
+#: trois groupes sont declares : les directions d'une compagnie, les
+#: qualites d'un role (jamais la personne qui l'occupe), et les mots que
+#: les champs de signature de ce depot emploient deja -- ceux-la sont
+#: releves, pas inventes.
 _MOTS_DE_ROLE = {
+    # -- le socle d'origine
     'direction', 'technique', 'actuaire', 'actuariat', 'test', 'tests',
     'souscription', 'controle', 'contrôle', 'lot', 'qualite', 'qualité',
     'signataire', 'validation', 'sceau', 'schema', 'schéma', 'temoin',
     'témoin', 'ctrl', 'reserve', 'réserve', 'cac', 'acpr', 'service',
     'cellule', 'pole', 'pôle', 'comite', 'comité', 'ia', 'du', 'de', 'la',
     'le', 'des', 'et', 'golden', 'auto', 'decennale', 'mrh', 'rcpro',
+    # -- les directions d'une compagnie d'assurance qui declarent ou
+    #    valident un element tarifaire
+    'commerciale', 'commercial', 'distribution', 'juridique', 'conformite',
+    'conformité', 'risques', 'financiere', 'financière', 'comptabilite',
+    'comptabilité', 'indemnisation', 'sinistres', 'reassurance',
+    'réassurance', 'audit', 'informatique', 'marketing', 'produit',
+    'generale', 'générale', 'general', 'général', 'operations',
+    'opérations', 'interne', 'externe',
+    # -- la QUALITE d'un role, jamais la personne qui l'occupe
+    'responsable', 'adjoint', 'adjointe', 'directeur', 'directrice',
+    'chef', 'referent', 'référent', 'referente', 'référente', 'designe',
+    'désigné', 'designee', 'désignée', 'interim', 'intérim',
+    # -- les mots que les champs de signature de ce depot emploient DEJA
+    #    (releve AST du 14/09 : ils vivent au depot, ils ne sont pas
+    #    supposes)
+    'aucun', 'par', 'demonstration', 'démonstration', 'locale',
+    'verification', 'vérification', 'profil', 'gel', 'role', 'rôle',
 }
 
 #: une initiale suivie d'un patronyme, ou deux initiales
@@ -245,9 +286,31 @@ class TestAucuneIdentiteCivilePubliee(unittest.TestCase):
         roles = ('Direction Technique', 'Actuaire Test', 'Controle du lot',
                  'sceau-schema', 'X', 'temoin', 'Direction Technique, IA',
                  'Test V9', 'Actuaire X',
-                 'VERIFICATION LOCALE - aucun actuaire responsable')
+                 'VERIFICATION LOCALE - aucun actuaire responsable',
+                 # ⚠️ LE VOCABULAIRE ELARGI DU 14/09 : ces valeurs etaient
+                 # ACCUSEES, et ce sont des SERVICES. Sans ces lignes,
+                 # l'elargissement ne serait atteste par rien.
+                 'Direction Commerciale', 'Direction des Risques',
+                 'Direction Juridique', 'Responsable Conformite',
+                 'Chef de Service', 'Direction de la Distribution',
+                 'Audit Interne', 'Actuaire designe', 'Directeur Technique')
         identites = ('Marie Durand', 'M. Dupont', 'Jean-Pierre Martin',
-                     'A. Nkemelu', 'S. S.', 'Paul Martin')
+                     'A. Nkemelu', 'S. S.', 'Paul Martin',
+                     # ⚠️⚠️ ET LE SECOND SENS DE L'ELARGISSEMENT : un etat
+                     # civil qui emploie INCIDEMMENT un mot ajoute doit
+                     # rester vu. La regle tient parce qu'elle exige que
+                     # TOUS les mots soient des roles -- un prenom suffit
+                     # a faire tomber la valeur. Si un jour un prenom
+                     # entrait dans la liste, ces lignes tomberaient.
+                     #   ⚠️⚠️ ET CES PATRONYMES SONT SYNTHETIQUES, COMME
+                     # CEUX D'AU-DESSUS. J'avais ecrit ici l'identite que
+                     # `RD-8` protege, pour prouver qu'elle restait vue :
+                     # `RD-8` est tombe DANS LA MINUTE, et il avait raison
+                     # -- ce fichier est DANS le perimetre d'un depot
+                     # PUBLIC. *La preuve qu'une identite reelle reste vue
+                     # se fait HORS du depot, jamais en l'y ecrivant.*
+                     'Marie Commerciale', 'Jean Audit', 'Sophie Conformite',
+                     'Lise Berthaud', 'Ahmed Produit')
         for v in roles:
             with self.subTest(role=v):
                 self.assertFalse(
