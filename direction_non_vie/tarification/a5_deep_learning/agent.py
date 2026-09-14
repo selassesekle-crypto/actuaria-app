@@ -1742,10 +1742,22 @@ class AgentA5DeepLearning:
           *Un `nan` n'est ni un nombre utilisable ni une absence : il
           franchit les gardes écrites pour l'un ET pour l'autre.*
 
-        ⚠️ La garde rend `0.0` comme A3 et A4 — pas `None`. Le sens de
-        l'absence est porté par `diagnostic_evaluation`, publié par cet
-        agent depuis le lot précédent ; et A6 écarte désormais tout Gini
-        NON FINI, de sorte que la valeur ne décide plus de rien.
+        ⚠️⚠️ CETTE PHRASE DISAIT « la garde rend `0.0` comme A3 et A4 — pas
+        `None` », ET C'ÉTAIT FAUX DES TROIS CÔTÉS — constat `A5-6`. Relevé
+        AST des `return` de cette fonction, le 14/09/2026 : **quatre
+        `return None` et pas un seul `return 0.0`** — assiette vide (l.1751),
+        aucun sinistre sur la période (l.1754), `gini_socle` muet (l.1763),
+        et l'`except` final (l.1784). Même mesure sur `_calculer_gini` d'A3
+        (a3:2508) et d'A4 (a4:2174) : les trois rendent `None`, aucune ne
+        rend `0.0`.
+
+        C'est donc `None` qui porte l'absence, et c'est le bon choix : un
+        `0.0` serait un pouvoir discriminant NUL mesuré, indiscernable
+        d'une mesure qui n'a pas pu se faire. *La prose décrivait un
+        correctif qui n'a pas été écrit ainsi, et elle le décrivait dans le
+        sens le plus rassurant.* Le sens de l'absence est en outre porté par
+        `diagnostic_evaluation`, publié par cet agent, et A6 écarte tout
+        Gini NON FINI : la valeur ne décide plus de rien.
         """
         if len(y_true) == 0:
             return None
@@ -1964,7 +1976,24 @@ class AgentA5DeepLearning:
         m_tab  = res_tabnet.get('metriques') or {}
 
         # Gini de référence
-        gini_glm = (self._reference_glm(result_a3)[1] or {}).get('gini')
+        # ⚠️⚠️ LE NOM DU GLM DE RÉFÉRENCE SE PUBLIE, IL NE SE SUPPOSE PAS —
+        # constat `A5-3`. Cette ligne prenait `[1]` (les métriques) et JETAIT
+        # `[0]`, qui est le NOM de la famille ; l'étiquette du document était
+        # alors écrite en dur « GLM Poisson (A3) ». Or `glm_de_reference`
+        # dérive ce nom de ce qu'A3 déclare — **Poisson sur la fréquence,
+        # Gamma sur `cout_moyen`, Tweedie sur `prime_pure`**. Sur une cible de
+        # coût ou de prime pure, le document publiait donc le Gini du Gamma ou
+        # du Tweedie sous le nom du Poisson.
+        #   *C'est l'inverse exact de ce que la docstring de
+        #   `glm_de_reference` a été écrite pour empêcher — « la bonne mesure
+        #   du mauvais modèle reste une mauvaise référence » : ici, la bonne
+        #   mesure sous le nom du mauvais modèle.*
+        # ⚠️ `(None, None)` quand aucune famille ne porte cette cible : on le
+        # DIT, on ne rebascule pas sur un nom par défaut.
+        _nom_glm, _met_glm = self._reference_glm(result_a3)
+        gini_glm = (_met_glm or {}).get('gini')
+        _libelle_glm = (f"GLM {_nom_glm.capitalize()} (A3)" if _nom_glm
+                        else "GLM de référence (A3) : AUCUN pour cette cible")
         gini_ml  = None
         if result_a4 and result_a4.get('success'):
             ml_only = [c for c in result_a4.get('classement', [])
@@ -1989,7 +2018,7 @@ class AgentA5DeepLearning:
             f"RMSE={mesure_texte(m_tab['rmse_test'], 2)} | "
             f"Époques={m_tab.get('n_epochs_reels', 'N/A')}\n\n"
             f"Références :\n"
-            f"  GLM Poisson (A3) : {gini_texte(gini_glm)}\n"
+            f"  {_libelle_glm} : {gini_texte(gini_glm)}\n"
             f"  Meilleur ML (A4) : {gini_texte(gini_ml)}"
         )
 
@@ -2015,17 +2044,45 @@ class AgentA5DeepLearning:
                 "→ Meilleur ML (A4) recommandé si Gini prioritaire."
             )
         else:
+            # ⚠️⚠️ CE BLOC PUBLIAIT « 50 ÉPOQUES » EN DUR — constat `A5-4`, et
+            # le chiffre était FAUX deux fois. Mesure du 14/09/2026 :
+            # `n_epochs` vaut **200** par défaut (l.542, arrêt automatique
+            # actif), et le nombre RÉELLEMENT atteint est publié sous
+            # `n_epochs_reels` — il est déjà affiché trois lignes plus haut,
+            # dans le MÊME texte. Le diagnostic annonçait donc 50 à côté du
+            # vrai nombre, et conseillait de « monter à `n_epochs=100` » un
+            # paramètre déjà réglé à 200 : *un conseil qui ferait RÉGRESSER
+            # celui qui le suit.*
+            # ⚠️ ON NE PUBLIE QUE CE QUI EST DÉJÀ MESURÉ. Le plafond n'est ni
+            # sur `self` ni dans la signature de cette méthode (relevé AST :
+            # `n_epochs` est un paramètre de `run`, jamais posé sur
+            # l'instance). Le poser ici aurait été ajouter de la plomberie
+            # pour republier un nombre que `n_epochs_reels` rend déjà
+            # parlant — et ma première rédaction lisait un `self.n_epochs`
+            # qui n'existe pas : elle aurait levé `AttributeError` sur le
+            # chemin même qu'elle prétendait décrire.
+            _ep = sorted({m.get('n_epochs_reels') for m in (m_cann, m_tab)
+                          if isinstance(m.get('n_epochs_reels'), int)})
+            _ep_dit = (f"{_ep[0]} à {_ep[-1]}" if len(_ep) > 1
+                       else f"{_ep[0]}" if _ep else None)
             n2 = (
                 "DIAGNOSTIC ACTUARIEL :\n"
                 f"Le Gini des modèles DL ({gini_texte(best_dl_gini)}) reste en dessous "
-                f"des modèles ML. 50 époques sur CPU Colab peuvent être "
-                f"insuffisantes pour que les réseaux convergent pleinement. "
-                f"Augmenter n_epochs=100 sur Colab Pro GPU améliorerait les résultats."
+                f"des modèles ML. " + (
+                    f"Les réseaux ont tourné {_ep_dit} époques sur cette "
+                    f"machine, arrêt automatique compris : ce budget peut "
+                    f"être insuffisant pour qu'ils convergent pleinement."
+                    if _ep_dit else
+                    "Le nombre d'époques réellement parcourues n'est PAS "
+                    "mesuré sur ce run : la convergence ne peut donc pas "
+                    "être mise en cause ici, ni écartée."
+                )
             )
             n3 = (
                 "RECOMMANDATION :\n"
                 "→ Utiliser le meilleur ML (A4) comme modèle de production.\n"
-                "→ CANN/TabNet : relancer avec n_epochs=100 sur Colab Pro.\n"
+                "→ CANN/TabNet : relancer avec un budget d'époques supérieur, "
+                "sur GPU.\n"
                 "→ Passer à l'agent A6 pour la décision finale."
             )
 

@@ -125,9 +125,14 @@ _SOCLE = _RACINE / 'core' / 'sortie_console.py'
 #: lot trop tard. *Une lecon qu'on ecrit sans changer le geste suivant n'est
 #: pas une lecon.*
 #:
+#: ⚠️ 356 -> 357 : `test_phrases_qui_disent_le_vrai`, le sceau de la famille
+#: des huit phrases fausses. Troisieme hausse posee DANS LE LOT qui la cause
+#: et AVANT sa gate -- le geste est devenu routine, et c'est exactement ce
+#: qu'on attend d'une lecon.
+#:
 #: ⚠️ CE PLAFOND NE PEUT QUE BAISSER. Il ne se releve que sur un fichier
 #: AJOUTE, jamais sur un fichier qui se met a dependre de l'encodage.
-_FICHIERS_A_RISQUE = 356
+_FICHIERS_A_RISQUE = 357
 
 
 def _fichiers_de_test() -> list:

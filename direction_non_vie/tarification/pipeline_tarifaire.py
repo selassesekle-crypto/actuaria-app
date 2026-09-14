@@ -49,7 +49,7 @@ from core.chargements_declares import (
 )
 from core.conformite_reglementaire import construire_matrice_x, source_exposition
 from core.frequence import ajuster_glm_frequence
-from core.plan_tarifaire import PlanTarifaire
+from core.plan_tarifaire import PlanTarifaire, coefficient_ht
 
 # ⚠️ `QualiteBloquante` n'est plus importée ici : la levée a suivi le préambule
 # dans `core.qualite_donnees`. Vérifié avant de la retirer — **aucun module ne
@@ -469,9 +469,13 @@ class TarifNonVie:
             # seconde fois pour le reformater ferait deux redactions du meme
             # fait, et deux redactions finissent par en dire deux choses.
             ch, _origine_ch, _ = self._chargements_du_contrat(contrat)
-            pc = (None if ch is None else
-                  prime_pure * (1 + ch["frais"]) * (1 + ch["marge"])
-                  / (1 - ch["commission"]))
+            # ⚠️⚠️ LA FORMULE VIENT DE `core.plan_tarifaire` — constat
+            # `PIPE-1`. Elle etait ecrite ICI en ligne ET dans
+            # `rapport_modeles_tarif._coefficient_ht` : deux redactions de la
+            # meme formule, et chacune portait le commentaire qui l'interdit
+            # sans voir l'autre. *Le commentaire trois lignes au-dessus le dit
+            # pour les chargements ; il valait aussi pour le coefficient.*
+            pc = (None if ch is None else prime_pure * coefficient_ht(ch))
             # ⚠️⚠️ LE TAUX DE TAXE SE RÉSOUT ICI, CONTRAT PAR CONTRAT — et il
             # peut REFUSER. Sur `flotte_automobile`, la qualification fiscale
             # suit `type_flotte` : VL et VUL relèvent de la RC à 33 %, PL de la
@@ -781,10 +785,19 @@ def _chargements_effectifs(explicites, plan) -> dict[str, float] | None:
     le taux vient alors du registre, RESOLU PAR CONTRAT -- une flotte poids
     lourds et une flotte legere ne portent pas la meme taxe, et un plan ne
     peut pas rendre un nombre unique pour les deux. Cette fonction reste la
-    source des trois autres chargements et du taux de REPLI ; la resolution
-    fiscale vit dans `TarifNonVie._taxe_du_contrat`, seul endroit qui voit le
-    contrat. *Chercher ici le taux qui a servi donnerait une reponse fausse
-    sur les plans routes.*
+    source des trois autres chargements ; la resolution fiscale vit dans
+    `TarifNonVie._taxe_du_contrat`, seul endroit qui voit le contrat.
+    *Chercher ici le taux qui a servi donnerait une reponse fausse sur les
+    plans routes.*
+
+    ⚠️⚠️ CETTE PHRASE PROMETTAIT UN << TAUX DE REPLI >>, ET IL N'Y EN A PLUS
+    NULLE PART -- constat `PIPE-2`. Deux sites le disent, et ils disent
+    l'inverse de ce qu'elle disait : le commentaire ci-dessous (<< ET
+    SURTOUT PAS UN REPLI >>) pour les chargements, et
+    `_taxe_du_contrat` pour la taxe (<< IL N'Y A PLUS DE REPLI DE TAXE, ET
+    C'EST VOULU >> : le `0.33` qui bouchait ce trou etait le taux de la RC
+    auto applique aux vingt LoB). *Une prose qui promet un repli supprime
+    envoie son lecteur chercher un chemin qui n'existe pas.*
     """
     if explicites is not None:
         return dict(explicites)
@@ -992,8 +1005,18 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
         # `tarifer()` posait `datetime.now(timezone.utc)` et cette ligne
         # `datetime.now()`, en heure LOCALE : *deux traces du meme calcul ne
         # portaient pas la meme heure*, et rien ne disait laquelle etait
-        # laquelle. UTC des deux cotes -- un horodatage sans fuseau n'est pas
-        # un horodatage, c'est une supposition sur la machine qui l'a ecrit.
+        # laquelle. UTC ICI ET DANS `tarifer()` -- un horodatage sans fuseau
+        # n'est pas un horodatage, c'est une supposition sur la machine qui
+        # l'a ecrit.
+        # ⚠️⚠️ CETTE PHRASE DISAIT << UTC DES DEUX COTES >>, ET CE N'EST PAS
+        # VRAI DE TOUT LE DEPOT -- constat `AGENTS-5`. Relevé AST du
+        # 14/09/2026 : ce module horodate en UTC a DEUX sites (l.421 et
+        # ci-dessous), mais `pipeline_agents.py:469` ecrit
+        # `datetime.now().astimezone()`, soit l'heure LOCALE de la machine.
+        # Le fuseau y est donc PORTE (l'objet n'est pas naif), mais ce n'est
+        # pas UTC. La portee de cette phrase est desormais celle de ce
+        # fichier, et l'ecart avec l'orchestrateur est NOMME plutot que nie.
+        # *Une phrase de portee se mesure comme un chiffre.*
         horodatage=datetime.now(timezone.utc).isoformat())
     df = rapport_qualite.dataframe_propre
     col_freq, col_cout, col_expo = (plan.cible_frequence, plan.cible_cout,

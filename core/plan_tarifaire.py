@@ -208,6 +208,31 @@ CHARGEMENTS_DEFAUT: dict[str, float] = {
 }
 
 
+def coefficient_ht(valeurs: dict) -> float:
+    """Le coefficient qui porte la prime pure à la prime commerciale HT.
+
+    ⚠️⚠️ UNE SEULE DÉFINITION, ET ELLE VIT ICI — constat `PIPE-1`. La formule
+    était écrite DEUX fois : en ligne dans `pipeline_tarifaire.tarifer`
+    (l.472-474) et dans `rapport_modeles_tarif._coefficient_ht`. Les deux
+    sites portaient d'ailleurs, chacun de son côté, le commentaire qui
+    l'interdit — *« deux écritures de la même formule finissent par en dire
+    deux choses »* — sans qu'aucun ne voie l'autre.
+
+    ⚠️ ET SA MAISON EST CELLE DE LA STRUCTURE QU'ELLE LIT. Les trois clés
+    `frais`, `marge`, `commission` sont celles de `CHARGEMENTS_DEFAUT` et de
+    `CHAMPS_CHARGEMENT`, définis juste au-dessus : la formule appartient au
+    module qui possède le vocabulaire, pas à un service de rapport ni au
+    pipeline. *Le second site était le plus bas dans la pile et le premier
+    le plus haut : aucun des deux ne pouvait importer l'autre sans inverser
+    la dépendance.*
+
+    Rien de normatif ici : la convention est celle du module
+    (`CONVENTION_MODULE`).
+    """
+    return ((1 + valeurs['frais']) * (1 + valeurs['marge'])
+            / (1 - valeurs['commission']))
+
+
 def _chargements_depuis_dict(d: dict) -> Chargements:
     """Construit un bloc `chargements` depuis le YAML, exceptions comprises.
 

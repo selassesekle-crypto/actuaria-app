@@ -28,7 +28,10 @@ from core.conformite_reglementaire import (
     avertissement_controle_effet,
 )
 from core.qualite_donnees import synthese_qualite_donnees
-from core.plan_tarifaire import synthese_colonnes_plan_manquantes
+from core.plan_tarifaire import (
+    coefficient_ht,
+    synthese_colonnes_plan_manquantes,
+)
 from core.chargements_declares import (
     chargements_du_contrat,
     synthese_chargements,
@@ -1034,15 +1037,15 @@ TITRE_TARIF = 'Tarif calcule (prime pure, et prime commerciale si declaree)'
 LIGNES_DETAIL_TARIF = 10
 
 
-def _coefficient_ht(valeurs: dict) -> float:
-    """Le coefficient qui porte la prime pure a la prime commerciale HT.
-
-    ⚠️ UNE SEULE DEFINITION : la formule vivait en ligne dans `tarif_publie`
-    et devait desormais servir a plusieurs taux. Deux ecritures de la meme
-    formule finissent par en dire deux choses.
-    """
-    return ((1 + valeurs['frais']) * (1 + valeurs['marge'])
-            / (1 - valeurs['commission']))
+#: ⚠️⚠️ LA DEFINITION A DEMENAGE DANS `core.plan_tarifaire` — constat
+#: `PIPE-1`. Elle etait ecrite ici ET en ligne dans
+#: `pipeline_tarifaire.tarifer` (l.472-474) : deux ecritures de la meme
+#: formule, chacune accompagnee du commentaire qui l'interdit, sans
+#: qu'aucune ne voie l'autre. Elle vit desormais aupres de
+#: `CHARGEMENTS_DEFAUT` et de `CHAMPS_CHARGEMENT`, dont elle lit les trois
+#: cles -- le seul module que les DEUX anciens sites peuvent importer sans
+#: inverser la dependance. Cet alias garde le nom local des deux appels.
+_coefficient_ht = coefficient_ht
 
 
 def _coefficients_du_portefeuille(plan, portefeuille):

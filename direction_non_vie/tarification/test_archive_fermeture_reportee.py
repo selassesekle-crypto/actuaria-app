@@ -147,14 +147,22 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "jour ou les deux coincideront, il tombera, et ce sera le signal qu'il "
         "faut reecrire le constat.",
     ('services/C7', 'test_tri_a5_charts_services.py'):
-        "Cite par la passe de tri, avec sa raison, "
-        "jamais epingle. `raisons_plafond` atteint 2 surfaces sur 6 ; le porter "
-        "aux quatre autres (Excel A6 + les trois formats du rapport equipe) "
-        "ajoute une phrase a QUATRE LIVRABLES SIGNES. C'est un lot de "
-        "PUBLICATION a lui seul, de la meme famille que l'etape 4 du chantier "
-        "`unite_exposition`, et il doit porter ses propres controles -- la "
-        "lecon du jour etant precisement qu'une surface signee peut changer "
-        "sous 812 tests verts. **Ne pas l'empiler dans une passe de tri.**",
+        "Cite par la passe de tri, avec sa raison, jamais epingle. "
+        "/!\\ CE REPORT A SURVECU A SA RAISON -- constat `PERIME-1`, "
+        "14/09/2026. Il disait AU PRESENT << `raisons_plafond` ATTEINT "
+        "2 surfaces sur 6 ; le porter aux quatre autres ajoute une phrase a "
+        "QUATRE LIVRABLES SIGNES >>. Or ce lot de publication A ETE FAIT le "
+        "12/09 : releve AST des sites d'appel, `synthese_raisons_plafond` "
+        "est appelee par `rapport_equipe_tarif` (3 formats) et par "
+        "`tarif_excel`, et `raisons_plafond` est lue 4 fois par "
+        "`rapport_modeles_tarif` (2 formats) -- soit **6 surfaces sur 6**. "
+        "Les deux services le disent eux-memes, a l'IMPARFAIT : "
+        "<< n'atteignait que deux surfaces sur six >>. "
+        "*Un report ecrit au present continue d'annoncer un travail a faire "
+        "longtemps apres qu'il a ete fait, et le prochain lecteur le refait "
+        "ou l'evite pour rien.* La mention RESTE -- elle explique pourquoi "
+        "ce constat est cite sans etre epingle -- mais elle dit desormais "
+        "l'etat REEL.",
     # ⚠️⚠️ LES TROIS EXEMPTIONS  ONT ETE RETIREES LE 02/09/2026.
     # Elles disaient << c'est l'etape 1-B qui FERMERAIT  >>, et
     # << le chemin agent n'appelle pas la couche >> -- devenus FAUX le jour

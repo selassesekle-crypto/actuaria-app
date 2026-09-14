@@ -955,7 +955,13 @@ def sensibilite_tarifaire(plan, df, etat, variations=VARIATIONS_DEFAUT,
     un maximum de 12,9 M€ à +200 % pour le modèle réellement ajusté.
 
     ⚠️ LA MARGE SUIT LA STRUCTURE DE CHARGEMENTS DU DÉPÔT
-    (`pipeline_tarifaire.CHARGEMENTS_DEFAUT`), pas une fraction du CA :
+    (`core.plan_tarifaire.CHARGEMENTS_DEFAUT`), pas une fraction du CA :
+    ⚠️ ce renvoi désignait `pipeline_tarifaire` — constat `CORE-6`. Relevé
+    AST sur tout le dépôt : la constante est définie UNE fois, à
+    `core/plan_tarifaire.py:206`, et c'est de là que ce module l'importe
+    (l.42). *Un renvoi vers le mauvais module envoie chercher la source
+    là où elle n'est pas — et ce fichier-ci la lit au bon endroit depuis
+    toujours, si bien que rien ne signalait l'écart.*
 
         marge_technique = prime × (1 − commission) − charge × (1 + frais)
 

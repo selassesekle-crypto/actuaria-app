@@ -42,10 +42,18 @@ import dataclasses
 
 from core.charts_tarif import STATUT_RAG
 
+#: ⚠️⚠️ IL EN MANQUAIT DEUX, ET ILS SONT LUS AILLEURS — constat `CORE-6`.
+#: `TITRE_DECISION` et `verdict_discordant` sont publics, definis ici, et
+#: utilises hors de ce module ; `__all__` ne les exposait pas. *Un
+#: `__all__` amputé ne casse rien tant que personne n'ecrit
+#: `from … import *` — il ment seulement sur ce que le module offre, et
+#: c'est ce mensonge-la que le lecteur paie.* Releve AST : 11 noms publics
+#: dans le module, 9 exposes, 2 absents — exactement ces deux-ci.
 __all__ = [
     'ACCORD', 'DECISIONS_ADMISES', 'PASSE_OUTRE', 'REFUS',
-    'STATUTS_ADMIS', 'DecisionActuaire', 'decision_depuis_dict',
-    'divergence', 'synthese_decision',
+    'STATUTS_ADMIS', 'TITRE_DECISION', 'DecisionActuaire',
+    'decision_depuis_dict', 'divergence', 'synthese_decision',
+    'verdict_discordant',
 ]
 
 #: ⚠️ DÉRIVÉ DE LA SOURCE UNIQUE, JAMAIS RECOPIÉ. Le dépôt a déjà payé sept
