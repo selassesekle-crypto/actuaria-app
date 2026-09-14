@@ -33,11 +33,7 @@ if str(RACINE) not in sys.path:
 
 from core.plan_tarifaire import PlanTarifaire
 from demos.pipeline_3lob_a1_a6_demo import portefeuille_auto
-from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
-from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
-from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
-from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
-from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+from direction_non_vie.tarification.pipeline_agents import pipeline_agents
 from direction_non_vie.tarification.services.rapport_modeles_tarif import (
     generer_rapport_tarification,
 )
@@ -99,28 +95,71 @@ def main():
     df = portefeuille_auto(nb_contrats, np.random.default_rng(2026))
     plan = PlanTarifaire.depuis_yaml(str(RACINE / 'plans' / 'auto.yaml'))
 
-    r1 = AgentA1Ingestion(audit_path=TMP, verbose=False).run(
-        branche='non_vie', sous_branche='auto', dataframe=df)
-    r2 = AgentA2Preprocessing(audit_path=TMP, verbose=False).run(
-        result_a1=r1, plan=plan)
-    r3 = AgentA3GLM(models_path=TMP, audit_path=TMP, verbose=False).run(
-        result_a2=r2, plan=plan, generer_graphiques=True)
-    r4 = AgentA4ML(models_path=TMP, audit_path=TMP, verbose=False).run(
-        result_a2=r2, result_a3=r3, plan=plan, calcul_shap=False,
-        generer_graphiques=True)
-    r6 = AgentA6Comparaison(models_path=TMP, audit_path=TMP, verbose=False).run(
-        result_a2=r2, result_a3=r3, result_a4=r4, result_a5=None,
-        col_cible='nb_sinistres', generer_graphiques=True,
-        generer_rapport_equipe=False, environnement='production',
+    # ══════════════════════════════════════════════════════════════════
+    #  LA CHAINE PASSE PAR L'ORCHESTRATEUR — 14/09/2026
+    # ══════════════════════════════════════════════════════════════════
+    # ⚠️⚠️ CE SCRIPT ASSEMBLAIT LA CHAINE A LA MAIN, ET IL Y PERDAIT LE
+    # PRIX. Il appelait A6 sans `plan=` ni `result_a1=` — les deux
+    # arguments dont A6 a besoin pour BATIR un tarif — et avec
+    # `result_a5=None`. C'est le constat `INERTE` du 2e audit : *le bloc
+    # prix n'est pas mort, il est conditionne, et la condition n'etait
+    # remplie par aucun appelant.*
+    #
+    # Mesure du 14/09, meme portefeuille (3 000 contrats, graine 2026),
+    # meme plan, les deux chaines cote a cote :
+    #
+    #     sentinelle du document        a la main    via l'orchestrateur
+    #     prime pure                    absent       PRESENT
+    #     bloc Tarif calcule            absent       PRESENT
+    #     COMPARAISON DE (critere E2)   absent       PRESENT
+    #     Empreinte du plan             absent       PRESENT
+    #     montants publies              0,00 EUR     409,22 EUR et
+    #                                                1 227 671,25 EUR
+    #     candidats au classement       7            9
+    #     HTML                          35 060 car.  40 726 car.
+    #     Word                          44 717 o     46 712 o
+    #     temps                         31,8 s       59,8 s  (x1,88)
+    #
+    # *Aucun euro ne bouge : un euro ARRIVE.* Le document ne portait
+    # aucun prix ; il en porte un.
+    #
+    # ⚠️ ET L'ORCHESTRATEUR EST LE SEUL ENDROIT OU LE MODULE D'IA AVANCEE
+    # EST BRANCHE SOUS FILET ET SOUS DELAI (`_module_avance`). Le brancher
+    # ici plutot que de rappeler A5 a la main evite une SECONDE definition
+    # du meme geste — ce que `ML-6` scelle ailleurs dans ce depot.
+    #
+    # ⚠️ LE +x1,88 EST LE PRIX DE DEUX CIBLES DE PLUS (cout et prime pure
+    # directe), pas une lenteur : les trois arbitrages reutilisent A1, A2
+    # et A3. Ce script publie toujours la cible FREQUENCE ; les deux
+    # autres sont calculees et disponibles dans `resultat`.
+    resultat = pipeline_agents(
+        df, plan, 'auto',
+        models_path=TMP, audit_path=TMP, verbose=False,
+        generer_graphiques=True, calcul_shap=False,
+        environnement='production',
         # ⚠️ MEME DEFAUT QUE LA DEMO, ET IL ETAIT DANS MON PROPRE OUTIL :
         # << Actuaire >> satisfaisait le controle de gouvernance sans nommer
         # personne. Le rapport produit ici est une verification, pas un
         # livrable signe — il le dit.
         profil_valide_par='VERIFICATION LOCALE - aucun actuaire responsable')
+    r3 = resultat.a3
+    _freq = resultat.frequence
+    r4, r5, r6 = _freq.a4, _freq.a5, _freq.a6
+    if _freq.motif_dl:
+        print(f'  IA avancee : {_freq.motif_dl}')
+    if r6 is None:
+        print(f'  ARBITRAGE IMPOSSIBLE : {_freq.erreur}')
+        return 1
 
     horodatage = maintenant.strftime('%Y%m%d_%H%M%S')
     rapports = generer_rapport_tarification(
         result_a3=r3, result_a4=r4, result_a6=r6,
+        # ⚠️ LE MODULE D'IA AVANCEE ATTEINT LE DOCUMENT. `result_a5` est
+        # accepte ici depuis toujours et n'etait JAMAIS passe : la
+        # plomberie etait posee, rien ne l'alimentait. `None` reste
+        # legitime -- c'est ce que l'orchestrateur rend quand le module
+        # n'a pas concouru, et le document le dit alors.
+        result_a5=r5,
         ref_client='PORTEFEUILLE DE DEMONSTRATION',
         # ⚠️ Arrêté NON déclaré, VOLONTAIREMENT : ce script est une VÉRIFICATION,
         # pas un livrable signé (cf. profil_valide_par ci-dessus). Le rapport

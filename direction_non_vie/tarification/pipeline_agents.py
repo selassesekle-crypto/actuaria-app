@@ -45,27 +45,28 @@
 ║     plus son GLM de coût.                                                    ║
 ║                                                                              ║
 ║                                                                              ║
-║  CONSTAT `agents/C1` -- CE MODULE N'A AUCUN APPELANT DE PRODUCTION, ET       ║
-║  LES TROIS DEFAUTS QU'IL REPARE SONT INTACTS PARTOUT. Releve par AST         ║
-║  sur tout le depot le 01/09/2026 : `pipeline_agents`, `ResultatAgents`,      ║
-║  `ArbitrageCible`, `CIBLE_COUT` et `CIBLE_PRIME_PURE` ont chacun             ║
-║  production=0. Les trois defauts decrits ci-dessus restent vrais chez        ║
-║  les DEUX appelants de production hors app :                                 ║
+║  CONSTAT `agents/C1` -- LE CABLAGE A COMMENCE LE 14/09/2026, ET CET          ║
+║  EN-TETE A CHANGE AVEC LUI. Il disait, du 01/09 au 14/09, que ce module      ║
+║  n'avait aucun appelant de production -- releve AST, production=0 pour       ║
+║  `pipeline_agents`, `ResultatAgents`, `ArbitrageCible`, `CIBLE_COUT` et      ║
+║  `CIBLE_PRIME_PURE`. C'etait vrai, et ce ne l'est plus.                      ║
 ║                                                                              ║
-║    demos/pipeline_3lob_a1_a6_demo.py   5 agents sur 6, result_a5=None,       ║
-║                                        A6 col_cible='nb_sinistres' seul      ║
-║    scripts/rapport_tarif_local.py      idem, l.111                           ║
+║    scripts/rapport_tarif_local.py      BRANCHE le 14/09. Mesure, meme        ║
+║                                        portefeuille : le document passe      ║
+║                                        de 0,00 EUR seul a 409,22 EUR et      ║
+║                                        1 227 671,25 EUR ; 7 -> 9 candidats ; ║
+║                                        temps x1,88 pour deux cibles de plus  ║
+║    demos/pipeline_3lob_a1_a6_demo.py   PAS ENCORE : 5 agents sur 6,          ║
+║                                        result_a5=None, A6 col_cible=         ║
+║                                        'nb_sinistres' seul. Temps 2.         ║
+║    actuaria_app.py                     hors assiette par arbitrage.          ║
 ║                                                                              ║
-║  Autrement dit : LA MOITIE DU TARIF N'EST TOUJOURS PAS CHALLENGEE chez       ║
-║  eux -- ce module existe, il repare, et personne ne l'appelle.               ║
-║                                                                              ║
-║  CE N'EST PAS CORRIGE ICI, ET C'EST DELIBERE. Y brancher ces deux            ║
-║  appelants leur ferait produire TROIS cibles et un A5 la ou ils n'en         ║
-║  produisent qu'une : c'est un changement de SORTIE sur des livrables,        ║
-║  pas un correctif de texte. Et `actuaria_app.py`, le troisieme, est          ║
-║  hors assiette par arbitrage. *Un module qui repare sans etre appele         ║
-║  n'est pas un defaut de code : c'est un cablage qui manque, et le dire       ║
-║  vaut mieux que de laisser croire que la reparation a eu lieu.*              ║
+║  LA MOITIE DU TARIF RESTE NON CHALLENGEE CHEZ LA DEMO. Le branchement se     ║
+║  fait en trois temps, arbitres : la verification locale d'abord -- elle se   ║
+║  declare elle-meme << verification, pas livrable signe >>, donc l'ecart se   ║
+║  mesure sans qu'aucun document signe ne bouge -- puis la demo, puis l'app.   ║
+║  *Une phrase de portee se mesure comme un chiffre : celle-ci a ete FAUSSE    ║
+║  pendant le temps d'un commit, et c'est `AG-6` qui l'a dit.*                 ║
 ║  AUTEUR    : ActuarIA                                                        ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
