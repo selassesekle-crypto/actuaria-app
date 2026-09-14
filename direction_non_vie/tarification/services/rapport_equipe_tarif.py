@@ -21,6 +21,10 @@ Version  : 1.0.0
 """
 
 from __future__ import annotations
+# ⚠️ LE MÊME CONVERTISSEUR QUE LE JUMEAU — constat `RET-D1`. La conversion
+# markdown vit dans `core.narration` et nulle part ailleurs : une seconde
+# implémentation locale est exactement ce que ce constat a coûté.
+from core import narration as _md
 from core.charts_tarif import glyphe_rag, FOND_CLAIR, couleur_rag
 import io, logging, re
 from core.conformite_reglementaire import (
@@ -217,24 +221,45 @@ def _md_to_html_light(txt: str) -> str:
     Conversion Markdown minimal → HTML — réutilisée pour afficher le
     commentaire actuariel déjà généré par A6 (rapport_modeles_tarif.py),
     SANS effectuer de nouvel appel à l'API Claude.
+
+    ⚠️⚠️ LE NOM RESTE, LE CORPS DÉLÈGUE — constat `RET-D1`, 12/09/2026.
+    Ce corps était la conversion locale que `rapport_modeles_tarif` avait
+    retirée au lot T6, avec ce motif : *« elle enveloppait les `<li>` dans
+    un `<ul>` par une substitution de regex, puis passait chaque LIGNE au
+    découpeur de paragraphes — la balise `</ul>` se retrouvait donc À
+    L'INTÉRIEUR d'un `<p>` »*. La même fonction vivait toujours ici, et
+    elle traite le commentaire actuariel du §7 ET chaque ligne de
+    `_syntheses_html` — c'est-à-dire **chaque synthèse réglementaire
+    publiée au CAC**.
+
+    Mesure du 14/09/2026, les neuf formes de markdown EN CONTEXTE DE
+    DOCUMENT (une phrase avant, une phrase après) :
+
+        conversion locale   2 fautes de balisage, 5 formes sur 9 BRUTES
+                            (`#`, `##`, `>`, `---`, `|`)
+        `core.narration`    0 faute,              1 forme sur 9 BRUTE (`>`)
+
+    La faute mesurée, mot pour mot : `</ul> ferme alors que <p> est
+    ouvert`.
+
+    ⚠️ MA PREMIÈRE SONDE AVAIT ACQUITTÉ À TORT : sa liste d'essai ne
+    contenait qu'une liste SEULE — le seul cas où ce défaut ne se voit
+    pas. *Le défaut demande une liste SUIVIE de quelque chose.*
+
+    ⚠️ LE NOM NE CHANGE PAS, ET C'EST DÉLIBÉRÉ : deux appelants internes
+    s'y ancrent (`_syntheses_html` et le §7), et renommer déplacerait le
+    correctif à côté de sa surface.
+
+    ⚠️ CE QUI BOUGE VISIBLEMENT : le titre de section `§N —` passe de
+    `<h4 class="s-head">` à `<h3 class="s-head">` — MÊME classe, niveau
+    différent. Mesuré : la feuille de style de CE rapport ne porte aucune
+    règle pour `h3`, `h4` ni `.s-head` (1 903 caractères, seules `h1` et
+    `.header h1` y sont définies), donc ni l'un ni l'autre n'était stylé.
+    La règle `.narration h3.s-head` existe — dans la feuille du JUMEAU.
+    *Constat NOMMÉ, non traité ici : ce rapport publie une classe que sa
+    propre feuille ignore.*
     """
-    import re as _re
-    if not txt:
-        return ''
-    txt = _re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', txt)
-    txt = _re.sub(r'\*(.+?)\*', r'<em>\1</em>', txt)
-    txt = _re.sub(r'^§(\d+)\s*[—\-–]\s*(.+)$', r'<h4 class="s-head">§\1 — \2</h4>', txt, flags=_re.MULTILINE)
-    txt = _re.sub(r'^###\s+(.+)$', r'<h5>\1</h5>', txt, flags=_re.MULTILINE)
-    txt = _re.sub(r'^-\s+(.+)$', r'<li>\1</li>', txt, flags=_re.MULTILINE)
-    txt = _re.sub(r'(<li>.*</li>\n?)+', r'<ul>\g<0></ul>', txt)
-    paragraphs = []
-    for line in txt.split('\n'):
-        line = line.strip()
-        if not line or line.startswith('<h') or line.startswith('<ul') or line.startswith('<li'):
-            paragraphs.append(line)
-        else:
-            paragraphs.append(f'<p>{line}</p>')
-    return '\n'.join(paragraphs)
+    return _md.en_html(txt) if txt else ''
 
 
 # ── LES SYNTHÈSES RÉGLEMENTAIRES : source unique, calculées UNE fois ─────────
