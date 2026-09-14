@@ -3814,6 +3814,28 @@ def export_pdf(
     narration_calculee: Optional[Tuple[str, str]] = None,
     actuaire_nom: str = '', actuaire_numero_ia: str = '',
     *, result_a5: dict | None = None,
+    # ⚠️⚠️ LES CINQ BLOCS DU PRIX ET DE LA DÉCISION — constat `RMT-D1`,
+    # 12/09/2026. Cette fonction n'acceptait aucun d'eux, donc ne les
+    # transmettait pas : le PDF publiait « AUCUNE DÉCISION D'ACTUAIRE
+    # ENREGISTRÉE » sur une décision PASSE_OUTRE motivée, remise aux deux
+    # autres formats. *Le bloc de décision est le seul que ce module
+    # déclare ne devoir jamais se taire, et le PDF en affirmait l'absence.*
+    #   Mesure du 14/09, l'HTML tel que cette fonction le demandait, contre
+    #   l'HTML complet, mêmes données :
+    #       complet  19 242 car. | « aucune décision » x0 | PASSE_OUTRE x1
+    #                | motif x1 | signataire x1
+    #       demandé  19 008 car. | « aucune décision » x1 | PASSE_OUTRE x0
+    #                | motif x0 | signataire x0
+    # ⚠️ CE QUI EST VIVANT, ET CE QUI NE L'EST PAS. Sur l'orchestrateur, le
+    # PDF est un rendu de `html_str`, construit AVEC les cinq blocs dès que
+    # `'pdf' in formats` : le repli qui appelle cette fonction n'est atteint
+    # que si `export_html` a déjà rendu `''`. Le défaut est donc LATENT par
+    # cette porte — et VIVANT par l'autre : `services/__init__.py` réexporte
+    # `export_pdf` publiquement, et un appelant direct perd les cinq blocs.
+    tarif=None, portefeuille=None,
+    decision_actuaire=None,
+    comparaison_prix=None,
+    conditions_mesure=None,
 ) -> bytes:
     """Génère le rapport PDF via weasyprint (HTML→PDF). Retourne bytes ou b''.
 
@@ -3830,7 +3852,11 @@ def export_pdf(
         html = export_html(result_a3, result_a4, result_a6, ref_client, arrete,
                            audit_id, narration_calculee,
                            actuaire_nom, actuaire_numero_ia,
-                           result_a5=result_a5)
+                           result_a5=result_a5,
+                           tarif=tarif, portefeuille=portefeuille,
+                           decision_actuaire=decision_actuaire,
+                           comparaison_prix=comparaison_prix,
+                           conditions_mesure=conditions_mesure)
         if not html:
             return b''
         buf = io.BytesIO()
@@ -3944,9 +3970,22 @@ def generer_rapport_tarification(
             except ImportError:
                 logger.warning('weasyprint absent — PDF non généré')
         else:
+            # ⚠️⚠️ LE REPLI TRANSMET CE QUE LA PORTE PRINCIPALE TRANSMET —
+            # constat `RMT-D1`. Il perdait les cinq blocs du prix ET le nom
+            # du signataire (`actuaire_nom`, `actuaire_numero_ia` étaient en
+            # 8e et 9e position et n'étaient pas passés) : un PDF produit par
+            # ce chemin sortait non signé et affirmait l'absence d'une
+            # décision présente. *Un repli qui n'a pas le contrat de sa porte
+            # principale est un second document, pas un repli.*
             out['pdf_bytes'] = export_pdf(result_a3, result_a4, result_a6, ref_client,
                                           arrete, audit_id, narration_calculee,
-                                          result_a5=result_a5)
+                                          actuaire_nom, actuaire_numero_ia,
+                                          result_a5=result_a5,
+                                          tarif=tarif,
+                                          portefeuille=portefeuille,
+                                          decision_actuaire=decision_actuaire,
+                                          comparaison_prix=comparaison_prix,
+                                          conditions_mesure=conditions_mesure)
 
     if 'excel' in formats:
         try:
