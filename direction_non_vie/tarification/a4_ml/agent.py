@@ -3126,9 +3126,18 @@ class AgentA4ML:
                         opacity = 0.9,
                     ),
                     hovertemplate = (
+                        # ⚠️⚠️ TROIS VALEURS, UNE SEULE ETAIT NUE — constat
+                        # `A4-1`. L'asymetrie vivait A L'INTERIEUR d'une
+                        # seule chaine : ses deux voisines immediates
+                        # passaient deja par `gini_texte`, et la RMSE
+                        # sortait en `{rmse:.4f}`. Sur une RMSE `None`,
+                        # `{None:.4f}` LEVE `TypeError` -- le depot le dit
+                        # deja a4:3898 -- et sur une RMSE non finie elle
+                        # publie `nan` dans l'infobulle d'une figure signee.
+                        # `mesure_texte` est deja importee l.182.
                         f"<b>{nom}</b><br>"
                         f"Gini : <b>{gini_texte(gini)}</b><br>"
-                        f"RMSE : <b>{rmse:.4f}</b><br>"
+                        f"RMSE : <b>{mesure_texte(rmse)}</b><br>"
                         f"Overfit : <b>{gini_texte(overfit, 2)}</b><extra></extra>"
                     ),
                     showlegend = False,

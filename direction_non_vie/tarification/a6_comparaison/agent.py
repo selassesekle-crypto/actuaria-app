@@ -3412,7 +3412,16 @@ class AgentA6Comparaison:
             n_seg = len(backtest.get('ae_par_segment', {}))
             n1 += (
                 f"\nBACKTESTING TEMPOREL ({backtest.get('split', 'N/A')}) :\n"
-                f"  A/E ratio        : {backtest.get('ae_ratio', 'N/A')}\n"
+                # ⚠️⚠️ SON JUMEAU CINQ LIGNES PLUS HAUT EST GARDE, PAS LUI —
+                # constat `A6-2`. `ae_cv_wf` passe par `_fmt4` ; `ae_ratio`
+                # sortait tel quel, avec `'N/A'` pour defaut. Deux maux dans
+                # une ligne : un `float` brut s'ecrit avec toute sa precision
+                # machine dans un texte signe (0.9999999999999998 a cote d'un
+                # 1.0639 voisin), et `'N/A'` n'est pas le mot de ce depot --
+                # `_fmt4` dit << non mesure >>, comme partout ailleurs.
+                # *Un garde a portee de main qui n'est pas appele est la
+                # forme la moins chere du defaut, et la plus frequente.*
+                f"  A/E ratio        : {_fmt4(backtest.get('ae_ratio'))}\n"
                 f"  Interprétation   : {backtest.get('interpretation', 'N/A')}\n"
                 f"{wf_info}"
                 f"  A/E par segment  : {n_seg} segment(s) analysé(s)"

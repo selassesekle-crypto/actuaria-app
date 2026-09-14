@@ -237,10 +237,72 @@ def _est_numerique(noeud):
 #: Les grandeurs dont l'absence FABRIQUE une mesure. Ce sont celles que les
 #: agents publient comme resultat d'un calcul statistique -- pas les libelles
 #: (`branche`, `note`, `erreur`), pour lesquels un defaut textuel est honnete.
-#: ⚠️ Ce filtre restreint l'assiette DERIVEE : il est donc verifie par
-#: `test_AD3b`, qui exige que chacune de ces cles soit effectivement derivee.
+#:
+#: ⚠️⚠️ CE N'EST PLUS UN FILTRE : C'EST UN PLANCHER -- constat `EXCEL-1`,
+#: 14/09/2026. Cette liste RESTREIGNAIT l'assiette derivee par une
+#: intersection : `surveillees = {c for c in _MESURES if c in derivees}`.
+#: Mesure du jour : le controle DERIVE **72** cles et n'en surveillait que
+#: **6**. Les 66 autres -- dont `pvalue` et `ae_ratio` -- etaient derivees
+#: puis JETEES, parce qu'aucune main ne les avait ajoutees ici.
+#:
+#: *C'est exactement le defaut que la docstring de
+#: `_cles_que_les_producteurs_laissent_vides` dit eviter : << une liste
+#: tenue a la main aurait diverge le jour ou un agent publie une metrique
+#: nouvelle -- et l'assiette du controle se serait retrecie sans que
+#: personne le voie >>. Elle s'etait retrecie a 6 sur 72.*
+#:
+#: ⚠️ ET LE CONTROLE NE GARDAIT QU'UN SEUL SENS. `test_AD3b` exige que
+#: chaque cle d'ici soit derivee ; RIEN n'exigeait l'inverse, donc une cle
+#: derivee absente d'ici sortait de l'assiette EN SILENCE. `test_AD3d`
+#: ferme ce second sens.
+#:
+#: L'elargissement a l'assiette derivee entiere fait mordre **exactement
+#: TROIS sites** -- et ce sont les trois que l'auditeur avait trouves a la
+#: lecture (`tarif_excel.py:194`, `:221`, `:920`). *L'auditeur les a
+#: trouves en lisant ; le garde les trouve en derivant, des qu'il cesse de
+#: se retrecir a la main.*
 _MESURES = ('gini', 'gini_test', 'gini_train', 'rmse_test', 'overfit_ratio',
             'cout_moyen_pred')
+
+
+#: ⚠️⚠️ LES DEUX SEULES EXEMPTIONS DE `AD-3f`, ET ELLES SONT DECLAREES AVEC
+#: LEUR RAISON. La derivation les attrape parce qu'un producteur les met a
+#: `None` quelque part, mais ce ne sont PAS des grandeurs mesurees : un
+#: LIBELLE absent se dit << non renseignee >>, un HORODATAGE absent se dit
+#: << N/A >>, et leur imposer le mot des mesures appauvrirait le document.
+#: *Une exemption declaree avec sa raison est saine ; c'est le
+#: retrecissement SILENCIEUX qui ne l'est pas -- et c'est justement celui
+#: que ce lot vient de fermer.*
+_PAS_DES_MESURES = ('note', 'timestamp')
+
+#: ⚠️ `_GARDES` RETIRE AVEC `AD-3e` — quatrieme piece de la meme depouille.
+#: Il listait les fonctions par lesquelles une grandeur passe avant un
+#: texte, et seul `_passe_par_un_garde` le lisait. `vulture` ne l'a PAS
+#: signale : il flaire les fonctions mortes, pas les constantes mortes.
+#: Releve AST : pose une fois, LU nulle part. *Le nettoyage d'un sceau
+#: retire ne se confie pas a un outil -- il se mesure.*
+
+
+#: ⚠️ TROIS AIDES RETIREES AVEC `AD-3e` : `_cle_derivee_lue`, `_FONCTIONS`
+#: et `_passe_par_un_garde` ne servaient qu'a lui. Les laisser aurait ete
+#: de la plomberie posee que rien n'alimente -- la forme exacte du constat
+#: `socle/C2` -- et `vulture` l'a dit des le premier passage (0 -> 2).
+#: *Un sceau qu'on retire emporte ses outils ; sinon le suivant croit
+#: qu'ils servent.*
+
+
+def assiette_surveillee(derivees) -> set:
+    """L'assiette de `AD-3` — UNE definition, interrogeable par son sceau.
+
+    ⚠️ Elle existe pour que `AD-3d` puisse VERIFIER l'assiette au lieu d'en
+    recalculer une copie : une copie rendrait le controle tautologique, et
+    c'est precisement la faute qu'il surveille. *Un controle qui recalcule
+    ce qu'il verifie ne verifie que lui-meme.*
+
+    Tout ce qui est DERIVE est surveille. `_MESURES` est un plancher
+    (`AD-3b`), jamais un plafond.
+    """
+    return set(derivees)
 
 
 class TestControleQuiDerive(unittest.TestCase):
@@ -254,8 +316,16 @@ class TestControleQuiDerive(unittest.TestCase):
                            "aucun fichier de production trouve : le controle "
                            "ne mesure rien")
         derivees = _cles_que_les_producteurs_laissent_vides(arbres)
-        surveillees = {c for c in _MESURES if c in derivees}
+        #: ⚠️⚠️ L'ASSIETTE EST CE QUI EST DERIVE, POINT. Elle valait
+        #: `{c for c in _MESURES if c in derivees}` : 6 cles sur 72, et le
+        #: rétrécissement venait d'une liste tenue a la main. `_MESURES`
+        #: reste un PLANCHER, verifie par `AD-3b` ; il ne plafonne plus.
+        surveillees = assiette_surveillee(derivees)
         self.assertTrue(surveillees, 'aucune cle de mesure derivee')
+        self.assertTrue(
+            set(_MESURES) <= surveillees,
+            'le plancher `_MESURES` n est plus inclus dans l assiette '
+            f'derivee : {sorted(set(_MESURES) - surveillees)}')
 
         fautes = []
         for chemin, arbre in arbres:
@@ -286,6 +356,90 @@ class TestControleQuiDerive(unittest.TestCase):
                          'valoir None par aucun producteur : '
                          f'{manquantes} -- le controle AD-3 ne les surveille '
                          'donc plus. Relire le lot avec ce changement.')
+
+    def test_AD3d_l_assiette_n_est_pas_RETRECIE_par_une_liste_a_la_main(self):
+        """⚠️⚠️ LE SECOND SENS, ET IL MANQUAIT — constat `EXCEL-1`.
+
+        `AD-3b` garde un seul sens : toute clé de `_MESURES` doit être
+        dérivée. Rien ne gardait l'inverse, et c'est l'inverse qui a cédé :
+        le contrôle DÉRIVAIT 72 clés et n'en surveillait que **6**, parce
+        que l'assiette passait par `{c for c in _MESURES if c in derivees}`.
+        Les 66 autres — dont `pvalue` et `ae_ratio` — sortaient EN SILENCE.
+
+        *Une assiette qui se rétrécit sans que rien ne le dise est la forme
+        la plus discrète du contrôle qui atteste sans surveiller.* Ce
+        contrôle-ci exige que tout ce qui est dérivé soit surveillé.
+        """
+        arbres = list(_arbres())
+        derivees = _cles_que_les_producteurs_laissent_vides(arbres)
+        self.assertGreater(
+            len(derivees), len(_MESURES),
+            'la derivation ne trouve pas plus que le plancher : soit les '
+            'producteurs ont change, soit la derivation est cassee')
+        #: ⚠️ ON INTERROGE LA FONCTION QUE `AD-3` UTILISE, pas une copie
+        #: de son calcul. Une premiere redaction de ce controle recalculait
+        #: l'assiette ici (`surveillees = set(derivees)`) puis comparait
+        #: `derivees - surveillees` : TAUTOLOGIQUE, toujours vide, incapable
+        #: de mordre. *Le defaut que ce lot corrige, reproduit dans son
+        #: propre correctif.*
+        non_surveillees = sorted(derivees - assiette_surveillee(derivees))
+        self.assertEqual(
+            non_surveillees, [],
+            f'{len(non_surveillees)} cle(s) DERIVEE(S) sortent de '
+            f'l assiette sans que rien ne le dise : {non_surveillees[:12]}')
+
+    #: ⚠️⚠️ UN SCEAU ENVISAGE, MESURE, ET **NON POSE** -- et le dire vaut
+    #: mieux que de l'ecrire bancal. Constat `A4-1` : un `{x:.4f}` NU sur une
+    #: grandeur qui peut valoir `None` LEVE, ou publie << nan >>. Le site
+    #: nomme est corrige dans ce lot ; le GARDE GENERAL, lui, ne tient pas :
+    #:
+    #:   sans suivi de variable        -> **0** site trouve : aveugle, car
+    #:                                    `rmse` est une variable locale
+    #:   suivi dans tout le module     -> **64** sites : il relie un format a
+    #:                                    n'importe quelle affectation du nom
+    #:   suivi borne a la FONCTION     -> **54** sites : a peine mieux
+    #:
+    #: La cause est nette : le controle ne voit pas les gardes en AMONT
+    #: (`if gini is not None:` quelques lignes plus haut), et les distinguer
+    #: demande une ANALYSE DE FLOT -- une vraie architecture, pas un reglage.
+    #: *Un sceau qui accuse cinquante-quatre sites corrects n'est pas un
+    #: sceau : c'est du bruit que l'on apprend a ignorer, et le jour ou il
+    #: dit vrai personne ne l'ecoute.*
+    #: `AD-3f` ci-dessous, lui, tient : il juge un DEFAUT ECRIT, pas un flot.
+
+    def test_AD3f_aucun_defaut_TEXTUEL_invente_sur_une_cle_de_mesure(self):
+        """⚠️ Constat `A6-2`, elargi par derivation. `.get(cle, 'N/A')` a
+        DEUX defauts : le repli n'est jamais lu quand la cle EXISTE et vaut
+        `None` -- le depot le dit lui-meme dans `rapport_modeles_tarif` --
+        et `'N/A'` n'est pas le mot de ce depot. Mesure du 14/09 : **sept**
+        sites, dont cinq dans un rapport SIGNE, alors que le remede
+        (`_valeur_ou_absente`) vivait a une ligne et n'etait applique qu'a
+        UN site sur quatre."""
+        arbres = list(_arbres())
+        derivees = _cles_que_les_producteurs_laissent_vides(arbres)
+        fautes = []
+        for chemin, arbre in arbres:
+            for noeud in ast.walk(arbre):
+                if not (isinstance(noeud, ast.Call)
+                        and isinstance(noeud.func, ast.Attribute)
+                        and noeud.func.attr == 'get' and len(noeud.args) == 2
+                        and isinstance(noeud.args[0], ast.Constant)
+                        and noeud.args[0].value in derivees):
+                    continue
+                cle, defaut = noeud.args[0].value, noeud.args[1]
+                if cle in _PAS_DES_MESURES:
+                    continue          # exemption DECLAREE, avec sa raison
+                if (isinstance(defaut, ast.Constant)
+                        and isinstance(defaut.value, str) and defaut.value
+                        and defaut.value != NON_MESURE):
+                    fautes.append(f'{pathlib.Path(chemin).name}:'
+                                  f'{noeud.lineno} .get({cle!r}, '
+                                  f'{defaut.value!r})')
+        self.assertEqual(
+            fautes, [],
+            'une grandeur qui peut valoir None recoit un repli TEXTUEL '
+            'invente, et ce repli ne sera meme pas lu sur un `None` :\n  '
+            + '\n  '.join(fautes))
 
     def test_AD3c_le_999_n_existe_plus_nulle_part(self):
         """Le littéral nomme, cherche au texte : il ne doit plus etre le

@@ -2298,12 +2298,20 @@ def _construire_contexte_tarif(
     lines += [
         "",
         "=== HYPOTHÈSES ML ===",
-        f"H1 Overfitting : {hyp4.get('h1_overfitting',{}).get('statut','?')} | ratio={hyp4.get('h1_overfitting',{}).get('ratio','—')}",
+        # ⚠️⚠️ LE REMEDE ETAIT A UNE LIGNE, APPLIQUE A H2 SEUL — constat
+        # `A6-2` etendu par derivation, 14/09/2026. Le commentaire ci-dessous
+        # dit le piege depuis le 05/09 ; `_valeur_ou_absente` le ferme ; et
+        # H1, H3 et les trois lignes de backtest ne l'appelaient pas.
+        # *Une liste dupliquee mise a jour a moitie : le defaut de sceau le
+        # plus frequent de ce depot, ici sur un correctif.*
+        (f"H1 Overfitting : {hyp4.get('h1_overfitting',{}).get('statut','?')}"
+         f" | ratio={_valeur_ou_absente(hyp4.get('h1_overfitting',{}).get('ratio'))}"),
         # ⚠️ MÊME PIÈGE QU'EN H4, MÊME REMÈDE : `.get(clé, '—')` ne protège de
         # rien quand la clé EXISTE et vaut None — le repli n'est jamais lu.
         (f"H2 PSI réel : {hyp4.get('h2_psi',{}).get('statut','?')}"
          f" | PSI={_valeur_ou_absente(hyp4.get('h2_psi',{}).get('psi'))}"),
-        f"H3 Gini : {hyp4.get('h3_gini',{}).get('statut','?')} | Gini={hyp4.get('h3_gini',{}).get('gini','—')}",
+        (f"H3 Gini : {hyp4.get('h3_gini',{}).get('statut','?')}"
+         f" | Gini={_valeur_ou_absente(hyp4.get('h3_gini',{}).get('gini'))}"),
         # ⚠️ `.get(cle, '—')` NE SUFFIT PAS quand la cle EXISTE et vaut None :
         # le modele lisait « écart moy=0.0% », c'est-a-dire une calibration
         # parfaite, la ou rien n'avait ete mesure.
@@ -2312,8 +2320,11 @@ def _construire_contexte_tarif(
         f"{_valeur_ou_absente(hyp4.get('h4_calibration',{}).get('ecart_moy_pct'), '%')}",
         "",
         "=== BACKTESTING A/E (walk-forward recalibré) ===",
-        f"A/E ratio : {bt6.get('ae_ratio','—')} | {bt6.get('interpretation','—')}",
-        f"Walk-forward : {bt6.get('n_fenetres','—')} fenêtres | stabilité={bt6.get('stabilite_wf','—')} | CV={bt6.get('ae_cv_wf','—')}",
+        (f"A/E ratio : {_valeur_ou_absente(bt6.get('ae_ratio'))}"
+         f" | {bt6.get('interpretation','—')}"),
+        (f"Walk-forward : {bt6.get('n_fenetres','—')} fenêtres"
+         f" | stabilité={_valeur_ou_absente(bt6.get('stabilite_wf'))}"
+         f" | CV={_valeur_ou_absente(bt6.get('ae_cv_wf'))}"),
         f"Modèle recalibré par fenêtre : {bt6.get('modele_recalibre','—')} | Gini WF moyen={bt6.get('gini_wf_moyen','—')}",
         # Audit V11 : sans cette ligne, le modèle de narration ignorait que la
         # validation temporelle avait pu porter sur un AUTRE modèle que celui
@@ -3038,7 +3049,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
       <div class="kpi"><div class="kpi-label">Interprétation</div><div class="kpi-value" style="font-size:13px;">{bt6.get('interpretation','—')}</div></div>
       <div class="kpi"><div class="kpi-label">Stabilité Walk-Forward</div><div class="kpi-value" style="font-size:13px;">{bt6.get('stabilite_wf','—')}</div></div>
       <div class="kpi"><div class="kpi-label">Fenêtres testées</div><div class="kpi-value">{bt6.get('n_fenetres','—')}</div></div>
-      <div class="kpi"><div class="kpi-label">CV A/E WF</div><div class="kpi-value">{bt6.get('ae_cv_wf','—')}</div></div>
+      <div class="kpi"><div class="kpi-label">CV A/E WF</div><div class="kpi-value">{_valeur_ou_absente(bt6.get('ae_cv_wf'))}</div></div>
       <div class="kpi"><div class="kpi-label">Fenêtres ROUGE</div><div class="kpi-value" style="color:{ROUGE}">{bt6.get('n_fenetres_rouge','—')}</div></div>
     </div>
 """

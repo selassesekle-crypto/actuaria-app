@@ -189,9 +189,18 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "", arrete: Optional[str] =
             _header(ws2, r, col, txt, w)
         r += 1
         for var, d in sorted(rels_p.items(), key=lambda x: -abs(x[1].get('beta', 0))):
+            # ⚠️⚠️ UNE P-VALUE ABSENTE N'EST PAS `0` — constat `EXCEL-1`.
+            # `0` se lit « rejet certain de l'hypothèse nulle », c'est-à-dire
+            # la plus forte affirmation possible : **la variable est
+            # significative**. Le publier dans un classeur SIGNÉ sur une
+            # mesure que personne n'a faite est le défaut central de ce
+            # module. `mesure_arrondie` rend le nombre s'il existe et le MOT
+            # sinon — elle est déjà importée en tête de ce fichier, et sa
+            # docstring dit qu'elle existe pour les cellules numériques.
             vals = [var, d.get('beta',0), d.get('relativite',0),
                     d.get('ic95_low',0), d.get('ic95_high',0),
-                    d.get('pvalue',0), "Oui" if d.get('significatif') else "Non",
+                    mesure_arrondie(d.get('pvalue')),
+                    "Oui" if d.get('significatif') else "Non",
                     d.get('sens','')]
             fmts = [None, FMT_DEC4, FMT_DEC4, FMT_DEC4, FMT_DEC4, FMT_DEC4, None, None]
             bg = GRIS_L if list(rels_p.keys()).index(var) % 2 == 0 else None
@@ -216,9 +225,13 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "", arrete: Optional[str] =
             _header(ws3, r, col, txt, w)
         r += 1
         for var, d in sorted(rels_g.items(), key=lambda x: -abs(x[1].get('beta', 0))):
+            # ⚠️ MEME DEFAUT, ONGLET GAMMA — les deux tables sont jumelles,
+            # et un correctif qui n'en prendrait qu'une laisserait la moitie
+            # du classeur signe affirmer une significativite non mesuree.
             vals = [var, d.get('beta',0), d.get('relativite',0),
                     d.get('ic95_low',0), d.get('ic95_high',0),
-                    d.get('pvalue',0), "Oui" if d.get('significatif') else "Non",
+                    mesure_arrondie(d.get('pvalue')),
+                    "Oui" if d.get('significatif') else "Non",
                     d.get('sens','')]
             fmts = [None, FMT_DEC4, FMT_DEC4, FMT_DEC4, FMT_DEC4, FMT_DEC4, None, None]
             bg = GRIS_L if list(rels_g.keys()).index(var) % 2 == 0 else None
@@ -916,8 +929,19 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
             for wf in backtest.get('walk_forward', []):
                 st = wf.get('statut','')
                 bg = {"VERT":"EAF3DE","AMBRE":"FAEEDA","ROUGE":"FCEBEB"}.get(st, GRIS_L)
+                # ⚠️⚠️ UN A/E ABSENT N'EST PAS `0` — constat `EXCEL-1`. Un
+                # ratio actuel/attendu de 0 se lit « AUCUNE charge observée
+                # sur cette fenêtre », soit le sinistre parfait ; c'est la
+                # lecture la plus rassurante qui soit, publiée sur une
+                # fenêtre que le backtest n'a pas pu mesurer. `ae_ratio` est
+                # d'ailleurs posé à `None` par A6 lui-même (a6:2046).
+                # ⚠️ Les comptes `n_train` / `n_test` gardent leur `0` : pour
+                # un DÉNOMBREMENT, zéro est une mesure vraie. *La ligne de
+                # partage n'est pas la valeur `0`, c'est ce que `0` AFFIRME.*
                 vals = [wf.get('annee_test',''), wf.get('n_train',0), wf.get('n_test',0),
-                        wf.get('moy_train',0), wf.get('moy_test',0), wf.get('ae_ratio',0), st]
+                        mesure_arrondie(wf.get('moy_train')),
+                        mesure_arrondie(wf.get('moy_test')),
+                        mesure_arrondie(wf.get('ae_ratio')), st]
                 fmts = [None,FMT_NB,FMT_NB,FMT_DEC4,FMT_DEC4,FMT_DEC4,None]
                 for j,(v,f) in enumerate(zip(vals,fmts),1):
                     _cell(ws3, r, j, v, cf=NOIR, fill=bg, fmt=f,
