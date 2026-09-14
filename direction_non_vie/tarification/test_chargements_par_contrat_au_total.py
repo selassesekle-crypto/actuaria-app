@@ -102,11 +102,21 @@ def _avec(**kw) -> PlanTarifaire:
                                chargements=Chargements(**_GENERAL, **kw))
 
 
+#: ⚠️⚠️ `declare_par` NOMME UN ROLE, ET LE VOCABULAIRE ADMIS EST CELUI DE
+#: `RD-7`. Ces deux fixtures portaient `'Direction Commerciale'` : un
+#: SERVICE, pas une personne -- mais `_MOTS_DE_ROLE` ignore le mot
+#: << commerciale >>, et la sentinelle RGPD du depot public tombait dessus.
+#: Mesure du 14/09/2026 sur le vrai detecteur : `'Direction Commerciale'`
+#: -> accusee ; `'Direction de la Souscription'` -> role ; et les etats
+#: civils de MEME FORME restent tous vus (`Jean Souscription`,
+#: `Paul Direction`, `Souscription Durand` -> accuses).
+#: *Un garde-fou RGPD ne s'elargit pas pour faire passer MON travail :
+#: c'est la fixture qui prend un mot du vocabulaire admis.*
 _EXCEPTION = ExceptionsChargements(
     selon=_AXE,
     cas=((_DEROGE, CasException(commission=0.25,
                                 motif='accord de distribution',
-                                declare_par='Direction Commerciale',
+                                declare_par='Direction de la Souscription',
                                 declare_le='2026-09-08')),))
 
 
@@ -205,7 +215,7 @@ class TestChargementsParContratAuTotal(unittest.TestCase):
         pas s'appliquer ici ; la reserve doit atteindre l'HTML ET le Word."""
         plan = _avec(exceptions_par_contrat=TableExceptionsContrat(
             source='accords commerciaux 2026', empreinte_sha256=_SHA_BIDON,
-            nb_contrats=42, declare_par='Direction Commerciale',
+            nb_contrats=42, declare_par='Direction de la Souscription',
             declare_le='2026-09-08'))
         tarif = pipeline_complet(self.df, plan)
         publie = RM.tarif_publie(tarif, self.df)
