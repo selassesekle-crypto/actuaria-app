@@ -43,7 +43,90 @@ from __future__ import annotations
 import contextlib
 import sys
 
-__all__ = ['afficher_sans_echouer', 'console_tolerante']
+__all__ = ['ENCODAGE_CONSOLE_WINDOWS_FR', 'ENCODAGE_IMPOSE',
+           'afficher_sans_echouer', 'caracteres_hors_encodage',
+           'console_tolerante', 'imposer_l_encodage_du_processus',
+           'verdict_depend_de_l_encodage']
+
+#: ⚠️⚠️ LA VARIABLE VIT ICI, ET LE LANCEUR LA LIT AU LIEU DE LA RECOPIER —
+#: constat `TEST-D2`, 12/09/2026. Deux endroits qui declarent la meme
+#: condition finissent par en declarer deux differentes.
+ENCODAGE_IMPOSE = ('PYTHONUTF8', '1')
+
+#: L'encodage par defaut d'une console Windows francaise. C'est LUI qui
+#: fait diverger les verdicts, et c'est donc lui la reference de mesure.
+ENCODAGE_CONSOLE_WINDOWS_FR = 'cp1252'
+
+
+def caracteres_hors_encodage(texte: str,
+                             encodage: str = ENCODAGE_CONSOLE_WINDOWS_FR):
+    """Les caractères de `texte` qu'`encodage` ne sait pas représenter.
+
+    ⚠️ ON RÉPOND UN ENSEMBLE, PAS UN BOOLÉEN : savoir QU'IL Y EN A ne dit
+    pas lesquels, et c'est en les nommant qu'on décide quoi en faire.
+    """
+    hors = set()
+    for c in set(texte):
+        try:
+            c.encode(encodage)
+        except (UnicodeEncodeError, LookupError):
+            hors.add(c)
+    return hors
+
+
+def verdict_depend_de_l_encodage(
+        chemins, encodage: str = ENCODAGE_CONSOLE_WINDOWS_FR) -> dict:
+    """Quels fichiers portent un caractère que `encodage` ne sait pas coder.
+
+    ⚠️⚠️ C'EST L'INSTRUMENT DU CONSTAT `TEST-D2` : le même code rend deux
+    verdicts selon l'encodage de la console, parce qu'un `print` de test
+    portant un caractère hors `cp1252` lève `UnicodeEncodeError` — et
+    l'échec de RENDU devient un échec de TEST.
+
+    Rend ``{chemin: caractères en cause}``, les fichiers sains exclus. Un
+    fichier illisible ne disparaît pas : il ressort avec la raison.
+    """
+    import pathlib
+    vus = {}
+    for chemin in chemins:
+        p = pathlib.Path(chemin)
+        try:
+            texte = p.read_bytes().decode('utf-8')
+        except (OSError, UnicodeDecodeError) as erreur:
+            vus[str(p)] = {f'<illisible : {type(erreur).__name__}>'}
+            continue
+        hors = caracteres_hors_encodage(texte, encodage)
+        if hors:
+            vus[str(p)] = hors
+    return vus
+
+
+def imposer_l_encodage_du_processus() -> bool:
+    """Rend les flux du processus incapables d'échouer à l'encodage.
+
+    ⚠️⚠️ ELLE N'EST JAMAIS APPELÉE À L'IMPORT, ET C'EST DÉLIBÉRÉ. Un module
+    qui reconfigure `sys.stdout` en étant importé impose son choix à tout
+    appelant, y compris à celui qui capture la sortie pour la vérifier —
+    c'est exactement le défaut que `test_journaux_importables` verrouille.
+    *Elle s'appelle depuis un LANCEUR, qui, lui, a le droit de decider de
+    sa propre console.*
+
+    Rend `True` si au moins un flux a été reconfiguré.
+    """
+    fait = False
+    for flux in (sys.stdout, sys.stderr):
+        reconfigurer = getattr(flux, 'reconfigure', None)
+        if reconfigurer is None:
+            continue
+        try:
+            reconfigurer(errors='backslashreplace')
+            fait = True
+        except (ValueError, OSError):
+            #: ⚠️ UN FLUX NON RECONFIGURABLE N'EST PAS UNE ERREUR -- meme
+            #: doctrine que `console_tolerante` : on le dit par le retour,
+            #: on ne leve pas dans un lanceur.
+            continue
+    return fait
 
 
 @contextlib.contextmanager

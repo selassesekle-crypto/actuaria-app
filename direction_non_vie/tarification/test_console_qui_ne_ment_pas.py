@@ -131,21 +131,62 @@ class TestUneConsoleQuiNeMentPas(unittest.TestCase):
               f"{len(agents)} agents l emploient")
 
     def test_EN3_la_gate_officielle_pose_la_variable_ELLE_MEME(self):
-        """⚠️⚠️ LU DANS LE FICHIER, PAS CRU. La gate est immune parce
-        qu'elle pose `PYTHONUTF8=1` dans l'environnement qu'elle donne a
-        ses enfants -- si elle cessait, tout le harnais deviendrait
-        dependant de la console qui le lance."""
-        src = (_RACINE / 'scripts' / 'gate.py').read_bytes().decode('utf-8')
-        poses = [n for n in ast.walk(ast.parse(src))
-                 if isinstance(n, ast.Dict) and 'PYTHONUTF8' in ast.unparse(n)]
-        self.assertTrue(
-            poses,
-            "`scripts/gate.py` ne pose plus `PYTHONUTF8` : la gate n'est "
-            "plus immune a la console qui la lance")
-        env = ast.unparse(poses[0])
-        self.assertIn("'PYTHONUTF8': '1'", env,
-                      f'la variable est posee a une autre valeur : {env[:90]}')
-        print(f"    EN-3 : la gate pose PYTHONUTF8=1 (l.{poses[0].lineno})")
+        """⚠️⚠️ MESURE SUR CE QUE LA GATE REND, PAS SUR CE QU'ELLE ECRIT.
+        La gate est immune parce qu'elle pose `PYTHONUTF8=1` dans
+        l'environnement qu'elle donne a ses enfants -- si elle cessait,
+        tout le harnais deviendrait dependant de la console qui le lance.
+
+        ⚠️⚠️ CE CONTROLE LISAIT LE TEXTE DU CODE, ET IL A ACCUSE A TORT.
+        Sa premiere version cherchait le litteral `'PYTHONUTF8': '1'` dans
+        un `ast.Dict` de `gate.py`. Le lot `TEST-D2` a fait LIRE cette
+        variable depuis le socle au lieu de la recopier -- le comportement
+        protege est intact, et ce controle est devenu ROUGE. *Un controle
+        qui lit le texte et non le comportement se trompe dans les DEUX
+        sens : il passe sur un defaut ecrit autrement, et il accuse une
+        correction qui ne change rien.*
+
+        Il appelle desormais `environnement_des_enfants()` et lit ce
+        qu'elle REND. C'est strictement plus fort : une gate qui ecrirait
+        le litteral sans jamais employer le dictionnaire passait avant, et
+        ne passe plus.
+
+        ⚠️⚠️ ET L'ENVIRONNEMENT AMBIANT EST RETIRE AVANT LA MESURE. La
+        gate construit `{**os.environ, ...}` : si la console qui lance ce
+        test porte deja `PYTHONUTF8=1`, le controle passe sur une valeur
+        que la gate n'a PAS posee. Mesure du 14/09 : un plant qui faisait
+        poser une variable SANS EFFET a la gate restait VERT, parce que
+        `os.environ` fournissait la bonne. *La question est << la gate la
+        pose-t-elle QUELLE QUE SOIT la console ? >>, et on ne peut y
+        repondre qu'en otant la console de l'equation.*
+        """
+        import importlib.util
+        chemin = _RACINE / 'scripts' / 'gate.py'
+        spec = importlib.util.spec_from_file_location('gate_sous_test',
+                                                      chemin)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _ambiant = os.environ.pop('PYTHONUTF8', None)
+        try:
+            env = module.environnement_des_enfants()
+        finally:
+            if _ambiant is not None:
+                os.environ['PYTHONUTF8'] = _ambiant
+        self.assertIsInstance(
+            env, dict,
+            "`environnement_des_enfants` ne rend plus un environnement")
+        self.assertEqual(
+            env.get('PYTHONUTF8'), '1',
+            f"la gate ne pose plus `PYTHONUTF8=1` dans l'environnement de "
+            f"ses enfants : {env.get('PYTHONUTF8')!r}. Elle n'est plus "
+            f"immune a la console qui la lance.")
+        self.assertIn(
+            'backslashreplace', str(env.get('PYTHONIOENCODING', '')),
+            f"le gestionnaire d'erreur d'encodage a disparu : "
+            f"{env.get('PYTHONIOENCODING')!r}. Sans lui, un caractere non "
+            f"representable LEVE au lieu de DEGRADER.")
+        print(f"    EN-3 : la gate REND PYTHONUTF8="
+              f"{env['PYTHONUTF8']!r} et PYTHONIOENCODING="
+              f"{env['PYTHONIOENCODING']!r}")
 
     def test_EN4_l_exposition_residuelle_est_CHIFFREE(self):
         """⚠️ UNE PHRASE DE PORTEE SE MESURE COMME UN CHIFFRE. Le README

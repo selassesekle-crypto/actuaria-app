@@ -68,6 +68,48 @@ ENCODAGE_SORTIE = 'utf-8:backslashreplace'
 _JETONS = {'OK': 'OK', 'FAILED': 'FAILED', 'NO TESTS RAN': 'AUCUN TEST'}
 
 
+def environnement_des_enfants() -> dict:
+    """L'environnement que ce lanceur donne au processus de tests.
+
+    ⚠️⚠️ LE VERDICT NE DOIT PAS DEPENDRE DE LA CONSOLE. Mesure du
+    11/09/2026 : les memes 882 tests rendent << OK >> sous `PYTHONUTF8=1`
+    et << FAILED (errors=87) >> dans une console cp1252 -- 87
+    `UnicodeEncodeError` levees par des `print` de TESTS, aucun cadre en
+    production. `backslashreplace` fait DEGRADER un caractere non
+    representable au lieu de le faire LEVER : plus aucune impression ne
+    peut faire tomber un test.
+
+    ⚠️ CE N'EST PAS LA MEME CHOSE QUE `PYTHONUTF8=1`, QUI EST CONSERVE :
+    l'un choisit l'encodage, l'autre garantit que l'ECHEC D'ENCODAGE
+    n'existe plus. Le premier seul laissait le probleme entier des qu'on
+    lancait la suite autrement que par ce script.
+
+    ⚠️⚠️ LA VARIABLE VIENT DU SOCLE, ELLE N'EST PLUS RECOPIEE ICI --
+    constat `TEST-D2`, 14/09/2026. `('PYTHONUTF8', '1')` etait ecrit a la
+    fois dans `core/sortie_console.py` (en prose) et dans ce lanceur (en
+    dur) : *deux endroits qui declarent la meme condition finissent par
+    en declarer deux differentes.*
+
+    ⚠️⚠️ ET CETTE FONCTION EXISTE POUR QU'UN CONTROLE PUISSE LA LIRE. Le
+    sceau `EN-3` verifiait le TEXTE du code -- il cherchait le litteral
+    `'PYTHONUTF8': '1'` dans un `ast.Dict` -- et il a donc ACCUSE ce lot,
+    alors que le comportement qu'il protege etait intact. *Un controle
+    qui lit le texte et non le comportement se trompe dans les DEUX
+    sens.* Il appelle desormais cette fonction et lit ce qu'elle REND.
+
+    ⚠️ LA RACINE ENTRE DANS `sys.path` AVANT L'IMPORT : ce script vit dans
+    `scripts/`, et sans cela `core` n'est pas importable -- le lanceur
+    ENTIER tombait, et mon premier sceau ne l'avait pas vu.
+    """
+    racine = str(pathlib.Path(__file__).resolve().parent.parent)
+    if racine not in sys.path:
+        sys.path.insert(0, racine)
+    from core.sortie_console import ENCODAGE_IMPOSE
+    cle, valeur = ENCODAGE_IMPOSE
+    return {**os.environ, cle: valeur, 'PYTHONPATH': '.',
+            'PYTHONIOENCODING': ENCODAGE_SORTIE}
+
+
 def _verdict(chemin: pathlib.Path) -> tuple[str, int]:
     """Le verdict LU AU FICHIER, DANS LE BLOC DU LANCEUR : (etat, nb tests).
 
@@ -125,18 +167,7 @@ def main() -> int:
     delai = a.delai or DELAIS.get(a.cible, DELAI_PAR_DEFAUT)
     sortie = pathlib.Path(a.sortie or (
         pathlib.Path(tempfile.gettempdir()) / f'gate_{a.cible.replace("/", "_")}.txt'))
-    # ⚠️⚠️ LE VERDICT NE DOIT PAS DEPENDRE DE LA CONSOLE. Mesure du
-    # 11/09/2026 : les memes 882 tests rendent « OK » sous `PYTHONUTF8=1` et
-    # « FAILED (errors=87) » dans une console cp1252 — 87 `UnicodeEncodeError`
-    # levees par des `print` de TESTS, aucun cadre en production.
-    # `backslashreplace` fait DEGRADER un caractere non representable au lieu
-    # de le faire LEVER : plus aucune impression ne peut faire tomber un test.
-    # ⚠️ CE N'EST PAS LA MEME CHOSE QUE `PYTHONUTF8=1`, QUI EST CONSERVE :
-    # l'un choisit l'encodage, l'autre garantit que l'ECHEC D'ENCODAGE
-    # n'existe plus. Le premier seul laissait le probleme entier des qu'on
-    # lancait la suite autrement que par ce script.
-    env = {**os.environ, 'PYTHONUTF8': '1', 'PYTHONPATH': '.',
-           'PYTHONIOENCODING': ENCODAGE_SORTIE}
+    env = environnement_des_enfants()
 
     print(f'  gate {a.cible} — delai {delai} s — sortie {sortie}')
     t0 = time.time()
