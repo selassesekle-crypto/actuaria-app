@@ -362,6 +362,77 @@ class SeuilGrave:
 #: Goldens mis a jour dans le MEME commit.
 EMPREINTE_SCHEMA = 10
 
+# ⚠️⚠️ L'HISTORIQUE EST UNE TABLE VÉRIFIÉE À L'IMPORT, PAS UN COMMENTAIRE
+# DE PLUS — constat `PT-D1`, 12/09/2026. Le bloc ci-dessus documentait
+# chaque bump depuis `s1`… et il en manquait un : `5 -> 6` n'y figure pas.
+#   Mesuré par `git log -S` : le commit `4cb2abc` (02/09/2026) porte
+#   `EMPREINTE_SCHEMA` de 5 à 6 et fait entrer `valeurs_absentes` dans le
+#   payload — vérifié présent dans `empreinte()` aujourd'hui — SANS note de
+#   bump et sans la mesure « aucune empreinte s5: persistée ».
+# *Un contestataire d'une empreinte `s5:` ou `s6:` ne pouvait pas savoir ce
+# qui avait changé entre les deux, donc ne pouvait pas juger si l'écart
+# qu'il observe vient du plan ou de la structure.* C'est le seul défaut de
+# cette liste qui porte sur l'OPPOSABILITÉ plutôt que sur un chiffre.
+#
+# ⚠️ UNE SUITE DOCUMENTÉE N'EST PAS UNE SUITE TENUE. Le dépôt a déjà payé
+# cette leçon (03/09/2026). Celle-ci est tenue PAR CONSTRUCTION : un bump
+# sans note, ou une note sans bump, fait échouer l'import de ce module.
+HISTORIQUE_SCHEMA: dict[int, str] = {
+    2: ("`unite_exposition` entre dans le payload (31/08/2026). Mesuré "
+        "avant le bump : aucune empreinte `s1:` persistée."),
+    3: ("`chargements` (plan) et `bornes` (facteur) entrent dans le "
+        "payload (31/08/2026) : une taxe décide de la prime payée, une "
+        "borne refuse un contrat."),
+    4: ("le `commentaire` du facteur entre dans le payload — constat "
+        "`plan/C8` (01/09/2026). Seul champ haché qui ne change pas un "
+        "prix : l'empreinte scelle LE DOCUMENT SIGNÉ."),
+    5: ("`cout_par_sinistre` entre dans le payload — constat `socle/C1` "
+        "(01/09/2026). Elle décide de l'ASSIETTE du seuil d'écrêtement."),
+    # ⚠️⚠️ LA GÉNÉRATION QUI MANQUAIT, ET SA MESURE MANQUANTE EST DITE.
+    # Les huit autres notes portent « aucune empreinte sN: persistée,
+    # mesuré AVANT le bump ». Pour `s5`, cette mesure n'a pas été faite à
+    # l'époque et ne peut plus l'être : le bump est passé. *Le dire vaut
+    # mieux que l'affirmer* — on ne fabrique pas rétroactivement une
+    # vérification qui n'a pas eu lieu.
+    6: ("`valeurs_absentes` entre dans le payload — qualité, commit "
+        "`4cb2abc` (02/09/2026). NOTE AJOUTÉE APRÈS COUP le 14/09/2026 "
+        "(constat `PT-D1`) : la mesure « aucune empreinte `s5:` "
+        "persistée » N'A PAS été faite avant ce bump et ne peut plus "
+        "l'être. Une empreinte `s5:` signée auparavant se compare donc "
+        "sans garantie de non-persistance."),
+    7: ("`seuil_grave` entre dans le payload (05/09/2026) : un seuil "
+        "déclaré écrête les sinistres et réinjecte la charge en prime "
+        "unitaire. Mesuré avant le bump : aucune empreinte `s6:` "
+        "persistée."),
+    8: ("`refus_anti_selection` entre dans le payload (05/09/2026) : le "
+        "seul champ qui décide qu'AUCUN tarif ne sort. Mesuré avant le "
+        "bump : aucune empreinte `s7:` persistée."),
+    9: ("`regime_fiscal` entre dans le payload (08/09/2026) : il décide "
+        "du taux qui transforme la prime HT en prime PAYÉE. Mesuré avant "
+        "le bump : aucune empreinte `s8:` persistée."),
+    10: ("le bloc `chargements` change de FORME et de SENS (08/09/2026) : "
+         "il perd ses valeurs par défaut, `taxes` y devient optionnel, et "
+         "il porte QUI a déclaré, QUAND, les EXCEPTIONS par critère et la "
+         "déclaration d'une table par contrat. Mesuré avant le bump : "
+         "aucune empreinte `s9:` persistée."),
+}
+
+#: ⚠️ LA VÉRIFICATION EST À L'IMPORT, et c'est tout l'intérêt : un lot qui
+#: bumpe sans écrire sa note ne passe pas la porte. La borne basse est 2 —
+#: `s1` est la génération d'origine, elle n'a pas de « ce qui a changé ».
+_SANS_NOTE = [n for n in range(2, EMPREINTE_SCHEMA + 1)
+              if n not in HISTORIQUE_SCHEMA]
+_SANS_BUMP = sorted(n for n in HISTORIQUE_SCHEMA
+                    if not 2 <= n <= EMPREINTE_SCHEMA)
+if _SANS_NOTE or _SANS_BUMP:
+    raise RuntimeError(
+        f"HISTORIQUE_SCHEMA ne correspond pas a EMPREINTE_SCHEMA="
+        f"{EMPREINTE_SCHEMA}. Generation(s) SANS NOTE : {_SANS_NOTE} ; "
+        f"note(s) SANS BUMP : {_SANS_BUMP}. Constat `PT-D1` : l'historique "
+        f"publie de l'empreinte opposable ne doit sauter aucune generation "
+        f"-- un contestataire ne peut pas juger un ecart qu'aucune note "
+        f"n'explique.")
+
 # Transformations dérivées : suffixe appliqué par A2
 _SUFFIXE_TRANSFO = {"log": "log_{}", "carre": "{}_carre", "racine": "{}_racine"}
 
