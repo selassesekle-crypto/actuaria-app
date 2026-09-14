@@ -126,10 +126,6 @@ class T2_LaRegleArbitree(unittest.TestCase):
         print("    OK motif : les classes de test sont exclues par MOTIF")
 
 
-if __name__ == '__main__':
-    unittest.main(verbosity=2)
-
-
 def _outil():
     """Le module de l'outil, charge depuis son chemin (il vit hors paquet)."""
     import importlib.util
@@ -211,3 +207,21 @@ class T3_LEtatAbsolu(unittest.TestCase):
         avant = corps[:i].split('\n')[-3:]
         self.assertNotIn('if ', '\n'.join(avant),
                          "le total du lot ne doit etre sous AUCUNE condition")
+
+
+# ⚠️⚠️ LA GARDE EST EN FIN DE FICHIER, ET LA MESURE EST ICI POUR QU'UN
+# FUTUR LOT NE LA REDEPLACE PAS EN CROYANT RANGER — constat `TEST-D1`,
+# 12/09/2026. Elle vivait a la ligne 129, avec `T3_LEtatAbsolu` APRES
+# elle : `unittest.main()` s'execute puis appelle `sys.exit()`, donc tout
+# ce qui suit n'est JAMAIS defini.
+#   La gate (`discover`) importe le module et les voit ; la porte DIRECTE
+#   -- celle qu'on emprunte pour verifier un fichier qu'on modifie, et que
+#   le pied de page invite explicitement -- non.
+# Mesure du 14/09/2026 sur ce fichier, `PYTHONPATH` pose sur la racine :
+#     py <ce fichier>                          -> Ran  5 tests
+#     unittest discover (ce que fait la gate)  -> Ran 10 tests
+#     donc 5 tests INVISIBLES par la porte directe.
+# ⚠️ Le depot a deja paye cette classe de defaut : 163 tests invisibles,
+# 03/09/2026.
+if __name__ == '__main__':
+    unittest.main(verbosity=2)

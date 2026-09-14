@@ -358,10 +358,6 @@ class TestListeDisqualifiante(unittest.TestCase):
               "et sans publier une seule position")
 
 
-if __name__ == '__main__':
-    unittest.main(verbosity=2)
-
-
 class TestUnionJamaisSomme(unittest.TestCase):
     """⛔⛔ `qualite/C18` — LE RAPPORT SIGNE ADDITIONNAIT DES COMPTES QUI SE
     RECOUPENT.
@@ -643,3 +639,21 @@ class TestAmpleurDeLExclusion(unittest.TestCase):
                 f"module ne sait pas")
         print("    AM-4 67 % de perte : phrase d'ampleur PUBLIEE, pastille "
               "AMBRE (jamais << Non conforme >>)")
+
+
+# ⚠️⚠️ LA GARDE EST EN FIN DE FICHIER, ET LA MESURE EST ICI POUR QU'UN
+# FUTUR LOT NE LA REDEPLACE PAS EN CROYANT RANGER — constat `TEST-D1`,
+# 12/09/2026. Elle vivait a la ligne 361, avec `TestUnionJamaisSomme` ET
+# `TestAmpleurDeLExclusion` APRES elle : `unittest.main()` s'execute puis
+# appelle `sys.exit()`, donc tout ce qui suit n'est JAMAIS defini.
+#   La gate (`discover`) importe le module et les voit ; la porte DIRECTE
+#   -- celle qu'on emprunte pour verifier un fichier qu'on modifie, et que
+#   le pied de page invite explicitement -- non.
+# Mesure du 14/09/2026 sur ce fichier, `PYTHONPATH` pose sur la racine :
+#     py <ce fichier>                          -> Ran 11 tests
+#     unittest discover (ce que fait la gate)  -> Ran 21 tests
+#     donc 10 tests INVISIBLES par la porte directe.
+# ⚠️ Avec `core/test_proprete_outil.py`, cela faisait QUINZE tests sur
+# trente-et-un invisibles dans le perimetre.
+if __name__ == '__main__':
+    unittest.main(verbosity=2)
