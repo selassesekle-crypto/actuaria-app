@@ -83,3 +83,36 @@ audit/
 NUL
 RAA_commentaire.txt
 *_commentaire.txt
+
+# ══════════════════════════════════════════════════════════════════════
+#  LES POIDS DE MODELES ENTRAINES — 14/09/2026
+# ══════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ DES POIDS SONT DES DONNEES PERSONNELLES DERIVEES, PAS DU CODE. Un
+# reseau ou un arbre entraine porte la trace du portefeuille qui l'a
+# produit ; un depot PUBLIC n'en recoit aucun.
+#
+# Releve du 14/09/2026, avant d'ecrire ces lignes :
+#   . fichiers de modele SUIVIS par git : **0** — rien n'est masque ici ;
+#   . mais AUCUNE des 21 regles existantes ne couvrait une extension de
+#     poids. `torch_extensions/` et `torch_compile_debug/` ignorent des
+#     dossiers de BUILD, jamais les poids eux-memes ;
+#   . sur le disque, `/tmp/actuaria` portait 11 poids (9 `.pkl` d'A4, 2
+#     `.pt` d'A5), 2,29 Mo, en `-rw-rw-rw-`, sans aucune purge.
+#
+# *Ces lignes ferment un trou avant qu'il serve, comme celles des
+# porteurs de secret plus haut : le seul moment ou l'on peut empecher un
+# fichier de partir est avant qu'il existe.*
+#
+# ⚠️ CE QUI N'EST PAS FERME ICI, ET QUI EST DIT : il n'existe TOUJOURS
+# aucune duree de retention ni aucune purge des poids ecrits hors du
+# depot. C'est une decision de la direction technique, pas une ligne de
+# `.gitignore`.
+*.pt
+*.pth
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.onnx
+*.safetensors
+*.ckpt
