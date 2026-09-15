@@ -288,12 +288,35 @@ class TestTariferLaPublie(unittest.TestCase):
     def test_EX2b_un_contrat_REFUSE_ne_pretend_pas_avoir_une_duree(self):
         """⚠️ Le chemin d'echec ne doit pas publier une duree retenue : rien
         n'a ete tarife. *Une cle presente sur un refus se lirait comme un
-        resultat.*"""
+        resultat.*
+
+        ⚠️⚠️ CE CONTROLE EXIGEAIT L'ABSENCE DE LA CLE, ET L'ABSENCE N'EST PAS
+        CE QU'IL VEUT DIRE. Il ecrivait `assertNotIn('exposition_retenue', r)`.
+        Le 15/09/2026, `PIPE-4` a donne a `tarifer()` un GABARIT : les trois
+        chemins rendent desormais les MEMES vingt cles, les non mesurees a
+        `None`. La cle est donc la -- **et elle ne pretend RIEN** : dans ce
+        depot, `None` se lit << non mesure >>, jamais << zero >>.
+          *Ce qui se lirait comme un resultat, c'est une VALEUR sur un
+          refus, pas un nom de cle.* Le controle porte desormais sur la
+          valeur -- il est plus etroit sur son sujet, et il survit a la
+          syntaxe. Et il verifie EN PLUS ce que l'ancienne version ne
+          pouvait pas : que la cle est bien LA, donc qu'aucun lecteur ne
+          recevra son propre litteral.
+        """
         r = self.tarif.tarifer({**self.contrat, 'age': 'illisible'})
-        if not r['success']:
-            self.assertNotIn('exposition_retenue', r,
-                             'un contrat NON TARIFABLE publie une duree '
-                             'retenue : il n y a pourtant aucun prix')
+        self.assertFalse(r['success'],
+                         'le contrat sale devait etre REFUSE : ce controle '
+                         'ne mesure plus le chemin qu il decrit')
+        self.assertIn('exposition_retenue', r,
+                      'la cle a disparu du contrat de sortie : un lecteur '
+                      'posera de nouveau son propre litteral')
+        self.assertIsNone(r['exposition_retenue'],
+                          f"un contrat NON TARIFABLE publie une duree "
+                          f"retenue ({r['exposition_retenue']!r}) : il n y a "
+                          f"pourtant aucun prix")
+        self.assertIsNone(r['exposition_source'],
+                          'la SOURCE d une duree qui n a pas ete retenue est '
+                          'publiee : elle affirme une provenance inexistante')
 
 
 if __name__ == '__main__':

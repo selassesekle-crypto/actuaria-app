@@ -132,7 +132,13 @@ _SOCLE = _RACINE / 'core' / 'sortie_console.py'
 #:
 #: ⚠️ CE PLAFOND NE PEUT QUE BAISSER. Il ne se releve que sur un fichier
 #: AJOUTE, jamais sur un fichier qui se met a dependre de l'encodage.
-_FICHIERS_A_RISQUE = 357
+#:
+#: 15/09/2026, 357 -> 358 : `test_panne_qui_ne_parle_qu_au_journal.py`,
+#: le sceau de la famille (8) (`A1-2`, `A5-1`, `PIPE-4`). UN fichier
+#: AJOUTE, pas un fichier qui se degrade -- la seule hausse que ce
+#: plafond admet. Quatrieme hausse posee DANS LE LOT qui la cause et
+#: AVANT sa gate.
+_FICHIERS_A_RISQUE = 358
 
 
 def _fichiers_de_test() -> list:
