@@ -54,6 +54,7 @@ import sys
 import unittest
 import warnings
 import zipfile
+from typing import ClassVar
 
 _RACINE = pathlib.Path(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
@@ -331,6 +332,122 @@ class TestChargementsParContratAuTotal(unittest.TestCase):
               f"chargements -> constat "
               f"{'VIVANT ' + str(avec) if avec else 'LATENT'}")
         self.assertIsInstance(avec, list)
+
+
+# =============================================================================
+#  CORE-2 — UNE TABLE PAR CONTRAT SANS IDENTIFIANT NE S'APPLIQUE JAMAIS
+# =============================================================================
+
+class TestTablePar_ContratExigeUnIdentifiant(unittest.TestCase):
+    """⚠️⚠️ LE MÊME DEUX-SENS QUE POUR L'AXE CATÉGORIEL, ET IL MANQUAIT LÀ OÙ
+    IL COÛTE LE PLUS.
+
+    `chargements_du_contrat` joint la table au portefeuille par
+    `plan.identifiant_contrat`, et **par lui seul** : sans ce nom, `cle` vaut
+    `None`, `ligne` vaut `None`, et le taux GÉNÉRAL s'applique **sans un mot**
+    — alors que la déclaration est scellée (sha256), signée par un rôle et
+    datée, c'est-à-dire tout ce qu'un régulateur demande.
+
+    MESURE DU 15/09/2026, deux plans identiques à ce nom près, même contrat,
+    même table déjà chargée :
+
+        avec `identifiant_contrat`   coef 1.071837   prime HT 438,62 EUR
+        sans                         coef 1.396706   prime HT 571,56 EUR
+        **écart +132,94 EUR, soit +30,3 %**, payés par le contrat qui avait
+        une dérogation signée.
+
+    ⚠️ `valider_chargements` DÉNONÇAIT DÉJÀ CE DÉFAUT, DEUX FOIS, dans ses
+    propres mots — « Une règle écrite pour une modalité inexistante ne se
+    déclenche jamais : elle a l'apparence d'un garde-fou sans en être un » —
+    et ne se l'appliquait pas. *Le motif du chantier, appliqué au filet.*
+    """
+
+    #: ⚠️ `ClassVar` DECLARE, et `RUF012` avait raison : un dict de classe
+    #: mutable partage serait modifiable par un test et lu par le suivant.
+    #: Chaque appel en construit un objet neuf ci-dessous.
+    _TABLE: ClassVar[dict] = {
+        'source': 'table_grands_comptes_2026.csv',
+        'empreinte_sha256': 'a' * 64,
+        'nb_contrats': 1,
+        'declare_par': 'Direction Technique (role)',
+        'declare_le': '2026-09-15',
+    }
+
+    def _chargements(self):
+        from core.plan_tarifaire import TableExceptionsContrat
+        return Chargements(frais=0.12, commission=0.15, marge=0.06,
+                           taxes=None,
+                           declare_par='Direction Technique (role)',
+                           declare_le='2026-09-15',
+                           exceptions_par_contrat=TableExceptionsContrat(
+                               **self._TABLE))
+
+    def _plan(self, identifiant):
+        #: ⚠️ LE PLAN VERSIONNE, pas un plan fabrique : le refus doit tomber
+        #: sur ce qu'un actuaire ecrit vraiment.
+        base = PlanTarifaire.depuis_yaml(str(_PLANS / 'auto.yaml'))
+        return dataclasses.replace(base,
+                                   chargements=self._chargements(),
+                                   identifiant_contrat=identifiant)
+
+    def test_CORE2_sans_identifiant_le_plan_est_REFUSE(self):
+        """La déclaration est refusée AU PLAN, pas découverte au run."""
+        with self.assertRaises(ValueError) as capture:
+            self._plan(None)
+        message = str(capture.exception)
+        for attendu in ('identifiant_contrat', 'JAMAIS', 'taux général'):
+            self.assertIn(
+                attendu, message,
+                f"le refus ne dit pas {attendu!r} : un plan refusé sans sa "
+                f"raison se contourne au lieu de se corriger.\n{message}")
+        print('    CORE-2 table par contrat sans identifiant -> REFUSEE')
+
+    def test_CORE2b_SECOND_SENS_avec_identifiant_le_plan_PASSE(self):
+        """⚠️ Sans ce sens, un contrôle qui refuse TOUT serait vert aussi."""
+        plan = self._plan('id_contrat')
+        self.assertEqual(plan.identifiant_contrat, 'id_contrat')
+        print('    CORE-2b second sens : avec identifiant -> ACCEPTE')
+
+    def test_CORE2c_et_le_prix_DIVERGE_vraiment_sans_lui(self):
+        """⚠️⚠️ LA MESURE QUI FONDE LE GARDE-FOU, REJOUÉE ICI.
+
+        Elle ne passe PAS par le plan (qui refuse désormais) mais par
+        `chargements_du_contrat` lui-même : c'est lui qui joint, c'est donc
+        lui qu'il faut interroger. *Un garde-fou dont on ne mesure plus le
+        motif finit par être retiré comme une gêne.*
+        """
+        from core.chargements_declares import (
+            EXCEPTION_CONTRAT,
+            GENERAL,
+            chargements_du_contrat,
+        )
+        from core.plan_tarifaire import coefficient_ht
+
+        class _Faux:
+            pass
+        contenu = {'CTR-001': {'frais': 0.04, 'commission': 0.02,
+                               'marge': 0.01, 'motif': 'grand compte'}}
+        contrat = {'id_contrat': 'CTR-001'}
+        prix = {}
+        for etiquette, idc in (('avec', 'id_contrat'), ('sans', None)):
+            faux = _Faux()
+            faux.chargements = self._chargements()
+            faux.identifiant_contrat = idc
+            valeurs, origine, _ = chargements_du_contrat(faux, contrat, contenu)
+            prix[etiquette] = (coefficient_ht(valeurs), origine)
+        self.assertEqual(prix['avec'][1], EXCEPTION_CONTRAT)
+        self.assertEqual(
+            prix['sans'][1], GENERAL,
+            'sans identifiant, la table s applique quand meme : ce garde-fou '
+            'n a plus de motif, relisez-le avant de le retirer')
+        ecart = prix['sans'][0] / prix['avec'][0] - 1
+        self.assertGreater(
+            ecart, 0.25,
+            f'l ecart mesure ({ecart:+.1%}) est tombe sous 25 % : la mesure '
+            f'du 15/09 en donnait +30,3 %. Si les taux du cas ont change, '
+            f'mettez ce seuil a jour AVEC sa nouvelle mesure.')
+        print(f'    CORE-2c sans identifiant : prix +{ecart:.1%} '
+              f'(table signee ignoree en silence)')
 
 
 if __name__ == '__main__':

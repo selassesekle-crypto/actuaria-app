@@ -1128,7 +1128,10 @@ class PlanTarifaire:
         # ⚠️ LE RESTE DE LA RÈGLE VIT DANS `core.chargements_declares` : elle a
         # besoin des FACTEURS pour vérifier qu'une exception porte sur un axe
         # qui existe, et dans les DEUX SENS.
-        valider_chargements(self.chargements, self.facteurs, self.lob)
+        # ⚠️ ET IL A BESOIN DU NOM DE L'IDENTIFIANT : une table d'exceptions
+        # PAR CONTRAT ne se joint au portefeuille que par lui.
+        valider_chargements(self.chargements, self.facteurs, self.lob,
+                            self.identifiant_contrat)
         # ⚠️ LE VOCABULAIRE ET LES DEUX SENS DU ROUTAGE SONT VÉRIFIÉS LÀ-BAS :
         # `core.taxes_assurance` est le seul à connaître les régimes admis.
         valider_declaration(self.regime_fiscal, self.facteurs, self.lob)

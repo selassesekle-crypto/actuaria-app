@@ -222,7 +222,8 @@ def _refuser_taux(nom: str, valeur, ou: str) -> float:
     return valeur
 
 
-def valider_chargements(chargements, facteurs: Sequence, lob: str) -> None:
+def valider_chargements(chargements, facteurs: Sequence, lob: str,
+                        identifiant_contrat) -> None:
     """Refuse une déclaration de chargements qui ne peut pas être tenue.
 
     ⚠️⚠️ TOUT OU RIEN SUR LES TROIS. Déclarer `frais` sans `commission` est une
@@ -234,6 +235,13 @@ def valider_chargements(chargements, facteurs: Sequence, lob: str) -> None:
     ⚠️⚠️ ET LES DEUX SENS DU ROUTAGE, comme pour le régime fiscal : une
     exception sur une modalité qui n'existe pas est une règle qui **ne se
     déclenchera jamais**, donc un garde-fou qui n'en est pas.
+
+    ⚠️⚠️ `identifiant_contrat` N'A PAS DE VALEUR PAR DÉFAUT, ET C'EST VOULU.
+    Un `= None` laisserait un futur appelant rouvrir le trou en silence, et
+    ce contrôle-ci existe précisément parce qu'un trou s'était ouvert en
+    silence. Il n'y a **qu'un seul appelant** (`PlanTarifaire`, relevé par
+    AST le 15/09/2026), et il possède le nom : le lui faire passer coûte un
+    argument et ferme le cas.
     """
     if chargements is None:
         return
@@ -321,6 +329,30 @@ def valider_chargements(chargements, facteurs: Sequence, lob: str) -> None:
     if tab is not None:
         if not isinstance(tab, TableExceptionsContrat):
             raise TypeError(f"{ou} : `exceptions_par_contrat` mal formé.")
+        # ⚠️⚠️ LE MÊME DEUX-SENS QUE CI-DESSUS, ET IL MANQUAIT PRÉCISÉMENT
+        # LÀ OÙ IL COÛTE LE PLUS. `chargements_du_contrat` joint la table au
+        # portefeuille par `plan.identifiant_contrat` : sans ce nom, `cle`
+        # vaut `None`, `ligne` vaut `None`, et **le taux GÉNÉRAL s'applique
+        # sans un mot**. La déclaration est pourtant scellée (sha256), signée
+        # par un rôle et datée — tout ce qu'un régulateur demande.
+        #   *Mesuré le 15/09/2026, deux plans identiques à ce nom près, même
+        #   contrat, même table : prime HT 438,62 EUR contre 571,56 EUR, soit
+        #   **+132,94 EUR et +30,3 %** payés par le contrat qui avait une
+        #   dérogation signée.*
+        # ⚠️ Et c'est le défaut que cette fonction DÉNONCE deux fois plus
+        # haut, dans ses propres mots : « Une règle écrite pour une modalité
+        # inexistante ne se déclenche jamais : elle a l'apparence d'un
+        # garde-fou sans en être un. » Elle ne se l'appliquait pas.
+        if not str(identifiant_contrat or '').strip():
+            raise ValueError(
+                f"{ou} : une table d'exceptions PAR CONTRAT est déclarée "
+                f"({tab.nb_contrats} contrat(s), source {tab.source!r}), mais "
+                f"le plan ne déclare AUCUN `identifiant_contrat`. La table se "
+                f"joint au portefeuille par ce nom et par lui seul : sans "
+                f"lui, elle ne s'appliquerait JAMAIS, et chaque contrat "
+                f"qu'elle nomme paierait le taux général — en silence. "
+                f"Déclarez `identifiant_contrat` sur le plan, ou retirez "
+                f"`exceptions_par_contrat`.")
         emp = str(tab.empreinte_sha256 or '')
         if len(emp) != 64 or any(c not in '0123456789abcdef' for c in emp):
             raise ValueError(

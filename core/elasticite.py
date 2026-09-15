@@ -39,7 +39,35 @@ from typing import NamedTuple
 #   Il est au niveau MODULE, contrairement aux autres imports de ce fichier :
 #   ceux-là sont différés parce qu'ils sont LOURDS (numpy, statsmodels).
 #   `core.plan_tarifaire` coûte 0,115 s et n'amène aucun tiers — mesuré.
+from core.format_fr import nombre as _milliers
 from core.plan_tarifaire import CHARGEMENTS_DEFAUT
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  LE SÉPARATEUR DE MILLIERS SE POSE **AU NOMBRE**, JAMAIS À LA PHRASE
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ CONSTAT `CORE-3`, ET SON ASSIETTE RÉELLE EST DE QUATRE SITES, PAS D'UN.
+# Le fichier portait le même défaut sous ses **deux formes symétriques** :
+#
+#   A  `f"… {n:,} …".replace(',', ' ')` — la conversion est appliquée à la
+#      PHRASE ENTIÈRE, donc elle mange aussi les virgules GRAMMATICALES.
+#      Mesuré à `l.1217` : « eps = -0.8421, IC 95 % » devenait
+#      « eps = -0.8421  IC 95 % », et « — voie renouvellement, 12 450 »
+#      devenait « — voie renouvellement  12 450 ». **Deux virgules perdues
+#      dans la même phrase signée.**
+#   B  `f"… {n:,} …"` sans aucune conversion — la phrase signée publie alors
+#      un séparateur ANGLAIS : `12,450`. Deux sites, dont le `motif` que
+#      `synthese_elasticite` republie tel quel.
+#
+# *Une phrase n'est pas un nombre : ce qui vaut pour le second ne s'applique
+# pas au premier.* Les quatre sites lisent désormais `core.format_fr`, qui
+# EXISTE pour être la source unique — écrire ici un seizième formateur privé
+# serait exactement ce que ce module a été créé pour empêcher.
+#
+# ⚠️ CONSÉQUENCE ASSUMÉE ET MESURÉE : le séparateur devient l'espace fine
+# INSÉCABLE (U+202F) au lieu de l'espace ordinaire. C'est la convention du
+# dépôt, et sa raison est écrite dans `format_fr` : une espace ordinaire
+# autorise une coupure de ligne, donc un montant scindé en deux dans un
+# rapport signé.
 
 #: ⚠️ LE VOCABULAIRE DES SOURCES, REPRIS DU SOCLE — il existe pour empêcher
 #: qu'une règle maison passe silencieusement pour une obligation. Ici il n'a
@@ -659,8 +687,9 @@ def estimer_elasticite(plan, df, diag=None,
 
     return {**chiffre, 'concluante': True, 'motif': (
         f"Élasticité-prix estimée à {eps:+.4f}, intervalle de confiance à "
-        f"95 % [{bas:+.4f} ; {haut:+.4f}], sur {int(ok.sum()):,} "
-        f"renouvellements dont {int(np.sum(y > 0)):,} résiliations.")}
+        f"95 % [{bas:+.4f} ; {haut:+.4f}], sur {_milliers(int(ok.sum()))} "
+        f"renouvellements dont {_milliers(int(np.sum(y > 0)))} "
+        f"résiliations.")}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1165,7 +1194,7 @@ def sensibilite_tarifaire(plan, df, etat, variations=VARIATIONS_DEFAUT,
         'elasticite_ic': [est.get('ic_bas'), est.get('ic_haut')],
         'motif': (
             f"Sensibilite tracee depuis le modele de resiliation ajuste, sur "
-            f"{pf['n_contrats']:,} contrats, avec l'incertitude de "
+            f"{_milliers(pf['n_contrats'])} contrats, avec l'incertitude de "
             f"l'estimation (eps = {est.get('elasticite'):+.4f}, IC 95 % "
             f"[{est.get('ic_bas'):+.4f} ; {est.get('ic_haut'):+.4f}])."),
         **_lire_optimum(scenarios, domaine),
@@ -1216,9 +1245,9 @@ def synthese_elasticite(etat, sensibilite=None) -> str | None:
         lignes.append(
             f"ELASTICITE-PRIX : ESTIMEE. eps = {est.get('elasticite'):+.4f}, "
             f"IC 95 % [{est.get('ic_bas'):+.4f} ; {est.get('ic_haut'):+.4f}] "
-            f"— voie {est.get('voie')}, {est.get('n_lignes'):,} "
-            f"renouvellements dont {est.get('n_resiliations'):,} "
-            f"resiliations.".replace(',', ' '))
+            f"— voie {est.get('voie')}, "
+            f"{_milliers(est.get('n_lignes'))} renouvellements dont "
+            f"{_milliers(est.get('n_resiliations'))} resiliations.")
         if est.get('reserve'):
             lignes.append(f"   ⚠ {est['reserve']}")
     else:
@@ -1236,8 +1265,8 @@ def synthese_elasticite(etat, sensibilite=None) -> str | None:
             opt = s.get('optimum') or {}
             lignes.append(
                 f"SENSIBILITE TARIFAIRE : tracee sur "
-                f"{(s.get('portefeuille') or {}).get('n_contrats', 0):,} "
-                f"contrats.".replace(',', ' '))
+                f"{_milliers((s.get('portefeuille') or {}).get('n_contrats', 0))} "
+                f"contrats.")
             if opt:
                 lignes.append(
                     f"   Optimum de marge : {opt.get('variation_pct')} "

@@ -43,6 +43,7 @@ from unittest import mock
 
 import pandas as pd
 
+import core.plan_tarifaire as _PT
 from core import mapping_llm
 from direction_non_vie.tarification.a1_ingestion.agent import SYNONYMES_COLONNES
 from direction_non_vie.tarification.test_pipeline_agents import _PLAN_AUTO
@@ -55,6 +56,26 @@ _PLAN_ROLES = dataclasses.replace(_PLAN_AUTO, identifiant_contrat='id_contrat',
 # s'appuyer sur une absence implicite fait dependre le test d'un fichier livre.
 _PLAN_SANS_ROLE = dataclasses.replace(_PLAN_AUTO, identifiant_contrat=None,
                                       echeance=None)
+
+
+def _plan_tous_roles():
+    """Le plan qui declare TOUS les roles de donnees qu'il sait declarer.
+
+    ⚠⚠ IL SE CONSTRUIT PAR RELEVE DE STRUCTURE, PAS PAR LISTE ECRITE. Une
+    liste de champs recopiee ici reproduirait, un cran plus haut, le defaut
+    que ce sceau poursuit : elle vieillirait en silence au premier champ
+    ajoute. `dataclasses.fields(Comportement)` vieillit avec la classe.
+
+    ⚠ CE QUE CE FILET NE COUVRE PAS, ET IL FAUT LE DIRE : il derive les
+    champs du bloc `comportement` et les deux roles scalaires du plan. Un
+    role d'une TROISIEME forme -- un nouveau bloc porteur de colonnes, ajoute
+    a `PlanTarifaire` -- lui echapperait jusqu'a ce qu'on l'ajoute ici. *Nommer
+    la borne d'un filet reste ce qui empeche de le croire plus large qu'il
+    n'est.*
+    """
+    champs = [f.name for f in dataclasses.fields(_PT.Comportement)]
+    bloc = _PT.Comportement(**{nom: f'col_{nom}' for nom in champs})
+    return dataclasses.replace(_PLAN_ROLES, comportement=bloc)
 
 
 def _sans_cle():
@@ -135,15 +156,36 @@ class TestLeVocabulaireDuMappingLLM(unittest.TestCase):
         `date_echeance` etait la SEULE ; le defaut est desormais vide.
         *Ce test tombera le jour ou un nouveau role sera ajoute au plan sans
         etre nomme ici, c'est-a-dire avant qu'il ne soit mal presente.*
+
+        ⚠⚠ ET CETTE PHRASE ETAIT FAUSSE, MESUREE LE 11/09/2026. Le sceau
+        tournait sur `_PLAN_ROLES`, qui ne declare AUCUN bloc `comportement` :
+        les cinq colonnes de ce bloc n'entraient donc jamais dans son assiette.
+        Elles sont arrivees au plan apres ce lot, ne furent pas nommees dans
+        `_roles_attendus`, et le sceau est reste VERT -- exactement le cas
+        qu'il promettait d'attraper. Mesure : 0 defaut sur `_PLAN_ROLES`,
+        **5** sur le meme plan portant le bloc, et le prompt reel portait cinq
+        lignes « : facteur ».
+          *Un controle peut ATTESTER sans SURVEILLER ; la question a lui poser
+          est toujours << sur quelle ASSIETTE ? >>.*
         """
-        roles = mapping_llm._roles_attendus(_PLAN_ROLES)
-        sans = [c for c in _PLAN_ROLES.colonnes_attendues() if c not in roles]
+        plan = _plan_tous_roles()
+        roles = mapping_llm._roles_attendus(plan)
+        sans = [c for c in plan.colonnes_attendues() if c not in roles]
         self.assertEqual(
             sans, [],
             f"{len(sans)} colonne(s) seront presentees au modele comme "
             f"« facteur » faute de role nomme : {sans}")
-        print(f"    V-5 {len(list(_PLAN_ROLES.colonnes_attendues()))} colonnes "
-              f"attendues, 0 sur le defaut « facteur »")
+        # ⚠ SECOND SENS : le sceau doit aussi CONSTATER que l'assiette a bien
+        # grossi. Sans cette ligne, un `_plan_tous_roles` qui rendrait par
+        # megarde le plan nu repasserait au vert sans rien surveiller.
+        self.assertGreater(
+            len(plan.colonnes_attendues()),
+            len(_PLAN_ROLES.colonnes_attendues()),
+            "l'assiette du sceau n'a pas grossi : il ne surveille pas le bloc "
+            "`comportement`")
+        print(f"    V-5 {len(list(plan.colonnes_attendues()))} colonnes "
+              f"attendues (dont le bloc `comportement`), 0 sur le defaut "
+              f"« facteur »")
 
     def test_le_PROMPT_reel_porte_le_role(self):
         """⚠️ La table peut le nommer sans que le prompt le montre. On lit le

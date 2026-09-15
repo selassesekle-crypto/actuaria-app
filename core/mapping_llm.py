@@ -24,6 +24,7 @@ AUTEUR : ActuarIA
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 from typing import Dict, Optional
 
@@ -84,6 +85,30 @@ def _roles_attendus(plan: PlanTarifaire) -> Dict[str, str]:
     if plan.echeance:
         roles[plan.echeance] = ("echeance de contrat (periode de couverture, "
                                 "ne pas modeliser)")
+    # ⚠️⚠️ LE BLOC `comportement` EST ARRIVE APRES LE CORRECTIF DE
+    # L'ECHEANCE, ET CETTE SURFACE-CI N'A PAS SUIVI. Mesure du 11/09/2026 : ses
+    # CINQ colonnes entrent dans `colonnes_attendues()` (plan_tarifaire.py,
+    # `cols.extend(self.comportement.colonnes())`) et tombaient TOUTES sur le
+    # defaut `roles.get(c, 'facteur')` -- presentees au modele comme des
+    # grandeurs A MODELISER, quand le plan ecrit d'elles, mot pour mot :
+    # « PUREMENT DES ROLES DE DONNEES [...] si la prime precedente devenait un
+    # facteur, elle predirait la sinistralite et l'on retomberait sur la fuite
+    # structurelle ». *Le meme defaut que pour l'echeance, un role plus tard.*
+    #
+    # ⚠️ LES ROLES SONT DERIVES DES CHAMPS DU BLOC, JAMAIS RECOPIES. Une
+    # liste ecrite ici serait le meme defaut au cran suivant : un sixieme champ
+    # ajoute a `Comportement` doit etre couvert sans que personne ne repasse.
+    # `colonnes()` est la definition, par le bloc lui-meme, de ce qu'il declare :
+    # on ne nomme que ce qu'elle rend.
+    bloc = plan.comportement
+    if bloc is not None:
+        declarees = set(bloc.colonnes())
+        for champ in dataclasses.fields(bloc):
+            colonne = getattr(bloc, champ.name, None)
+            if isinstance(colonne, str) and colonne in declarees:
+                roles[colonne] = (
+                    f"comportement de renouvellement -- {champ.name} "
+                    f"(role de donnees, ne pas modeliser)")
     for f in plan.facteurs:
         for src in sources_brutes([f.nom]):     # dérivée → source brute
             roles.setdefault(src, f.type)

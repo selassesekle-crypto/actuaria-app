@@ -196,6 +196,80 @@ class TestElasticitePubliee(unittest.TestCase):
         print(f"    EP-6 `elasticite` a son libelle parmi les {len(cles)} "
               f"synthese(s) rendues au CAC")
 
+    # ══ CORE-3 — le séparateur de milliers se pose AU NOMBRE ═════════════
+    def test_EP_7_CORE3_aucun_nombre_n_est_formate_hors_format_fr(self):
+        """⚠️⚠️ LE DÉFAUT AVAIT **DEUX FORMES SYMÉTRIQUES**, ET L'ASSIETTE
+        RÉELLE ÉTAIT DE QUATRE SITES, PAS D'UN.
+
+            A  `f"… {n:,} …".replace(',', ' ')` — appliqué à la PHRASE, donc
+               il mange aussi les virgules GRAMMATICALES. Mesuré :
+               « eps = -0.8421, IC 95 % » devenait « eps = -0.8421  IC 95 % »
+               et « — voie renouvellement, 12 450 » perdait sa virgule aussi.
+               **Deux virgules dans la même phrase signée.**
+            B  `f"… {n:,} …"` sans conversion — la phrase signée publie un
+               séparateur ANGLAIS : `12,450`. Deux sites, dont le `motif`
+               que `synthese_elasticite` republie tel quel.
+
+        Ce contrôle interdit les DEUX : plus aucun `{x:,}` dans le module.
+        *Une phrase n'est pas un nombre ; ce qui vaut pour le second ne
+        s'applique pas au premier.*
+        """
+        source = (_RACINE / 'core' / 'elasticite.py').read_text(
+            encoding='utf-8')
+        arbre = ast.parse(source)
+        fautifs = []
+        for n in ast.walk(arbre):
+            if not isinstance(n, ast.JoinedStr):
+                continue
+            for p in n.values:
+                if (isinstance(p, ast.FormattedValue) and p.format_spec
+                        and ',' in ast.unparse(p.format_spec)):
+                    fautifs.append(
+                        f'elasticite.py:{n.lineno} '
+                        f'{ast.unparse(p.value)[:48]}')
+        self.assertEqual(
+            fautifs, [],
+            'ces nombres portent le separateur ANGLAIS dans une phrase '
+            'signee. Passez par `core.format_fr.nombre`, qui EXISTE pour '
+            'etre la source unique :\n  ' + '\n  '.join(fautifs))
+        #: ⚠️ ET LE SECOND SENS : le module DOIT s'en servir. Sans cette
+        #: ligne, retirer tous les nombres rendrait ce controle vert.
+        self.assertIn(
+            'from core.format_fr import', source,
+            "`elasticite` ne lit plus `format_fr` : ce controle ne "
+            'surveille plus rien')
+        print('    EP-7 CORE-3 : 0 `{x:,}` dans `core/elasticite.py`, '
+              'le separateur vient de `format_fr`')
+
+    def test_EP_8_CORE3_la_phrase_signee_GARDE_ses_virgules(self):
+        """⚠️ PAR EXÉCUTION, pas par relevé : c'est la phrase qui compte.
+
+        Le contrôle structurel ci-dessus interdit l'idiome ; celui-ci mesure
+        ce qui SORT — et il tomberait si un futur `.replace` réapparaissait
+        ailleurs dans la chaîne de publication.
+        """
+        etat = {'etat': ELASTICITE_ESTIMEE,
+                'estimation': {'elasticite': -0.8421, 'ic_bas': -1.1032,
+                               'ic_haut': -0.5810, 'voie': 'renouvellement',
+                               'n_lignes': 12450, 'n_resiliations': 1287,
+                               'reserve': None}}
+        t = synthese_elasticite(etat) or ''
+        self.assertIn(
+            '-0.8421, IC 95 %', t,
+            'la virgule GRAMMATICALE apres eps a disparu : une conversion '
+            'de separateur est de nouveau appliquee a la PHRASE')
+        self.assertIn(
+            'voie renouvellement, ', t,
+            'la virgule GRAMMATICALE apres la voie a disparu')
+        self.assertIn('12 450', t,
+                      'le separateur de milliers n est plus l espace fine '
+                      'insecable de `format_fr`')
+        self.assertNotIn('12,450', t,
+                         'le separateur ANGLAIS est publie dans une phrase '
+                         'signee')
+        print(f"    EP-8 CORE-3 phrase signee : {t.count(',')} virgule(s) "
+              f"grammaticale(s), {t.count(chr(0x202f))} separateur(s) fins")
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
