@@ -1,0 +1,623 @@
+{
+  "_doctrine": "MATRICE FAIT x SURFACE. Pour chaque fait rendu par la chaine a1..a6, le nombre de surfaces signees qui le PORTENT, et lesquelles. Elle ne porte AUCUNE phrase : seulement le chemin du fait et le sha256 de son texte. Regeneree par `py scripts/matrice_fait_surface.py --figer`, et TOUTE regeneration se justifie dans le message de commit -- c'est ce qui fait d'un instrument une sentinelle.",
+  "_assiette_non_couverte": "un seul plan (auto), une seule graine, un seul jeu de donnees synthetiques ; les phrases de MOINS de 60 caracteres ou de moins de huit mots ne sont pas ramassees (un libelle de cellule n'est pas un fait) ; les faits produits par A7 sont COMPTES A PART et exclus de la dette (autre chantier, autres constats) ; et le compte de faits est un PLANCHER -- un autre plan en produirait d'autres.",
+  "_trois_etats": {
+    "porte": "au moins une surface signee contient ce fait",
+    "absent": "aucune surface ne le contient, et il y avait un texte a chercher",
+    "muet sur ce jeu": "le fait n'a rien rendu sur ce jeu : il n'y avait rien a chercher, et ce n'est PAS une absence"
+  },
+  "jeu": {
+    "graine": 7,
+    "taille": 1200,
+    "arrete": "2026-06-30",
+    "annees": [
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  },
+  "plafond_dette": 43,
+  "dette_au_figeage": 43,
+  "nb_faits": 63,
+  "surfaces_reelles": [
+    "a1 Excel",
+    "a2 Excel",
+    "a3 Excel",
+    "a4 Excel",
+    "a4 Word",
+    "a5 Excel",
+    "a6 Excel",
+    "a6 HTML",
+    "a6 Word",
+    "a7 Excel",
+    "a7 HTML",
+    "a7 Word",
+    "rapport_equipe Excel",
+    "rapport_equipe HTML",
+    "rapport_equipe Word",
+    "rapport_modeles HTML",
+    "rapport_modeles Word"
+  ],
+  "faits": {
+    "a1.rapport.alertes[0]": {
+      "empreinte": "sha256:0fa7cccdfac4294dae557117ddf24299",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a3.colonnes_exemptees_effet.antecedents_sinistres_n1": {
+      "empreinte": "sha256:91fb1638b62aa18c5ff3ec6a4fc830c2",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a3.lissage_geo.note": {
+      "empreinte": "sha256:1e7a1bc8f0d215ea423402ad43503cae",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a3.lissage_geo.reference": {
+      "empreinte": "sha256:e1759c63eabe485df54f779038e70cca",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a3.rapport.metriques_globales.meilleur_modele_motif": {
+      "empreinte": "sha256:b08f061de016e54e9b6e6e35fc40c18e",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a4.elasticite.ce_quil_faudrait": {
+      "empreinte": "sha256:05f1d32043d4eb02285e30ecdefaa089",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a4.elasticite.diagnostic": {
+      "empreinte": "sha256:8dcd2b81a19b405685b35af36e50fcde",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a4.exclusions_conformite.kilometrage_annuel": {
+      "empreinte": "sha256:9ab56256bd7b6adc47fb3bd8c8eac990",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a4.exclusions_conformite.prime_pure": {
+      "empreinte": "sha256:a4f399420b3ca96911ea18a7173e882d",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a4.monitoring.interpretation_gini": {
+      "empreinte": "sha256:0e91beb319e0c37f4a6802d25371af97",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a4.monitoring.methode": {
+      "empreinte": "sha256:36a734f201319423dc6f7cd972707e89",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a4.monitoring.portee": {
+      "empreinte": "sha256:26ecf147b696341721bae22451e486c6",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a5.validation_dl.h1_convergence.conseil": {
+      "empreinte": "sha256:a068c7dc63188af116a9bde9a4f84f3f",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a5.validation_dl.h1_convergence.message": {
+      "empreinte": "sha256:1569037a89da9d5fe0deb0ae7889bdab",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a5.validation_dl.h2_surapprentissage.conseil": {
+      "empreinte": "sha256:7a57cb694f6d6ea3171d8f704f8f8956",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a5.validation_dl.h3_apport_dl.conseil": {
+      "empreinte": "sha256:44bf03b7c0befe6c8c862930a191e13f",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a6.validation_selection.conclusion": {
+      "empreinte": "sha256:0501a18f74a5e555740aaa3375e300e9",
+      "etat": "absent",
+      "portee": 0,
+      "surfaces": []
+    },
+    "a1.qualite.note_identite": {
+      "empreinte": "sha256:a4b4cc1e6ba5189916f55140729eae85",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a1 Excel"
+      ]
+    },
+    "a2.data_dictionnaire.age_carre.justification": {
+      "empreinte": "sha256:15029928a210030bb05f44788214c57e",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a2 Excel"
+      ]
+    },
+    "a2.data_dictionnaire.inter_age_bonus_malus.justification": {
+      "empreinte": "sha256:46531c922b7dd37778796f8eec80dc66",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a2 Excel"
+      ]
+    },
+    "a2.data_dictionnaire.log_cout_total_sinistres.justification": {
+      "empreinte": "sha256:f0542ed014b8133a874c4ff07873246f",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a2 Excel"
+      ]
+    },
+    "a2.data_dictionnaire.log_exposition.justification": {
+      "empreinte": "sha256:3257e56bc1ba050bcdd03392efdb3b18",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a2 Excel"
+      ]
+    },
+    "a3.credibilite.raison": {
+      "empreinte": "sha256:08cc898b3234f8bb9ad6a2896d1a1aa0",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "rapport_equipe Word"
+      ]
+    },
+    "a3.ecretement_severite.seuil_suppose": {
+      "empreinte": "sha256:2b4938fa274f672254f3ce77fb75cb62",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a3 Excel"
+      ]
+    },
+    "a3.metriques.gamma.puissance_selection": {
+      "empreinte": "sha256:59cb10807fb297587c1576fe580b48d2",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a3 Excel"
+      ]
+    },
+    "a3.metriques.tweedie.puissance_selection": {
+      "empreinte": "sha256:933afb869f8842b2af0e811627c05120",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a3 Excel"
+      ]
+    },
+    "a3.validation_glm.conclusion": {
+      "empreinte": "sha256:1a65c10d6f6731a7e8bc4983443852c9",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a3 Excel"
+      ]
+    },
+    "a4.validation_ml.conclusion": {
+      "empreinte": "sha256:a8a458ffbb8a26efb1026866580204ee",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a4 Excel"
+      ]
+    },
+    "a5.validation_dl.conclusion": {
+      "empreinte": "sha256:aa12dd0d1e8a0f59930278dc5ed54e1f",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a5 Excel"
+      ]
+    },
+    "a6.backtest.ae_par_segment.quintiles_risque[0].note": {
+      "empreinte": "sha256:29567577aca3d0e7c36c6ea87eac1de4",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.backtest.ae_par_segment.quintiles_risque[1].note": {
+      "empreinte": "sha256:e66a48486f80e8b1359167005dfaf25e",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.fiche_decision.justification_regl[0]": {
+      "empreinte": "sha256:3bb3530a6009173d06597f52a749769f",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.fiche_decision.justification_regl[1]": {
+      "empreinte": "sha256:ea449e352463611be312144ad8491dbc",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.fiche_decision.justification_regl[2]": {
+      "empreinte": "sha256:be2478fc392306f3fa0b046a0d570380",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.fiche_decision.questions_actuaire[0]": {
+      "empreinte": "sha256:eab5a7e4adeb78283824881a5c2ed77d",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.fiche_decision.questions_actuaire[1]": {
+      "empreinte": "sha256:0d9c1fcf94234ae9c52846a82d3e2cbb",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.fiche_decision.questions_actuaire[2]": {
+      "empreinte": "sha256:b1d7bb350fc6112649d53d04a6306e27",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.fiche_decision.questions_actuaire[3]": {
+      "empreinte": "sha256:ce69d9e2b56dbea044953ae0fe76922b",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.fiche_decision.questions_actuaire[4]": {
+      "empreinte": "sha256:6bc5223ca373b3dd5f0c80f96bb5b84f",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.publication_reglementaire.avertissement": {
+      "empreinte": "sha256:82f090692aa80397617b9d503b0d924c",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.publication_reglementaire.non_produit.loss_ratio_attendu": {
+      "empreinte": "sha256:737db4d55910cdb2d17225a57700bf1c",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.publication_reglementaire.non_produit.primes_acquises": {
+      "empreinte": "sha256:0271b6bce4e2d3d420cc2b6d177fc379",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.publication_reglementaire.non_produit.primes_emises": {
+      "empreinte": "sha256:9e7dab21deada6df1d89a00c8bde029c",
+      "etat": "porte",
+      "portee": 1,
+      "surfaces": [
+        "a6 Excel"
+      ]
+    },
+    "a6.validation_selection.c3_coherence.conseil": {
+      "empreinte": "sha256:e784f07bbb0f7c11b7a92677b585cd7a",
+      "etat": "porte",
+      "portee": 2,
+      "surfaces": [
+        "a6 Excel",
+        "rapport_modeles HTML"
+      ]
+    },
+    "a3.validation_glm.h2_homosc.message": {
+      "empreinte": "sha256:51e884de96aaa68fcb69013943074010",
+      "etat": "porte",
+      "portee": 4,
+      "surfaces": [
+        "a3 Excel",
+        "a4 Word",
+        "a6 Word",
+        "rapport_modeles Word"
+      ]
+    },
+    "a6.audit_trail.note_score_global": {
+      "empreinte": "sha256:ef781daa153b03ca3dea4f69a0741f87",
+      "etat": "porte",
+      "portee": 4,
+      "surfaces": [
+        "a6 HTML",
+        "a6 Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a4.validation_ml.h1_overfitting.conseil": {
+      "empreinte": "sha256:ddf1359fae398512d9f8bd31920a004b",
+      "etat": "porte",
+      "portee": 5,
+      "surfaces": [
+        "a4 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a4.validation_ml.h1_overfitting.message": {
+      "empreinte": "sha256:45ba19f3d48bff2e33d73e867a719b93",
+      "etat": "porte",
+      "portee": 5,
+      "surfaces": [
+        "a4 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a4.validation_ml.h2_psi.conseil": {
+      "empreinte": "sha256:6f8e65332c9ba01e230541721bfb401b",
+      "etat": "porte",
+      "portee": 5,
+      "surfaces": [
+        "a4 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a4.validation_ml.h2_psi.message": {
+      "empreinte": "sha256:aae885a1d98e31c1bc8fbb2c7c49775d",
+      "etat": "porte",
+      "portee": 5,
+      "surfaces": [
+        "a4 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a3.validation_glm.h2_homosc.conseil": {
+      "empreinte": "sha256:9f38faa5b36f2485d01be05fd63c2450",
+      "etat": "porte",
+      "portee": 6,
+      "surfaces": [
+        "a3 Excel",
+        "a4 Word",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a3.validation_glm.h3_ajustement.conseil": {
+      "empreinte": "sha256:2d668765815f90bd9e03a41df2b0d39e",
+      "etat": "porte",
+      "portee": 6,
+      "surfaces": [
+        "a3 Excel",
+        "a4 Word",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a3.validation_glm.h4_stabilite.conseil": {
+      "empreinte": "sha256:9dd3e998aeac32711bca101a22e2d866",
+      "etat": "porte",
+      "portee": 6,
+      "surfaces": [
+        "a3 Excel",
+        "a4 Word",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a3.validation_glm.h4_stabilite.message": {
+      "empreinte": "sha256:17284c0be552a2f32af3a0c7b6a8c87e",
+      "etat": "porte",
+      "portee": 6,
+      "surfaces": [
+        "a3 Excel",
+        "a4 Word",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a3.anti_selection": {
+      "empreinte": "sha256:1bf8eb5cf052369d0984b5f68126a372",
+      "etat": "porte",
+      "portee": 8,
+      "surfaces": [
+        "a6 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_equipe Excel",
+        "rapport_equipe HTML",
+        "rapport_equipe Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a4.sensibilite_tarifaire.motif": {
+      "empreinte": "sha256:f345120ba3fe9af2c3ae2daea7e2093e",
+      "etat": "porte",
+      "portee": 8,
+      "surfaces": [
+        "a6 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_equipe Excel",
+        "rapport_equipe HTML",
+        "rapport_equipe Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a6.arbitrage_contestable": {
+      "empreinte": "sha256:d6acacfcfff6b0323c24a5da1bb1941e",
+      "etat": "porte",
+      "portee": 8,
+      "surfaces": [
+        "a6 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_equipe Excel",
+        "rapport_equipe HTML",
+        "rapport_equipe Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a6.audit_trail.raisons_plafond[1]": {
+      "empreinte": "sha256:438553e4eebf19c0ee937348b3baa53d",
+      "etat": "porte",
+      "portee": 8,
+      "surfaces": [
+        "a6 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_equipe Excel",
+        "rapport_equipe HTML",
+        "rapport_equipe Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a6.audit_trail.raisons_plafond[3]": {
+      "empreinte": "sha256:feb9bd1042230f74d39013f81dbe190a",
+      "etat": "porte",
+      "portee": 8,
+      "surfaces": [
+        "a6 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_equipe Excel",
+        "rapport_equipe HTML",
+        "rapport_equipe Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a6.reserve_bases_gini": {
+      "empreinte": "sha256:f4a1ad4b25eaf819a31126238354a7f9",
+      "etat": "porte",
+      "portee": 8,
+      "surfaces": [
+        "a6 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_equipe Excel",
+        "rapport_equipe HTML",
+        "rapport_equipe Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a6.reserve_surapprentissage": {
+      "empreinte": "sha256:e47c8809c8f44ed49d7f1d0dbeba912b",
+      "etat": "porte",
+      "portee": 8,
+      "surfaces": [
+        "a6 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_equipe Excel",
+        "rapport_equipe HTML",
+        "rapport_equipe Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a4.elasticite.ce_que_cela_coute": {
+      "empreinte": "sha256:d405e050175a0d854b54e2bfc04acf35",
+      "etat": "porte",
+      "portee": 9,
+      "surfaces": [
+        "a4 Word",
+        "a6 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_equipe Excel",
+        "rapport_equipe HTML",
+        "rapport_equipe Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    },
+    "a4.elasticite.motif": {
+      "empreinte": "sha256:04f22fce4ecf511c64149186454cb42c",
+      "etat": "porte",
+      "portee": 9,
+      "surfaces": [
+        "a4 Word",
+        "a6 Excel",
+        "a6 HTML",
+        "a6 Word",
+        "rapport_equipe Excel",
+        "rapport_equipe HTML",
+        "rapport_equipe Word",
+        "rapport_modeles HTML",
+        "rapport_modeles Word"
+      ]
+    }
+  }
+}
