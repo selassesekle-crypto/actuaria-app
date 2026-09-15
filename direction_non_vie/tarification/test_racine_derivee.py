@@ -170,7 +170,33 @@ _FORME_INITIALE = re.compile(r'^[A-Z]\.\s*[A-Z]')
 #: 83 occurrences, dont 74 dans `normes/ifrs17/` -- un autre chantier, que
 #: ce lot n'ouvre pas. Le plafond ne sert pas a tolerer : il sert a ce que
 #: la dette ne puisse que DECROITRE pendant qu'on ne la traite pas.
-_DETTE_GELEE = 83
+#:
+#: ⚠️⚠️ 83 -> 123 LE 15/09/2026 : `plans/` ENTRE DANS LE COMPTE, ET AUCUN
+#: PLAN NE BOUGE. Arbitre par le responsable du depot. Mesure au site :
+#:
+#: ⚠️ ET CE COMMENTAIRE A FAIT ROUGIR `RD-8` A SA PREMIERE REDACTION : j'y
+#: avais ecrit le PRENOM protege pour nommer l'arbitrage. Troisieme fois
+#: dans ce chantier, et sur le lot qui elargit precisement le compte RGPD.
+#: *Le garde n'a pas ete affaibli d'un iota : c'est le texte qui a change.*
+#:
+#:     RD-9 avant (plans/ exemptee)   83   {normes 74, dnv 5, racine 4}
+#:     RD-9 apres (plans/ comptee)   123   {+ plans 40}
+#:
+#: ⛔⛔ CE N'EST PAS UN RELACHEMENT, C'EST L'INVERSE. `plans/` etait
+#: exemptee de `RD-7`/`RD-8` -- a raison : un plan tarifaire de PRODUCTION
+#: est un document signe, son champ `auteur` porte une signature opposable
+#: qui ENTRE dans l'empreinte du plan (arbitrage du 12/09, option (b)).
+#: Mais l'exemption s'etendait aussi a `RD-9`, qui ne CORRIGE rien : il
+#: COMPTE. **Quarante occurrences n'etaient donc ni surveillees NI
+#: comptees** -- invisibles des deux cotes a la fois.
+#:
+#: *Une exemption justifiee pour un CONTROLE ne l'est pas pour un
+#: COMPTEUR : ne pas toucher a une dette est une decision, ne pas la
+#: connaitre n'en est pas une.*
+#:
+#: `RD-7` et `RD-8` gardent l'exemption -- verifie : `_EXEMPTES` reste lu
+#: a l.335 et l.353, et n'est retire qu'a l.381.
+_DETTE_GELEE = 123
 
 
 def _fichiers_suivis() -> list[pathlib.Path]:
@@ -378,7 +404,14 @@ class TestAucuneIdentiteCivilePubliee(unittest.TestCase):
         reste = 0
         zones = collections.Counter()
         for rel in _suivis_relatifs():
-            if _zone(rel, _PERIMETRE) or _zone(rel, _EXEMPTES):
+            #: ⚠️⚠️ `_EXEMPTES` N'EST PLUS SAUTE ICI — arbitrage du 15/09.
+            #: Il l'etait, et les 40 occurrences de `plans/` n'etaient donc
+            #: ni SURVEILLEES par `RD-7`/`RD-8` (qui l'exemptent a raison :
+            #: un plan signe porte la signature de son redacteur) ni
+            #: COMPTEES ici. *Invisibles des deux cotes a la fois.*
+            #: `RD-7` et `RD-8` continuent de l'exempter : seul ce
+            #: COMPTEUR change, et aucun plan n'est touche.
+            if _zone(rel, _PERIMETRE):
                 continue
             try:
                 txt = (_RACINE / rel).read_text(encoding='utf-8',
