@@ -26,8 +26,10 @@ NOMME, pour que le compte cesse de mentir. Mesure du figeage du
 14/09 : **22 insertions, 0 suppression** -- aucune empreinte ne bouge.
 
 ⚠️ ET LA CAUSE N'EST PAS TOUJOURS WEASYPRINT, ce qui est le vrai
-inconfort. Sur les 15 absentes, HUIT sont des PDF (weasyprint non
-installe, cause connue) et SEPT ne le sont pas :
+inconfort. Au 15/09/2026 les absentes sont DIX-SEPT : NEUF PDF
+(weasyprint non installe, cause connue), UNE a cause DECLAREE
+(`a5 Word` -- A5 ne produit pas de Word, et son gabarit le dit), et SEPT
+sans cause, les memes qu'au 14/09 :
 
     a1 Word, a2 Word, a3 Word, a6 Rapport equipe Excel,
     a6 Rapport equipe HTML, a6 Rapport equipe Word, rapport_modeles Excel
@@ -61,6 +63,28 @@ from direction_non_vie.tarification.services import gel_livrables as G
 _REFERENCE = (_RACINE / 'direction_non_vie' / 'tarification'
               / 'reference_gel.json')
 _LANCEUR = _RACINE / 'scripts' / 'gel_avant_apres.py'
+
+#: ⚠️⚠️ LES ABSENCES DONT LA CAUSE EST CONNUE **ET ECRITE** — hors PDF, dont
+#: la cause (weasyprint non installe) se lit deja au suffixe.
+#: *Une absence expliquee et une absence inexpliquee ne se comptent pas
+#: ensemble : la seconde est une dette, la premiere un fait declare.*
+_CAUSES_DECLAREES: dict[str, str] = {
+    'a5 Word':
+        "A5 ne produit PAS de document Word, et sa sortie le DIT : son "
+        "gabarit porte `word_bytes = b''`. La surface est entree dans "
+        "l'assiette du gel le 15/09/2026, avec `a5 PDF`, precisement parce "
+        "qu'une surface TUE est une surface que l'instrument de "
+        "non-regression ne regarde pas. Mesure : 34 surfaces, 17 reelles "
+        "inchangees.",
+}
+
+#: ⚠️ ET CELLES QUI RESTENT SANS CAUSE : un ensemble FIGE, pas un plafond.
+#: Elles valaient sept au 14/09/2026 et ce sont les memes.
+_SANS_CAUSE_CONNUE = frozenset({
+    'a1 Word', 'a2 Word', 'a3 Word', 'a6 Rapport equipe Excel',
+    'a6 Rapport equipe HTML', 'a6 Rapport equipe Word',
+    'rapport_modeles Excel',
+})
 
 
 def _reference() -> dict:
@@ -188,14 +212,24 @@ class TestGelDeclareSesAbsences(unittest.TestCase):
         noms = sorted(bloc.get('noms') or [])
         self.assertTrue(noms, 'aucune absente declaree : rien a mesurer')
         pdf = [n for n in noms if n.endswith('PDF')]
-        autres = [n for n in noms if not n.endswith('PDF')]
-        self.assertLessEqual(
-            len(autres), 7,
-            f"le nombre de surfaces absentes SANS cause connue a AUGMENTE : "
-            f"{autres}. Il valait 7 au 14/09/2026, et chacune est un "
-            f"livrable signe que la chaine ne produit pas.")
+        autres = [n for n in noms if not n.endswith('PDF')
+                  and n not in _CAUSES_DECLAREES]
+        #: ⚠️⚠️ ON NOMME, ON NE COMPTE PLUS. Le controle disait
+        #: `len(autres) <= 7` : un plafond laisse passer un ECHANGE -- une
+        #: absente qui disparait pendant qu'une autre arrive, et le compte
+        #: ne bouge pas. Depuis le 15/09 la liste est EGALE a un ensemble
+        #: fige, ce qui est strictement plus fort.
+        self.assertEqual(
+            sorted(autres), sorted(_SANS_CAUSE_CONNUE),
+            f"la liste des surfaces absentes SANS cause connue a change.\n"
+            f"  apparues  : {sorted(set(autres) - _SANS_CAUSE_CONNUE)}\n"
+            f"  disparues : {sorted(_SANS_CAUSE_CONNUE - set(autres))}\n"
+            f"Chacune est un livrable signe que la chaine ne produit pas : "
+            f"si une cause est desormais connue, elle se DECLARE dans "
+            f"`_CAUSES_DECLAREES`, avec sa mesure.")
         print(f"    DA-5 RELEVE (non ferme) : {len(pdf)} PDF (weasyprint "
-              f"absent) + {len(autres)} SANS cause connue -> {autres}")
+              f"absent) + {len(_CAUSES_DECLAREES)} a cause DECLAREE + "
+              f"{len(autres)} SANS cause connue -> {autres}")
 
 
 if __name__ == '__main__':

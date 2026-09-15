@@ -72,19 +72,45 @@ class TestElasticitePubliee(unittest.TestCase):
 
         Assiette : les DEUX dicts de sortie d'A6, par AST -- une moitie des
         appelants ne verrait rien autrement (la lecon de `OB-11`).
+
+        ⚠️⚠️ L'ASSIETTE A DU ETRE RESSERREE LE 15/09/2026, ET C'EST UN
+        RESSERREMENT, PAS UN AFFAIBLISSEMENT. Elle comptait TOUS les dicts
+        du fichier ; l'arrivee de `GABARIT_SORTIE` -- le contrat de sortie
+        d'A6, qui DECLARE chaque cle avec sa forme vide -- en a fait un
+        TROISIEME, et le controle a rendu `3 != 2`. *Un gabarit n'est pas un
+        relais : il dit ce qu'A6 rend quand il ne rend rien.* On compte donc
+        les dicts qui vivent DANS `run`, et on exige EN PLUS que la cle soit
+        au gabarit -- ce que l'ancienne version ne verifiait pas du tout.
         """
         src = (_RACINE / 'direction_non_vie' / 'tarification'
                / 'a6_comparaison' / 'agent.py').read_text(encoding='utf-8')
         arbre = ast.parse(src)
+        runs = [n for n in ast.walk(arbre)
+                if isinstance(n, ast.FunctionDef) and n.name == 'run']
+        self.assertEqual(len(runs), 1, "A6 n a plus un seul `run` : "
+                                       "l'assiette de ce controle a change")
+        gabarit = [n for n in arbre.body
+                   if isinstance(n, (ast.Assign, ast.AnnAssign))
+                   and 'GABARIT_SORTIE' in ast.unparse(n).split('=')[0]]
+        self.assertEqual(len(gabarit), 1,
+                         'le gabarit de sortie d A6 est introuvable')
+        cles_gabarit = {k.value for k in gabarit[0].value.keys
+                        if isinstance(k, ast.Constant)}
         for cle in ('elasticite', 'sensibilite_tarifaire'):
-            n = [c.lineno for x in ast.walk(arbre) if isinstance(x, ast.Dict)
+            n = [c.lineno for x in ast.walk(runs[0]) if isinstance(x, ast.Dict)
                  for c in x.keys
                  if isinstance(c, ast.Constant) and c.value == cle]
             self.assertEqual(
                 len(n), 2,
                 f"A6 relaie '{cle}' dans {len(n)} dict(s) de sortie au lieu "
                 f"des DEUX : une moitie des appelants ne la verrait pas")
-        print("    EP-1 A6 relaie les 2 cles dans ses 2 dicts de sortie")
+            self.assertIn(
+                cle, cles_gabarit,
+                f"'{cle}' n est pas au gabarit d A6 : ses chemins d ECHEC "
+                f"ne la porteront pas, et les trois surfaces liront leur "
+                f"litteral des qu'A6 echoue")
+        print("    EP-1 A6 relaie les 2 cles dans ses 2 dicts de `run`, "
+              "et les 2 sont au gabarit")
 
     def test_EP_2_la_synthese_PARLE_quand_l_elasticite_n_est_pas_prise(self):
         """⚠️⚠️ *Le silence laisserait croire qu'elle a ete consideree.*"""

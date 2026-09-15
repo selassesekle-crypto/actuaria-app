@@ -239,16 +239,38 @@ class TestMappingPublieSaCause(unittest.TestCase):
             'porteront pas, et A6 lira un litteral quand A1 aura echoue')
         source = _A1.read_text(encoding='utf-8')
         arbre = ast.parse(source)
-        racines = [n for n in ast.walk(arbre)
-                   if isinstance(n, ast.Return) and isinstance(n.value, ast.Dict)
-                   and 'statut_rag' in {k.value for k in n.value.keys
-                                        if isinstance(k, ast.Constant)}]
+        #: ⚠️⚠️ ET LA DEUXIEME VERSION A CESSE DE VOIR SON SUJET, LE 15/09.
+        #: Elle cherchait un `return {...}` LITTERAL portant `statut_rag` :
+        #: A1 n'en a plus AUCUN -- ses quatre chemins passent desormais par
+        #: `sortie_completee(GABARIT_SORTIE, statut_rag=..., ...)`. La liste
+        #: `racines` est devenue VIDE, et le sceau a dit << le dict rendu a
+        #: change de forme >> : il avait raison sur la forme, et il ne
+        #: mesurait plus rien.
+        #:   *Un releve qui epingle une SYNTAXE meurt le jour ou la syntaxe
+        #:   change, meme quand le fait, lui, est intact.* On releve donc les
+        #: cles RENDUES, sous les deux formes : cle de dict litteral ET
+        #: mot-cle passe a `sortie_completee`.
+        racines = []
+        for n in ast.walk(arbre):
+            if not isinstance(n, ast.Return):
+                continue
+            if isinstance(n.value, ast.Dict):
+                cles = {k.value for k in n.value.keys
+                        if isinstance(k, ast.Constant)}
+            elif (isinstance(n.value, ast.Call)
+                  and getattr(n.value.func, 'id', None) == 'sortie_completee'):
+                cles = {kw.arg for kw in n.value.keywords if kw.arg}
+                #: le gabarit garantit le RESTE des cles sur ce chemin-la.
+                cles |= set(GABARIT_SORTIE)
+            else:
+                continue
+            if 'statut_rag' in cles:
+                racines.append((n.lineno, cles))
         self.assertTrue(racines, 'le dict rendu par A1 a change de forme')
-        for n in racines:
-            cles = {k.value for k in n.value.keys if isinstance(k, ast.Constant)}
+        for lg, cles in racines:
             self.assertIn(
                 'rapport_mapping', cles,
-                f'le dict rendu a a1:{n.lineno} ne porte pas '
+                f'le dict rendu a a1:{lg} ne porte pas '
                 f'`rapport_mapping` a la racine : A6 ne le verra pas')
         # ⚠️ ET A6 LE LIT BIEN DEPUIS LA RACINE.
         a6 = (pathlib.Path(_ICI) / 'a6_comparaison' / 'agent.py'

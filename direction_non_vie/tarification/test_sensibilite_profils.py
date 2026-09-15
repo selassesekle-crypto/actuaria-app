@@ -369,24 +369,41 @@ class TestA6SeLaRelaieAILuiMeme(unittest.TestCase):
     def test_S15_SECOND_SENS_rien_d_autre_n_entre_dans_le_dictionnaire(self):
         """⚠️ LA CONTRE-ÉPREUVE DEMANDÉE : le dict intermédiaire gagne
         **cette clé et rien d'autre**. Son compte était de 34 ; il doit
-        valoir exactement 35."""
+        valoir exactement 35.
+
+        ⚠️⚠️ IL SE RECONNAISSAIT PAR SES CLÉS, ET UN AUTRE DICT LES A EUES.
+        La version d'origine prenait le PREMIER dict portant
+        `sensibilite_tarifaire`, `audit_id` et `success`. Le 15/09/2026, A6
+        s'est vu poser un `GABARIT_SORTIE` — son contrat de sortie, qui
+        DÉCLARE les 58 clés avec leur forme vide — et il porte évidemment ces
+        trois-là. Le sceau l'a trouvé en premier (il vit au niveau du module,
+        donc avant `run`) et a rendu `58 != 35` : *il mesurait un autre objet
+        que celui dont il parle.*
+          La parade n'est pas d'ajuster le nombre : c'est de désigner le dict
+        par SON NOM. `_tmp_a6` est le dictionnaire intermédiaire ; aucun
+        autre objet ne peut plus lui être substitué.
+        """
         arbre = ast.parse(
             pathlib.Path(_A6_SRC).read_text(encoding='utf-8'))
         for noeud in ast.walk(arbre):
-            if not isinstance(noeud, ast.Dict):
+            if not (isinstance(noeud, ast.Assign) and len(noeud.targets) == 1
+                    and getattr(noeud.targets[0], 'id', None) == '_tmp_a6'
+                    and isinstance(noeud.value, ast.Dict)):
                 continue
-            cles = [k.value for k in noeud.keys
+            cles = [k.value for k in noeud.value.keys
                     if isinstance(k, ast.Constant)]
-            if 'sensibilite_tarifaire' in cles and 'audit_id' in cles \
-                    and 'success' in cles:
-                self.assertEqual(
-                    len(cles), 35,
-                    f'le dictionnaire intermediaire d A6 porte {len(cles)} '
-                    f'cles au lieu de 35 : il valait 34 avant ce lot, et '
-                    f'ce lot n en ajoute QU UNE')
-                self.assertIn('sensibilite_profils', cles)
-                return
-        self.fail('le dictionnaire intermediaire d A6 est introuvable : '
+            self.assertIn(
+                'sensibilite_tarifaire', cles,
+                '`_tmp_a6` ne porte plus `sensibilite_tarifaire` : ce n est '
+                'plus le dictionnaire intermediaire que ce controle decrit')
+            self.assertEqual(
+                len(cles), 35,
+                f'le dictionnaire intermediaire d A6 porte {len(cles)} '
+                f'cles au lieu de 35 : il valait 34 avant ce lot, et '
+                f'ce lot n en ajoute QU UNE')
+            self.assertIn('sensibilite_profils', cles)
+            return
+        self.fail('le dictionnaire intermediaire `_tmp_a6` est introuvable : '
                   'ce controle ne mesure plus rien')
 
 

@@ -67,6 +67,32 @@ def _arbre(p):
         return None
 
 
+#: ⚠️⚠️ LES HOMONYMES, NOMMES UN PAR UN, AVEC LEUR PREUVE. Ce controle
+#: releve les cles nullables PAR LEUR NOM, sur TOUS les dicts du depot : il
+#: ne distingue donc pas deux cles homonymes vivant dans deux dictionnaires
+#: differents. Une entree ici n'est PAS une tolerance de confort -- c'est
+#: une preuve que le `None` ne peut pas atteindre CE site-la, et le triplet
+#: (fichier, cle, expression) est EXACT : deplacer le site, changer
+#: l'expression ou renommer le fichier le fait RESSORTIR.
+#:
+#:   `a4:2777` -- `_est.get('elasticite')`. Mesure du 15/09/2026 :
+#:   `elasticite` est devenue nullable aux yeux de ce releve le jour ou les
+#:   six agents ont recu un `GABARIT_SORTIE` portant `'elasticite': None`.
+#:   Mais ce `None`-la est celui du RESULTAT D'AGENT ; `_est` est le
+#:   sous-dictionnaire `estimation` de `core/elasticite.py`, un AUTRE objet.
+#:   Le site est atteint sous `if _elast.get('etat') == ELASTICITE_ESTIMEE`,
+#:   et `ELASTICITE_ESTIMEE` n'est pose qu'a `elasticite.py:841`, sur un
+#:   socle ou `'estimation': est` a ete pose l.816, et seulement si
+#:   `est['concluante']`. Or `concluante: True` ne sort que du dernier
+#:   `return` d'`estimer_elasticite`, bati sur `chiffre`, qui pose TOUJOURS
+#:   `'elasticite': round(eps, 5)` -- un flottant. **Le `None` ne peut pas
+#:   arriver la.**
+_HOMONYMES: frozenset[tuple[str, str, str]] = frozenset({
+    ('direction_non_vie/tarification/a4_ml/agent.py', 'elasticite',
+     "_est.get('elasticite')"),
+})
+
+
 def _cles_nullables():
     """Les cles de dictionnaire dont la valeur PEUT valoir `None`."""
     vues = set()
@@ -161,7 +187,7 @@ class TestUneMesureAbsenteNeFaitPasTomberLAgent(unittest.TestCase):
                 continue
             rel = str(p.relative_to(_RACINE)).replace('\\', '/')
             for lg, cle, src in _formats_numeriques(a):
-                if cle in nullables:
+                if cle in nullables and (rel, cle, src) not in _HOMONYMES:
                     fautifs.append(f'{rel}:{lg} `{cle}` -> {src}')
         self.assertEqual(
             fautifs, [],
@@ -170,7 +196,39 @@ class TestUneMesureAbsenteNeFaitPasTomberLAgent(unittest.TestCase):
             "`None`, il ne couvre que l'ABSENCE :\n  "
             + "\n  ".join(fautifs))
         print(f"    ME-1 SCEAU : 0 format nu sur {len(nullables)} cles "
-              f"nullables relevees")
+              f"nullables relevees, {len(_HOMONYMES)} homonyme(s) declare(s)")
+
+    def test_ME1b_AUCUNE_EXEMPTION_MORTE(self):
+        """⚠️⚠️ UNE EXEMPTION QUI NE S'APPLIQUE PLUS EST UN TROU QUI DORT.
+
+        `_HOMONYMES` retranche des sites de l'accusation. Si l'un d'eux
+        disparaissait -- site deplace, expression reecrite, fichier renomme
+        -- l'entree resterait ecrite, et la PROCHAINE fois qu'un site
+        identique naitrait ailleurs, personne ne relirait la preuve.
+        *Une liste d'exemptions se verifie dans les DEUX sens.*
+        """
+        vus = set()
+        for p in _fichiers_de_production():
+            a = _arbre(p)
+            if a is None:
+                continue
+            rel = str(p.relative_to(_RACINE)).replace('\\', '/')
+            for _, cle, src in _formats_numeriques(a):
+                vus.add((rel, cle, src))
+        mortes = sorted(_HOMONYMES - vus)
+        self.assertEqual(
+            mortes, [],
+            f'exemption(s) qui ne correspondent plus a aucun site : '
+            f'{mortes}. Retirez-les, ou relisez la preuve qui les justifie.')
+        nullables = _cles_nullables()
+        inutiles = sorted(x for x in _HOMONYMES if x[1] not in nullables)
+        self.assertEqual(
+            inutiles, [],
+            f'exemption(s) portant sur une cle qui n est PLUS nullable : '
+            f'{inutiles}. Elles ne retranchent plus rien et masqueraient un '
+            f'vrai defaut le jour ou la cle le redeviendrait.')
+        print(f"    ME-1b {len(_HOMONYMES)} exemption(s), toutes vivantes "
+              f"et toutes encore utiles")
 
     def test_ME2_SCEAU_la_PRIMITIVE_du_depot_dit_l_absence(self):
         """⚠️⚠️ LE COMPORTEMENT, PAS LA PRESENCE D'UN APPEL. Un futur site

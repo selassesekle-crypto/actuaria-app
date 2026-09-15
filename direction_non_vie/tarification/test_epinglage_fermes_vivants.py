@@ -21,9 +21,11 @@ Les trois natures, déclarées SÉPARÉMENT (jamais fondues dans « aucun euro d
   · `a5/C2` est un NOMBRE PUBLIÉ — une convergence H1 déduite du Gini au lieu
     d'être lue de l'historique d'entraînement réel.
 """
+import ast
 import inspect
 import os
 import sys
+import textwrap
 import unittest
 
 import numpy as np
@@ -162,11 +164,40 @@ class POS_a4C4_ValidationMlEtHypothesesIdentiques(unittest.TestCase):
     épinglé. Il l'est enfin ici, par la source ET par un vrai retour A4."""
 
     def test_source_les_deux_cles_portent_le_meme_objet(self):
-        src = inspect.getsource(A4.AgentA4ML.run)
-        self.assertRegex(src, r"'validation_ml':\s*_val_ml_tmp",
-                         "validation_ml ne porte pas _val_ml_tmp")
-        self.assertRegex(src, r"'hypotheses':\s*_val_ml_tmp",
-                         "hypotheses ne porte pas _val_ml_tmp")
+        """⚠️⚠️ IL LISAIT LE TEXTE, ET LE TEXTE A CHANGE SANS QUE LE FAIT
+        CHANGE. Deux `assertRegex` cherchaient `'hypotheses':\\s*_val_ml_tmp`
+        dans la source de `run`. Le 15/09/2026, le chemin de succes d'A4 est
+        passe par `sortie_completee(GABARIT_SORTIE, hypotheses=_val_ml_tmp,
+        ...)` : la meme valeur, sous la meme cle, ECRITE AUTREMENT -- et le
+        sceau est devenu rouge sur une correction qui ne change rien.
+        *La parade n'est pas d'elargir la regex : c'est de lire ce que le
+        code FAIT.* On compare desormais les deux expressions PAR AST, quelle
+        que soit leur syntaxe -- cle de dict ou mot-cle d'appel.
+        """
+        arbre = ast.parse(textwrap.dedent(inspect.getsource(A4.AgentA4ML.run)))
+        porte = {}
+        for n in ast.walk(arbre):
+            if isinstance(n, ast.Dict):
+                for k, v in zip(n.keys, n.values):
+                    if isinstance(k, ast.Constant) and k.value in (
+                            'validation_ml', 'hypotheses'):
+                        porte.setdefault(k.value, set()).add(ast.unparse(v))
+            elif isinstance(n, ast.Call):
+                for kw in n.keywords:
+                    if kw.arg in ('validation_ml', 'hypotheses'):
+                        porte.setdefault(kw.arg, set()).add(
+                            ast.unparse(kw.value))
+        for cle in ('validation_ml', 'hypotheses'):
+            self.assertIn(cle, porte,
+                          f'{cle} ne figure plus dans `run` : ce controle ne '
+                          f'mesure plus rien')
+            self.assertEqual(
+                porte[cle], {'_val_ml_tmp'},
+                f'{cle} ne porte pas `_val_ml_tmp` mais {sorted(porte[cle])}')
+        self.assertEqual(
+            porte['validation_ml'], porte['hypotheses'],
+            'les deux cles ne portent plus le MEME objet : elles peuvent '
+            'donc diverger dans le meme retour, ce qui est le constat a4/C4')
         print("    POS a4/C4 source : validation_ml et hypotheses = même objet ✅")
 
     def test_execution_sur_un_vrai_retour_A4_elles_sont_EGALES(self):
