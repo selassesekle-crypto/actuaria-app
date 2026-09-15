@@ -138,7 +138,15 @@ _SOCLE = _RACINE / 'core' / 'sortie_console.py'
 #: AJOUTE, pas un fichier qui se degrade -- la seule hausse que ce
 #: plafond admet. Quatrieme hausse posee DANS LE LOT qui la cause et
 #: AVANT sa gate.
-_FICHIERS_A_RISQUE = 358
+#:
+#: 16/09/2026, 358 -> 359 : `test_matrice_fait_surface.py`, la sentinelle
+#: de `PUBLICATION-1` partie 1. Meme nature : UN fichier AJOUTE.
+#: ⚠️ CINQUIEME HAUSSE, ET LE MOTIF EST TOUJOURS LE MEME -- ce plafond
+#: mesure une dette d'ENCODAGE, et tout fichier de test neuf de ce depot
+#: porte des accents. *Un plafond qui monte a chaque fichier neuf mesure
+#: la croissance du depot, pas sa degradation* : c'est pourquoi la regle
+#: ecrite plus haut distingue les deux, et c'est elle qui tient.
+_FICHIERS_A_RISQUE = 359
 
 
 def _fichiers_de_test() -> list:
