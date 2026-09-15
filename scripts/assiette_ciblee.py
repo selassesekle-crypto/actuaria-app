@@ -73,9 +73,17 @@ def _git(*args: str) -> str:
                           errors='replace').stdout
 
 
-def fichiers_touches() -> list[str]:
-    """Ce que le lot modifie : index ET arbre de travail, suivis ou non."""
-    sortie = _git('status', '--porcelain')
+def fichiers_touches(porcelaine: str | None = None) -> list[str]:
+    """Ce que le lot modifie : index ET arbre de travail, suivis ou non.
+
+    ⚠️ `porcelaine` existe pour que le SCEAU puisse mesurer le comportement
+    de cette fonction au lieu d'en relire le texte. Mesure du 15/09 : un
+    controle qui verifiait la PRESENCE d'une ligne de code a ete contourne
+    par un plant qui ecrivait la meme chose autrement. *Un sceau qui lit du
+    texte se contourne ; un sceau qui appelle la fonction, non.*
+    """
+    sortie = (porcelaine if porcelaine is not None
+              else _git('status', '--porcelain'))
     touches = []
     for ligne in sortie.splitlines():
         if len(ligne) < 4:
@@ -86,7 +94,16 @@ def fichiers_touches() -> list[str]:
             touches.extend(x.strip() for x in chemin.split(' -> '))
         else:
             touches.append(chemin)
-    return [t for t in touches if t.endswith('.py')]
+    #: ⚠️⚠️ ON NE FILTRE PLUS SUR `.py` — TROU TROUVE EN SERVICE, 15/09.
+    #: Cette ligne rendait `[t for t in touches if t.endswith('.py')]`, et
+    #: un lot qui regenerait `reference_gel.json` -- un ORACLE -- ne
+    #: declenchait donc PAS la sentinelle qui le lit. Le critere `N`
+    #: travaille sur le NOM DE FICHIER : il attrape parfaitement un `.json`,
+    #: un `.yaml` ou un `.md` des qu'on le lui donne. *L'outil etait aveugle
+    #: a la seule categorie de fichier qui ne porte que des oracles.*
+    #: Seul le critere `I` a besoin d'un chemin de module : il est borne aux
+    #: `.py` a son propre site, pas ici.
+    return touches
 
 
 def modules_de_test(zone: str) -> list[str]:
@@ -141,7 +158,10 @@ def _est_balayeur(arbre: ast.AST) -> set[str]:
 
 def assiette(touches: list[str], zone: str = _ZONE_DEFAUT) -> dict:
     """{module de test : {raisons}} — ce qui doit tourner pour ce lot."""
-    modules = {t[:-3].replace('/', '.') for t in touches}
+    #: ⚠️ SEUL `I` a besoin d'un chemin de MODULE : on n'y garde donc que
+    #: les `.py`. `N` et `B`, eux, travaillent sur le nom de fichier et
+    #: acceptent un `.json` ou un `.yaml` -- c'est ce qui manquait.
+    modules = {t[:-3].replace('/', '.') for t in touches if t.endswith('.py')}
     bases = {pathlib.PurePosixPath(t).name for t in touches}
     retenus: dict[str, set[str]] = {}
 

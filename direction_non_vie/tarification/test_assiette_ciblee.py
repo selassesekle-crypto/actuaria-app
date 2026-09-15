@@ -182,6 +182,49 @@ class TestAssietteCiblee(unittest.TestCase):
             "l'assiette vaut le corpus entier pour un lot peripherique : "
             'le critere ne separe plus rien')
 
+    # ── AC-8 — un ORACLE qui n'est pas un `.py` entre dans l'assiette ───
+    def test_AC8_un_fichier_non_python_touche_est_vu(self):
+        """⚠️⚠️ TROU TROUVE EN SERVICE, 15/09. `fichiers_touches()` filtrait
+        sur `.py` : un lot qui regenerait `reference_gel.json` -- un ORACLE
+        -- ne declenchait donc PAS la sentinelle qui le lit. *L'outil etait
+        aveugle a la seule categorie de fichier qui ne porte QUE des
+        oracles.*
+
+        Deux sens : le fichier doit ressortir de `fichiers_touches()` quand
+        git le signale, ET l'assiette doit retenir le sceau qui le nomme.
+        """
+        oracle = 'direction_non_vie/tarification/reference_gel.json'
+        self.assertTrue(
+            (_RACINE / oracle).is_file(),
+            f'temoin mort : {oracle} n existe plus, ce controle ne mesure '
+            f'plus rien')
+        #: ⚠️⚠️ ON APPELLE `fichiers_touches` AVEC UNE SORTIE GIT
+        #: FABRIQUEE, au lieu de relire son code. Premiere redaction de ce
+        #: controle : il verifiait (a) `assiette([oracle])` -- qui ne passe
+        #: PAS par `fichiers_touches`, donc ne mesurait pas le filtre -- et
+        #: (b) l'ABSENCE d'une ligne de code, que le plant a contournee en
+        #: ecrivant `.py` autrement. **Il est reste VERT sur le plant.**
+        #: *Un sceau qui lit du texte se contourne ; un sceau qui appelle la
+        #: fonction, non.*
+        rendus = AC.fichiers_touches(f' M {oracle}\n M core/plan_tarifaire.py\n')
+        self.assertIn(
+            oracle, rendus,
+            f'`fichiers_touches` ecarte un fichier non-python : un lot qui '
+            f'REGENERE un ORACLE ne declencherait pas la sentinelle qui le '
+            f'lit. Rendu : {rendus}')
+        self.assertIn('core/plan_tarifaire.py', rendus,
+                      'temoin : les `.py` doivent evidemment passer aussi')
+        #: et le SECOND SENS : une fois vu, il DOIT retenir la sentinelle
+        gel = 'direction_non_vie/tarification/test_gel_livrables.py'
+        retenus = AC.assiette([oracle])
+        self.assertIn(
+            gel, retenus,
+            "la sentinelle du gel n'entre pas dans l'assiette d'un lot qui "
+            "REGENERE sa reference")
+        self.assertTrue(
+            any(r.startswith('N') for r in retenus[gel]),
+            f'elle y entre, mais pas par le NOM : raisons={retenus[gel]}')
+
     # ── AC-7 — une seule lecture de verdict dans ce depot ───────────────
     def test_AC7_le_verdict_n_est_pas_relu_ici_mais_importe(self):
         """`GATE-1` a coute assez cher pour qu'il n'existe qu'UNE lecture de
