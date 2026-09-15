@@ -132,6 +132,7 @@ from core.conformite_reglementaire import (
 # descend, il ne remonte pas. Voir l'en-tete de `contrat_sortie`.
 from direction_non_vie.tarification.contrat_sortie import (
     publication_reglementaire,
+    sortie_completee,
 )
 from core.sortie_console import afficher_sans_echouer
 
@@ -348,6 +349,115 @@ def interpretabilite_de(nom: str) -> float:
             f"l'actuaire. Declarez '{nom}' dans INTERPRETABILITE "
             f"(a6_comparaison/agent.py) avec la justification de sa valeur."
         ) from None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  LE CONTRAT DE SORTIE D'A6 — L'ECART LE PLUS LARGE DU MODULE
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ MESURE DU 11/09/2026, PAR AST : `run` publie **53 clés**, `_erreur`
+# en rend **12**. Quarante et une clés disparaissent quand A6 échoue — dont
+# **les QUATRE livrables** (`excel_bytes`, `html_bytes`, `word_bytes`,
+# `pdf_bytes`), `audit_trail`, `hypotheses`, `rapport_equipe`, et les neuf
+# réserves que ce module a construites précisément pour qu'un lecteur ne
+# puisse pas prendre un silence pour un feu vert.
+#
+# ⚠️⚠️ CE QUE CELA COUTE, ET C'EST MESURE :
+# `gel_livrables.livrables_d_un_resultat` ENUMERE les clés `_bytes` d'un
+# résultat. Sur un A6 en échec, il en trouve ZERO — les quatre surfaces
+# signées d'A6 **sortent de l'assiette** de l'instrument de non-régression,
+# qui rapporte alors « 0 écart » sur ce qu'il ne regarde plus.
+#   *Un instrument dont l'assiette rétrécit avec la panne certifie le plus
+#   fort là où il voit le moins.*
+#
+# ⚠️ ET `test_contrat_sortie.CS1` — la sentinelle qui promet « un agent rend
+# TOUJOURS les mêmes clés » — n'exerce que **A1**. Six agents, un mesuré.
+#
+# ⚠️ LES FORMES SONT VIDES, PAS NEUTRES : `b''` se lit « aucun document »,
+# `{}` « rien à déclarer », `None` « non mesuré ». Aucun chiffre fabriqué —
+# `statut_rag` vaut 'ROUGE' parce qu'un run qui a échoué n'est pas certifié.
+GABARIT_SORTIE: dict[str, Any] = {
+    'success':                   False,
+    'dataframe':                 None,
+    'branche':                   '',
+    'statut_rag':                'ROUGE',
+    'classement':                [],
+    'sensibilite_profils':       [],
+    'modele_production':         {},
+    'backtest':                  {},
+    'lift_ratio':                None,
+    'lift_statut':               None,
+    'exclusions_conformite':     {},
+    'controle_effet':            {},
+    'reserve_arbitrage':         None,
+    'reserve_vraisemblance':     None,
+    'reserve_bases_gini':        None,
+    'reserve_surapprentissage':  None,
+    'meilleur_par_base':         None,
+    'arbitrage_contestable':     None,
+    'alertes_conformite':        {},
+    'alertes_modele':            [],
+    'exclusions_cible':          [],
+    'valide_par_actuaire_dl':    None,
+    'rapport_qualite':           None,
+    'elasticite':                None,
+    'sensibilite_tarifaire':     None,
+    'anti_selection_a3':         None,
+    'reserve_gini_a3':           None,
+    'rapport_mapping':           None,
+    'colonnes_plan_manquantes':  None,
+    'colonnes_plan_ecartees':    {},
+    'colonnes_exemptees_effet':  {},
+    'courbes':                   {},
+    'graphiques':                {},
+    'validation_selection':      {},
+    'graphiques_validation':     {},
+    'fiche_decision':            {},
+    'rapport':                   {},
+    'commentaire':               '',
+    'audit_id':                  '',
+    'erreur':                    None,
+    'excel_bytes':               b'',
+    'html_bytes':                b'',
+    'word_bytes':                b'',
+    'pdf_bytes':                 b'',
+    'hypotheses':                {},
+    'audit_trail':               {},
+    'rapport_equipe':            {'excel_bytes': b'', 'html_bytes': b'',
+                                  'word_bytes': b'', 'pdf_bytes': b''},
+    'archive':                   {},
+    'archive_erreur':            None,
+    # ⚠️ VIDE, PAS « AUCUN MANQUANT » : sur un chemin d'échec, aucun livrable
+    # n'a été DEMANDE, donc aucun ne manque. C'est `avertissement_livrables`
+    # qui porte le fait que le run a échoué, pas cette liste.
+    'livrables_absents':         [],
+    'livrables_tailles':         {},
+    'avertissement_livrables':   None,
+    'publication_reglementaire': None,
+    # ══════════════════════════════════════════════════════════════════════
+    #  LES CINQ CLES DU RELAIS DE PRIX — ET CE QU'ELLES ONT COUTE
+    # ══════════════════════════════════════════════════════════════════════
+    # ⚠️⚠️ ELLES N'ARRIVENT PAS PAR UN LITTERAL : `run` fait
+    # `**_relais_prix`, un dict construit l.1257. Le gabarit de l'auditeur
+    # mesurait la sortie d'A6 au 11/09 — CINQ CLES avant que `18be214`
+    # (14/09) ne pose ce relais. `sortie_completee` a donc LEVE sur le
+    # chemin nominal, le `except Exception` de `run` l'a transformee en
+    # `_erreur`, et **A6 a publié ZERO octet sur ses trois surfaces**.
+    #   *Le garde-fou a fait exactement son travail ; c'est le `except` qui
+    #   a change une alarme en silence.* Trouve par le gel, qui a rendu
+    #   2 488 ecarts et trois surfaces `<livrable absent>` — pas par les
+    #   douze tests de la sentinelle, tous verts.
+    # ⚠️ `CS-1d` ferme la faille : il RESOUT les `**` etales et compare le
+    # jeu de cles du chemin de succes au gabarit, comme le fait
+    # `sortie_completee` a l'execution.
+    # ⚠️ `conditions_mesure` prend `None` comme chez A3, A4 et A5 : une
+    # meme cle ne peut pas avoir deux formes vides selon l'agent, sinon un
+    # lecteur qui traite l'une casse sur l'autre.
+    'tarif':                     None,
+    'portefeuille_tarife':       None,
+    'comparaison_prix':          None,
+    'conditions_mesure':         None,
+    'decision_actuaire':         None,
+}
 
 
 class AgentA6Comparaison:
@@ -1385,7 +1495,10 @@ class AgentA6Comparaison:
                 _val_sel_, classement) if generer_graphiques else {}
 
 
-            return {
+            # ⚠️ LE CHEMIN COMPLET PASSE PAR LE MEME GABARIT : une clé ajoutée
+            # ici sans être ajoutée au gabarit LEVE immédiatement, au lieu de
+            # creuser en silence un nouvel écart entre le succès et l'échec.
+            return sortie_completee(GABARIT_SORTIE, **{
                 'success':            True,
                 'dataframe':          df,
                 'branche':            sous_branche,
@@ -1509,7 +1622,7 @@ class AgentA6Comparaison:
                 # ⚠️ RELAIS, pas second calcul : deux calculs, deux vérités
                 # possibles entre le classeur signé et le résultat rendu.
                 'publication_reglementaire': _publication_regl,
-            }
+            })
 
         except Exception as e:
             logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)
@@ -4507,20 +4620,28 @@ class AgentA6Comparaison:
         return graphiques
 
     def _erreur(self, message: str, audit_id: str) -> Dict:
-        return {
-            'success':           False,
-            'dataframe':         pd.DataFrame(),
-            'branche':           'inconnue',
-            'statut_rag':        'ROUGE',
-            'classement':        [],
-            'modele_production': {},
-            'backtest':          {},
-            'courbes':           {},
-            'rapport':           {},
-            'commentaire':       f"❌ ERREUR A6 : {message}",
-            'audit_id':          audit_id,
-            'erreur':            message,
-        }
+        """Le chemin d'échec rend LES MEMES CLES que le chemin complet.
+
+        ⚠️ `sortie_completee` LEVE sur une clé hors gabarit : c'est ce qui
+        empêche ce chemin de publier une clé de plus ou de moins que
+        `GABARIT_SORTIE`, sans qu'aucune liste ne soit tenue à la main.
+        """
+        return sortie_completee(
+            GABARIT_SORTIE,
+            dataframe=pd.DataFrame(),
+            branche='inconnue',
+            commentaire=f"❌ ERREUR A6 : {message}",
+            audit_id=audit_id,
+            erreur=message,
+            # ⚠️ L'AVERTISSEMENT DE LIVRABLES DIT L'ECHEC, et il le dit dans
+            # le canal que les surfaces lisent deja : sans lui, un lecteur
+            # verrait quatre `b''` sans savoir si les documents n'ont pas ete
+            # DEMANDES ou n'ont pas pu etre PRODUITS.
+            avertissement_livrables=(
+                f"A6 a echoue ({message}) : AUCUN livrable n'a ete produit. "
+                f"Les quatre surfaces signees sont vides, et ce vide est une "
+                f"PANNE, pas une absence de demande."),
+        )
 
 
 if __name__ == '__main__':

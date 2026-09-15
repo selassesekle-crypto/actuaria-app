@@ -152,6 +152,7 @@ from core.severite import (ajuster_glm_cout, construire_cible_severite,
                            phrase_seuil_suppose, seuil_declare,
                            synthese_assiette_ecretement)
 from core.sortie_console import afficher_sans_echouer
+from direction_non_vie.tarification.contrat_sortie import sortie_completee
 
 # ⚠️⚠️ CONSTAT `a2/C15` — LE FILTRE GLOBAL D'AVERTISSEMENTS EST RETIRÉ.
 # `warnings.filterwarnings('ignore')` posé ICI, au niveau module, s'appliquait
@@ -369,6 +370,84 @@ def _calibration_impossible(modele: str, cible, quoi: str,
 # ══════════════════════════════════════════════════════════════════════════════
 # CLASSE PRINCIPALE : AGENT A3 GLM
 # ══════════════════════════════════════════════════════════════════════════════
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  LE CONTRAT DE SORTIE — MESURE PAR EXECUTION LE 11/09/2026
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ LE CONTRAT EXISTE, LA SENTINELLE EXISTE, ET UN SEUL AGENT SUR SIX LES
+# APPLIQUE. `contrat_sortie` écrit en tête : « un agent rend TOUJOURS LES
+# MEMES CLES, en échec comme en succès ». Mesure par EXECUTION de chaque
+# `_erreur`, comparée aux clés d'un run réel :
+#
+#     agent   gabarit   clés à l'échec   clés au succès   PERDUES
+#      A1      17         (via sortie_completee)  17          0
+#      A2      AUCUN        9                     16          7
+#      A3      AUCUN       11                     38         27
+#      A4      AUCUN       13                     37         24
+#      A5      AUCUN       12                     28         16
+#      A6      AUCUN       12                     53         41
+#
+# ⚠️⚠️ ET LES QUATRE CLES DU CONTRAT — `excel_bytes`, `word_bytes`,
+# `pdf_bytes`, `audit_trail` — SONT ABSENTES DU CHEMIN D'ECHEC DE CINQ
+# AGENTS SUR SIX.
+#
+# ⚠️ POURQUOI PERSONNE NE L'A VU : `test_contrat_sortie.CS1` — la sentinelle
+# qui promet « un agent rend toujours les mêmes clés » — n'exerce QUE A1
+# (classe `TestMemesClesPartout`, méthode `_a1`, aucun autre agent
+# instancié). *Une sentinelle braquée sur un sixième de son sujet certifie
+# ce qu'elle n'a pas regardé.*
+#
+# ⚠️ CE QUE CELA COUTE, MESURE : `gel_livrables.livrables_d_un_resultat`
+# ENUMERE les clés finissant par `_bytes`. Sur un agent en échec il en
+# trouve ZERO — les surfaces signées de cet agent **sortent de l'assiette**
+# de l'instrument de non-régression, qui rapporte alors « 0 écart » sur ce
+# qu'il ne regarde plus.
+#
+# ⚠️ A3 PERDAIT VINGT-SEPT CLES, dont `hypotheses` — que `_calculer_statut_rag`
+# d'A6 lit pour plafonner sur H1/H2/H5 — et `anti_selection`, le ROUGE forcé
+# sur un GLM qui discrimine à l'envers. *Sur un A3 en échec, A6 recevait
+# `None` pour l'une et pour l'autre, et ne plafonnait rien.*
+GABARIT_SORTIE: dict[str, Any] = {
+    'success':                  False,
+    'dataframe':                None,
+    'branche':                  '',
+    'statut_rag':               'ROUGE',
+    'anti_selection':           None,
+    'reserve_gini':             None,
+    'diagnostic_evaluation':    None,
+    'conditions_mesure':        None,
+    'modeles':                  {},
+    'metriques':                {},
+    'predictions':              {},
+    'graphiques':               {},
+    'validation_glm':           {},
+    'graphiques_validation':    {},
+    'rapport':                  {},
+    'commentaire':              '',
+    'audit_id':                 '',
+    'erreur':                   None,
+    'df_train':                 None,
+    'df_test':                  None,
+    'vars_pred':                [],
+    'relativites_poisson':      {},
+    'relativites_gamma':        {},
+    'excel_bytes':              b'',
+    'word_bytes':               b'',
+    'pdf_bytes':                b'',
+    'hypotheses':               {},
+    'audit_trail':              {},
+    'exclusions_conformite':    {},
+    'colonnes_plan_ecartees':   (),
+    'colonnes_exemptees_effet': (),
+    'ecretement_severite':      {},
+    'controle_effet':           {'execute': False, 'motifs': {}},
+    'alertes_conformite':       {},
+    'alertes_modele':           [],
+    'modele_ampute':            None,
+    'credibilite':              {},
+    'lissage_geo':              {},
+}
+
 
 class AgentA3GLM:
     """
@@ -806,74 +885,76 @@ class AgentA3GLM:
                 'lissage_geo_applique':  lissage_geo.get('applique', False),
             }
 
-            return {
-                'success':      True,
-                'dataframe':    df,
-                'branche':      sous_branche,
-                'statut_rag':   statut_rag,
+            # ⚠️ LE CHEMIN COMPLET PASSE PAR LE MEME GABARIT : une clé ajoutée
+            # ici sans être ajoutée au gabarit LEVE immédiatement.
+            return sortie_completee(GABARIT_SORTIE, 
+                success=True,
+                dataframe=df,
+                branche=sous_branche,
+                statut_rag=statut_rag,
                 # ⚠️⚠️ LA RAISON VOYAGE AVEC LE STATUT, JAMAIS SEULE.
                 # Un ROUGE sans sa cause laisse l'actuaire chercher un défaut
                 # de données là où un modèle discrimine à l'envers — c'est
                 # exactement le défaut que `services/C7` a fermé pour le
                 # plafond AMBRE. `None` quand il n'y a rien à dire.
-                'anti_selection': _raison_anti_selection,
+                anti_selection=_raison_anti_selection,
                 # ⚠️ Et la réserve, qui ne colore RIEN : elle nomme le Gini
                 # qui n'a pas pu être mesuré, sans le convertir en verdict.
-                'reserve_gini':   _reserve_gini,
+                reserve_gini=_reserve_gini,
                 # ⚠️⚠️ LE DIAGNOSTIC VOYAGE AVEC LE RÉSULTAT, PAS DANS UN LOG.
                 # A6 en a besoin pour REFUSER l'arbitrage et nommer la cause :
                 # un avertissement journalisé n'atteint personne, et c'est
                 # exactement ce que cet audit poursuit depuis le début.
                 # `None` quand l'évaluation est possible.
-                'diagnostic_evaluation': _diag_eval,
+                diagnostic_evaluation=_diag_eval,
                 # ⚠️ Sur quelle decoupe ces Gini ont ete mesures. A6 les range
                 # a cote de ceux d'A4 et d'A5 : le document doit dire d'ou ils
                 # viennent, et qu'aucun plan ne declare cette decoupe.
-                'conditions_mesure': getattr(self, '_conditions_mesure', None),
-                'modeles':      self.modeles,
-                'metriques':    self.metriques,
-                'predictions':  self.predictions,
-                'graphiques':            graphiques,
-                'validation_glm':        _val_glm_,
-                'graphiques_validation': _gv_glm_,
-                'rapport':      rapport,
-                'commentaire':  commentaire,
-                'audit_id':     audit_id,
-                'erreur':       None,
-                'df_train':     df_train,
-                'df_test':      df_test,
-                'vars_pred':    vars_pred,
+                conditions_mesure=getattr(self, '_conditions_mesure', None),
+                modeles=self.modeles,
+                metriques=self.metriques,
+                predictions=self.predictions,
+                graphiques=graphiques,
+                validation_glm=_val_glm_,
+                graphiques_validation=_gv_glm_,
+                rapport=rapport,
+                commentaire=commentaire,
+                audit_id=audit_id,
+                erreur=None,
+                df_train=df_train,
+                df_test=df_test,
+                vars_pred=vars_pred,
                 # ── RELATIVITÉS TARIFAIRES (sortie commerciale) ──────────────
-                'relativites_poisson': relativites_poisson,
-                'relativites_gamma':   relativites_gamma,
-                'excel_bytes':  excel_bytes,
-                'word_bytes':   b'',
-                'pdf_bytes':    b'',
-                'hypotheses':   _val_glm_,
-                'audit_trail':  audit_trail_a3,
+                relativites_poisson=relativites_poisson,
+                relativites_gamma=relativites_gamma,
+                excel_bytes=excel_bytes,
+                word_bytes=b'',
+                pdf_bytes=b'',
+                hypotheses=_val_glm_,
+                audit_trail=audit_trail_a3,
                 # Exclusions de conformité tracées par MatriceX (audit V11 / I5) :
                 # une exclusion silencieuse est un défaut en soi — c'est ce silence
                 # qui a rendu le BLOQUANT B5 si coûteux (facteur central de la RC Pro
                 # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
-                'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
-                'colonnes_plan_ecartees': getattr(
+                exclusions_conformite=getattr(self, 'exclusions_conformite', {}),
+                colonnes_plan_ecartees=getattr(
                     self, 'colonnes_plan_ecartees', ()),
-                'colonnes_exemptees_effet': getattr(
+                colonnes_exemptees_effet=getattr(
                     self, 'colonnes_exemptees_effet', ()),
                 # Constat socle/C1 : l assiette du seuil et son diagnostic
-                'ecretement_severite': getattr(self, 'ecretement_severite', {}),
-                'controle_effet': getattr(self, 'controle_effet',
+                ecretement_severite=getattr(self, 'ecretement_severite', {}),
+                controle_effet=getattr(self, 'controle_effet',
                                           {'execute': False, 'motifs': {}}),
-                'alertes_conformite': getattr(self, 'alertes_conformite', {}),
+                alertes_conformite=getattr(self, 'alertes_conformite', {}),
                 # Modèle amputé (colonnes du plan absentes des données) : alerte
                 # explicite + plafond AMBRE. A6 agrège déjà 'alertes_modele'
                 # depuis r3/r4/r5 et la route vers les 3 livrables.
-                'alertes_modele':   _alertes_modele,
-                'modele_ampute':    _ampute,
+                alertes_modele=_alertes_modele,
+                modele_ampute=_ampute,
                 # Modules avancés P2
-                'credibilite':  credibilite,
-                'lissage_geo':  lissage_geo,
-            }
+                credibilite=credibilite,
+                lissage_geo=lissage_geo,
+            )
 
         except Exception as e:
             logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)
@@ -4487,19 +4568,20 @@ class AgentA3GLM:
             }
 
     def _erreur(self, message: str, audit_id: str) -> Dict:
-        return {
-            'success':     False,
-            'dataframe':   pd.DataFrame(),
-            'branche':     'inconnue',
-            'statut_rag':  'ROUGE',
-            'modeles':     {},
-            'metriques':   {},
-            'predictions': {},
-            'rapport':     {},
-            'commentaire': f"❌ ERREUR A3 : {message}",
-            'audit_id':    audit_id,
-            'erreur':      message,
-        }
+        """Le chemin d'échec rend LES MEMES CLES que le chemin complet.
+
+        ⚠️ `sortie_completee` LEVE sur une clé hors gabarit : c'est ce qui
+        empêche ce chemin de publier une clé de plus ou de moins que
+        `GABARIT_SORTIE`, sans qu'aucune liste ne soit tenue à la main.
+        """
+        return sortie_completee(
+            GABARIT_SORTIE,
+            dataframe=pd.DataFrame(),
+            branche='inconnue',
+            commentaire=f"❌ ERREUR A3 : {message}",
+            audit_id=audit_id,
+            erreur=message,
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════════

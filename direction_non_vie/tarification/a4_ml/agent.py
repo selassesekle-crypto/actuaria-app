@@ -208,6 +208,7 @@ from core.plan_tarifaire import (
     alerte_modele_ampute,
 )
 from core.sortie_console import afficher_sans_echouer
+from direction_non_vie.tarification.contrat_sortie import sortie_completee
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -1007,6 +1008,77 @@ COLS_COMPTAGE = {
     'count',
 }
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  LE CONTRAT DE SORTIE D'A4 — LES MEMES CLES EN ECHEC QU'EN SUCCES
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ MESURE DU 11/09/2026, PAR AST SUR CE FICHIER : `run` publie **37 clés**
+# sur son chemin complet, et `_erreur` en rend **13**. Vingt-quatre clés
+# disparaissent quand A4 échoue — dont les trois livrables, `audit_trail`,
+# `hypotheses`, `validation_ml`, `echecs_modeles` et `diagnostic_evaluation`.
+#
+# ⚠️⚠️ ET L'INSTRUMENT QUI SURVEILLE CE CONTRAT NE POUVAIT PAS LE VOIR.
+# `test_contrat_sortie.CS3` dérive « les clés publiées » de l'UNION des
+# `return` trouvés DANS `run` : `_erreur` est une autre méthode, son `return`
+# n'entre donc pas dans le relevé, et les 37 clés du succès comptent comme
+# publiées en toute circonstance. *La garantie qu'un lecteur cherche est
+# l'INTERSECTION des chemins, jamais leur union.*
+#
+# ⚠️ CE QUE CELA COUTE, MESURE ET PAS SUPPOSE : aucun lecteur du dépôt
+# n'indexe une de ces clés en dur (relevé AST : 0 lecture `resultat[clé]`),
+# donc rien ne lève aujourd'hui. Quatre lecteurs les lisent avec un repli
+# (`a6:1488`, `rapport_modeles_tarif:1829`, `tarif_excel:361`, `:523`) — et
+# c'est exactement le défaut que `contrat_sortie` existe pour rendre inutile.
+# Le coût mesuré porte ailleurs : `gel_livrables.livrables_d_un_resultat`
+# ENUMERE les clés finissant par `_bytes`. Sur un A4 en échec il en trouve
+# ZERO, donc les trois surfaces d'A4 SORTENT de l'assiette de comparaison
+# — l'instrument de preuve ne compare plus ce qu'il croit comparer.
+#
+# ⚠️ LES FORMES SONT VIDES, PAS NEUTRES : `b''` se lit « aucun document »,
+# `None` « non mesuré ». Aucune de ces valeurs n'est un chiffre fabriqué.
+GABARIT_SORTIE: dict[str, Any] = {
+    'success':                 False,
+    'dataframe':               None,
+    'branche':                 '',
+    'col_cible':               None,
+    'conditions_mesure':       None,
+    'statut_rag':              'ROUGE',
+    'modeles':                 {},
+    'metriques':               {},
+    'classement':              [],
+    'meilleur_modele':         None,
+    'shap_values':             {},
+    'monitoring':              {},
+    'elasticite':              {},
+    'sensibilite_tarifaire':   {},
+    'validation_ml':           {},
+    'hypotheses':              {},
+    'graphiques':              {},
+    'graphiques_validation':   {},
+    'rapport':                 {},
+    'commentaire':             '',
+    'audit_id':                '',
+    'erreur':                  None,
+    'y_test':                  None,
+    'feature_names':           [],
+    'exclusions_conformite':   {},
+    'colonnes_plan_ecartees':  (),
+    'colonnes_exemptees_effet': (),
+    # ⚠️ La forme vide du contrôle par effet est celle que le chemin complet
+    # utilise déjà (`getattr(self, 'controle_effet', {...})`) : « il n'a pas
+    # été exécuté », et non « il est passé ».
+    'controle_effet':          {'execute': False, 'motifs': {}},
+    'alertes_conformite':      {},
+    'alertes_modele':          [],
+    'echecs_modeles':          [],
+    'diagnostic_evaluation':   None,
+    'modele_ampute':           None,
+    'excel_bytes':             b'',
+    'word_bytes':              b'',
+    'pdf_bytes':               b'',
+    'audit_trail':             {},
+}
+
+
 class AgentA4ML:
     """
     Agent A4 — Tarification Machine Learning.
@@ -1557,26 +1629,31 @@ class AgentA4ML:
                         audit_id, sous_branche, classement, statut_rag, commentaire, result_a3),
                     logger, audit_id)
 
-            return {
-                'success':         True,
-                'dataframe':       df,
-                'branche':         sous_branche,
-                'col_cible':       col_cible,   # cible sur laquelle CES modeles ML sont ajustes (A6 filtre dessus)
+            # ⚠️ LE CHEMIN COMPLET PASSE PAR LE MEME GABARIT, et c'est ce qui
+            # ferme le défaut pour de bon : une clé ajoutée ici sans être
+            # ajoutée au gabarit LEVE immédiatement (`sortie_completee`
+            # refuse une clé inconnue), au lieu de creuser en silence un
+            # nouvel écart entre le succès et l'échec.
+            return sortie_completee(GABARIT_SORTIE, 
+                success=True,
+                dataframe=df,
+                branche=sous_branche,
+                col_cible=col_cible,   # cible sur laquelle CES modeles ML sont ajustes (A6 filtre dessus)
                 # ⚠️ Sur quelle decoupe ces scores ont ete mesures. A6 les
                 # range cote a cote ; sans ce champ, le document ne peut pas
                 # dire d'ou ils viennent.
-                'conditions_mesure': getattr(self, '_conditions_mesure', None),
-                'statut_rag':      statut_rag,
-                'modeles':         self.modeles,
-                'metriques':       self.metriques,
-                'classement':      classement,
-                'meilleur_modele': classement[0]['modele'] if classement else None,
-                'shap_values':     shap_summary,
+                conditions_mesure=getattr(self, '_conditions_mesure', None),
+                statut_rag=statut_rag,
+                modeles=self.modeles,
+                metriques=self.metriques,
+                classement=classement,
+                meilleur_modele=classement[0]['modele'] if classement else None,
+                shap_values=shap_summary,
                 # Nouvelles méthodes avancées — mesurées une seule fois, plus
                 # haut. `validation_ml` et `hypotheses` portent DÉSORMAIS le
                 # même objet : une hypothèse ne peut plus recevoir deux
                 # verdicts dans le même dictionnaire de retour.
-                'monitoring':      _monitoring,
+                monitoring=_monitoring,
                 # ⚠️ `optimisation` A ETE RETIREE, ET CE QUI LA REMPLACE EST UN
                 # ETAT, PAS UN CHIFFRE. Elle publiait « Tarif optimal : -20 % »
                 # quels que soient le portefeuille, sa taille et la qualite du
@@ -1589,54 +1666,54 @@ class AgentA4ML:
                 # CA x 0,30, donc proportionnelle au CA.
                 # ⚠️ ET C'ETAIT UNE RECOMMANDATION D'ACTION : un actuaire qui
                 # la suivait baissait son tarif de 20 %.
-                'elasticite':      _etat_elasticite,
+                elasticite=_etat_elasticite,
                 # ⚠️ CE QUI A ETE RETIRE AU LOT L0 REVIENT ICI, FONDE : la
                 # courbe vient du logit ajuste, le portefeuille est le vrai,
                 # la marge suit les chargements du depot, et chaque point dit
                 # s'il est appuye par les donnees observees.
-                'sensibilite_tarifaire': rapport['sensibilite_tarifaire'],
-                'validation_ml':   _val_ml_tmp,
-                'graphiques_validation': self._graphiques_validation_ml(
+                sensibilite_tarifaire=rapport['sensibilite_tarifaire'],
+                validation_ml=_val_ml_tmp,
+                graphiques_validation=self._graphiques_validation_ml(
                                        _val_ml_tmp, classement, _monitoring,
                                    ) if generer_graphiques else {},
-                'graphiques':      graphiques,
-                'rapport':         rapport,
-                'commentaire':     commentaire,
-                'audit_id':        audit_id,
-                'erreur':          None,
-                'y_test':          y_test,
-                'feature_names':   feature_names,
+                graphiques=graphiques,
+                rapport=rapport,
+                commentaire=commentaire,
+                audit_id=audit_id,
+                erreur=None,
+                y_test=y_test,
+                feature_names=feature_names,
                 # Exclusions de conformité tracées par MatriceX (audit V11 / I5) :
                 # une exclusion silencieuse est un défaut en soi — c'est ce silence
                 # qui a rendu le BLOQUANT B5 si coûteux (facteur central de la RC Pro
                 # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
-                'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
-                'colonnes_plan_ecartees': getattr(
+                exclusions_conformite=getattr(self, 'exclusions_conformite', {}),
+                colonnes_plan_ecartees=getattr(
                     self, 'colonnes_plan_ecartees', ()),
-                'colonnes_exemptees_effet': getattr(
+                colonnes_exemptees_effet=getattr(
                     self, 'colonnes_exemptees_effet', ()),
-                'controle_effet': getattr(self, 'controle_effet',
+                controle_effet=getattr(self, 'controle_effet',
                                           {'execute': False, 'motifs': {}}),
-                'alertes_conformite': getattr(self, 'alertes_conformite', {}),
+                alertes_conformite=getattr(self, 'alertes_conformite', {}),
                 # Modèle amputé (colonnes du plan absentes des données) : alerte
                 # explicite + plafond AMBRE. A6 agrège déjà 'alertes_modele'.
-                'alertes_modele':  _alertes_modele,
+                alertes_modele=_alertes_modele,
                 # ⚠️ LE CANAL DES PANNES, LU PAR A6 : `rapport['alertes']` n'est
                 # lu par AUCUNE surface signée (mesuré), il ne pouvait pas
                 # porter un échec technique.
-                'echecs_modeles':  list(getattr(self, '_echecs_modeles', [])),
+                echecs_modeles=list(getattr(self, '_echecs_modeles', [])),
                 # ⚠️ Le diagnostic d'evaluation voyage avec le RESULTAT :
                 # A6 en a besoin pour refuser l'arbitrage et nommer la
                 # cause. Un avertissement journalise n'atteint personne.
-                'diagnostic_evaluation': getattr(
+                diagnostic_evaluation=getattr(
                     self, '_diag_evaluation', None),
-                'modele_ampute':   _ampute,
+                modele_ampute=_ampute,
                 # ── Standard ActuarIA ─────────────────────────────────────────
-                'excel_bytes':     _excel_a4,
-                'word_bytes':      _word_a4,
-                'pdf_bytes':       b'',
-                'hypotheses':      _val_ml_tmp,
-                'audit_trail':     {
+                excel_bytes=_excel_a4,
+                word_bytes=_word_a4,
+                pdf_bytes=b'',
+                hypotheses=_val_ml_tmp,
+                audit_trail={
                     'agent': 'A4_ML', 'version': '1.0', 'audit_id': audit_id,
                     'timestamp': t_debut.isoformat(), 'branche': sous_branche,
                     'statut_rag': statut_rag,
@@ -1659,7 +1736,7 @@ class AgentA4ML:
                     'ic_surapprentissage_tirages': IC_SURAPPRENTISSAGE_TIRAGES,
                     'ic_surapprentissage_graine': IC_SURAPPRENTISSAGE_GRAINE,
                 },
-            }
+            )
 
         except Exception as e:
             logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)
@@ -4210,21 +4287,20 @@ class AgentA4ML:
         return graphiques
 
     def _erreur(self, message: str, audit_id: str) -> Dict:
-        return {
-            'success':         False,
-            'dataframe':       pd.DataFrame(),
-            'branche':         'inconnue',
-            'statut_rag':      'ROUGE',
-            'modeles':         {},
-            'metriques':       {},
-            'classement':      [],
-            'meilleur_modele': None,
-            'shap_values':     {},
-            'rapport':         {},
-            'commentaire':     f"❌ ERREUR A4 : {message}",
-            'audit_id':        audit_id,
-            'erreur':          message,
-        }
+        """Le chemin d'échec rend LES MEMES CLES que le chemin complet.
+
+        ⚠️ `sortie_completee` LEVE sur une clé hors gabarit : c'est ce qui
+        empêche ce chemin de publier une clé de plus ou de moins que
+        `GABARIT_SORTIE`, sans qu'aucune liste ne soit tenue à la main.
+        """
+        return sortie_completee(
+            GABARIT_SORTIE,
+            dataframe=pd.DataFrame(),
+            branche='inconnue',
+            commentaire=f"❌ ERREUR A4 : {message}",
+            audit_id=audit_id,
+            erreur=message,
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════════

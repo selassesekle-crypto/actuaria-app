@@ -67,11 +67,20 @@ import numpy as np
 
 from core.conformite_reglementaire import synthese_colonnes_plan_ecartees
 from direction_non_vie.tarification import test_pipeline_agents as T
+
+# ⚠️ `GABARIT_SORTIE` EST ICI CELUI D'A1, ET IL NE SERT QU'A CS-2 (le
+# gabarit refuse-t-il une cle inconnue ?). ⛔ NE PAS s'en servir pour
+# DERIVER les cles d'un autre agent : c'est exactement le defaut que
+# `_gabarit_du_fichier` a ferme le 11/09/2026 -- 15 lectures reelles
+# declarees fantomes parce qu'A4 avait adopte le contrat.
 from direction_non_vie.tarification.a1_ingestion.agent import (
     GABARIT_SORTIE,
     AgentA1Ingestion,
 )
-from direction_non_vie.tarification.contrat_sortie import sortie_completee
+from direction_non_vie.tarification.contrat_sortie import (
+    FORMES_VIDES,
+    sortie_completee,
+)
 
 # =============================================================================
 #  CS-1, CS-2 — LE CONTRAT, VERIFIE PAR EXECUTION
@@ -186,8 +195,46 @@ LECTURES_HORS_PERIMETRE = {
 }
 
 
+def _gabarit_du_fichier(arbre):
+    """Les cles du `GABARIT_SORTIE` declare DANS CE MODULE-LA.
+
+    ⚠️⚠️ CE RELEVE LISAIT LE GABARIT D'A1 POUR LES SIX AGENTS. La ligne
+    fautive etait `cles |= set(GABARIT_SORTIE)` : `GABARIT_SORTIE` est ici
+    l'objet IMPORTE EN TETE DE CE FICHIER, `a1_ingestion.GABARIT_SORTIE`,
+    dix-sept cles. Tant qu'A1 etait le seul agent migre vers
+    `sortie_completee`, la confusion ne se voyait pas.
+
+    Mesure du 11/09/2026, sur une copie isolee ou A4 passe par
+    `sortie_completee` avec SON propre gabarit de 37 cles : **CS-3 rougit sur
+    15 lectures reelles** -- `tarif_excel:361 lit A4['validation_ml']`,
+    `a6:1488 lit A4['col_cible']`, `rapport_equipe_tarif:567 lit
+    A4['classement']`... toutes publiees par A4, aucune presente dans le
+    gabarit d'A1.
+
+      *La sentinelle ecrite pour garantir le contrat PUNISSAIT l'agent qui
+      adopte le contrat.* C'est le meme defaut qu'elle denonce chez les
+      autres : une reference lue a cote de la donnee qu'elle decrit.
+
+    ⚠️ ON DERIVE, ON N'IMPORTE PAS : le gabarit se lit dans l'arbre de
+    l'agent examine. Aucune table, aucun import a tenir a jour, et un
+    septieme agent entre dans la mesure sans que cette fonction change.
+    """
+    cles = set()
+    for n in arbre.body:
+        cible = None
+        if isinstance(n, ast.AnnAssign):
+            cible = getattr(n.target, 'id', None)
+        elif isinstance(n, ast.Assign) and len(n.targets) == 1:
+            cible = getattr(n.targets[0], 'id', None)
+        if cible == 'GABARIT_SORTIE' and isinstance(n.value, ast.Dict):
+            cles |= {k.value for k in n.value.keys
+                     if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+    return cles
+
+
 def _cles_publiees(chemin):
     arbre = ast.parse(pathlib.Path(chemin).read_text(encoding='utf-8'))
+    gabarit = _gabarit_du_fichier(arbre)
     cles = set()
     for n in ast.walk(arbre):
         if not (isinstance(n, ast.FunctionDef) and n.name == 'run'):
@@ -197,10 +244,23 @@ def _cles_publiees(chemin):
                 cles |= {k.value for k in sub.value.keys
                          if isinstance(k, ast.Constant)
                          and isinstance(k.value, str)}
-            # `return sortie_completee(GABARIT, ...)` : le gabarit porte les cles
+            # `return sortie_completee(GABARIT, ...)` : le gabarit porte les
+            # cles -- CELUI DE CET AGENT, lu dans son propre module.
             elif (isinstance(sub, ast.Return) and isinstance(sub.value, ast.Call)
                   and getattr(sub.value.func, 'id', None) == 'sortie_completee'):
-                cles |= set(GABARIT_SORTIE)
+                if not gabarit:
+                    raise AssertionError(
+                        f'{pathlib.Path(chemin).name} : `run` rend un '
+                        '`sortie_completee(...)` mais ce module ne declare '
+                        'aucun `GABARIT_SORTIE` -- le controle ne peut pas '
+                        'deriver ses cles publiees, et un gabarit emprunte '
+                        'a un autre agent le rendrait FAUX.')
+                cles |= gabarit
+                # ⚠️ Et les cles passees en clair au meme appel : un agent
+                # peut poser une valeur hors gabarit -- `sortie_completee`
+                # leverait, mais le relevé, lui, doit rester fidele a ce que
+                # le code ECRIT.
+                cles |= {kw.arg for kw in sub.value.keywords if kw.arg}
     return cles
 
 
@@ -339,6 +399,279 @@ class TestNomDuPlanPublie(unittest.TestCase):
         self.assertIn("plan '?'", sans,
                       "le libelle ne signale plus l'absence de nom : ce test "
                       'ne surveille plus rien')
+
+
+# =============================================================================
+#  CS-1c — LE CONTRAT EST VERIFIE SUR LES SIX AGENTS, PLUS SUR UN SEUL
+# =============================================================================
+
+class TestContratSurLesSixAgents(unittest.TestCase):
+    """⚠️⚠️ CS-1 CI-DESSUS N'EXERCE QUE A1, ET LE MODULE PROMET LES SIX.
+
+    Son en-tete dit « un agent rend TOUJOURS LES MEMES CLES » et
+    `contrat_sortie` le repete ; `TestMemesClesPartout` n'instancie qu'A1.
+    Mesure du 11/09/2026, par EXECUTION de chaque `_erreur`, comparee aux
+    cles d'un run reel :
+
+        agent   cles a l'echec   cles au succes   PERDUES
+         A1        17               17               0
+         A2         9               16               7
+         A3        11               38              27
+         A4        13               37              24
+         A5        12               28              16
+         A6        12               53              41
+
+    Et les quatre cles du contrat -- `excel_bytes`, `word_bytes`,
+    `pdf_bytes`, `audit_trail` -- manquaient au chemin d'echec de CINQ
+    agents sur six.
+
+      *Une sentinelle braquee sur un sixieme de son sujet certifie ce
+      qu'elle n'a pas regarde.*
+
+    ⚠️ LA LISTE DES AGENTS SE DERIVE DE `_AGENTS`, deja tenue par CS-3 :
+    une seconde liste divergerait de la premiere.
+    """
+
+    #: nom de module -> nom de la classe d'agent. ⚠️ Il n'y a PAS de table :
+    #: la classe est trouvee dans le module par son nom, qui commence tous
+    #: par `Agent`. Un septieme agent entre sans toucher a ce test.
+    @staticmethod
+    def _classe_agent(module):
+        import inspect
+        for nom, objet in vars(module).items():
+            if (inspect.isclass(objet) and nom.startswith('Agent')
+                    and objet.__module__ == module.__name__):
+                return objet
+        return None
+
+    @staticmethod
+    def _module(code):
+        import importlib
+        chemin = _AGENTS[code].replace('/', '.').removesuffix('.py')
+        return importlib.import_module(chemin)
+
+    def test_CS1c_chaque_agent_declare_un_gabarit_de_sortie(self):
+        """Sans gabarit, aucun chemin ne peut garantir les memes cles."""
+        sans = [code for code in sorted(_AGENTS)
+                if getattr(self._module(code), 'GABARIT_SORTIE', None) is None]
+        self.assertEqual(
+            sans, [],
+            f"{sans} ne declare(nt) aucun GABARIT_SORTIE : leur chemin "
+            f"d'echec ne peut pas rendre les memes cles que leur chemin "
+            f"complet, et rien ne le detecte.")
+
+    def test_CS1c_le_chemin_d_echec_rend_EXACTEMENT_le_gabarit(self):
+        """⚠️ PAR EXECUTION : on appelle `_erreur` et on lit ce qui SORT."""
+        for code in sorted(_AGENTS):
+            with self.subTest(agent=code):
+                module = self._module(code)
+                gabarit = getattr(module, 'GABARIT_SORTIE', None)
+                self.assertIsNotNone(gabarit, f'{code} : aucun gabarit')
+                classe = self._classe_agent(module)
+                self.assertIsNotNone(classe, f'{code} : classe introuvable')
+                agent = classe.__new__(classe)
+                _erreur = getattr(agent, '_erreur', None)
+                if _erreur is None:
+                    # A1 n'a pas de `_erreur` : ses chemins d'echec appellent
+                    # `sortie_completee` directement, et CS-1 les execute deja.
+                    continue
+                sortie = _erreur('sonde de contrat', 'AUDIT-CS1c')
+                self.assertEqual(
+                    sorted(sortie), sorted(gabarit),
+                    f"{code} : le chemin d'echec ne rend pas le gabarit. "
+                    f"Manquantes : {sorted(set(gabarit) - set(sortie))} ; "
+                    f"en trop : {sorted(set(sortie) - set(gabarit))}")
+
+    def test_CS1c_les_quatre_cles_de_livrable_sont_au_gabarit(self):
+        """⚠️⚠️ CE SONT ELLES QUE `gel_livrables` ENUMERE.
+
+        `livrables_d_un_resultat` parcourt les cles finissant par `_bytes`.
+        Un agent qui n'en publie aucune sur son chemin d'echec fait SORTIR
+        ses surfaces de l'assiette de l'instrument de non-regression, qui
+        rapporte alors << 0 ecart >> sur ce qu'il ne regarde plus.
+        """
+        for code in sorted(_AGENTS):
+            with self.subTest(agent=code):
+                gabarit = getattr(self._module(code), 'GABARIT_SORTIE', {})
+                manquantes = [cle for cle in FORMES_VIDES
+                              if cle in ('excel_bytes', 'word_bytes',
+                                         'pdf_bytes', 'audit_trail')
+                              and cle not in gabarit]
+                self.assertEqual(
+                    manquantes, [],
+                    f'{code} : {manquantes} absente(s) du gabarit — les '
+                    f'surfaces de cet agent sortent de l assiette du gel des '
+                    f'que son run echoue.')
+
+    def test_CS1c_les_DEUX_chemins_passent_par_le_gabarit(self):
+        """⚠️ CE CONTROLE-CI EST STRUCTUREL, ET JE LE DIS.
+
+        Les trois precedents s'executent. Celui-ci ne le peut pas : faire
+        REUSSIR les six agents demanderait un portefeuille, un plan et
+        plusieurs minutes de calibration par agent. Il verifie donc que le
+        `return` du chemin COMPLET passe lui aussi par
+        `sortie_completee(GABARIT_SORTIE, ...)` -- ce qui rend l'egalite des
+        cles structurelle plutot que constatee.
+
+        *Un controle structurel qui se declare tel vaut mieux qu'un controle
+        par execution qui n'a pas lieu.*
+        """
+        for code in sorted(_AGENTS):
+            with self.subTest(agent=code):
+                arbre = ast.parse(pathlib.Path(
+                    os.path.join(_RACINE, _AGENTS[code])).read_text(
+                        encoding='utf-8'))
+                complets, bruts = 0, 0
+                for n in ast.walk(arbre):
+                    if not (isinstance(n, ast.FunctionDef) and n.name == 'run'):
+                        continue
+                    for sub in ast.walk(n):
+                        if not isinstance(sub, ast.Return):
+                            continue
+                        if isinstance(sub.value, ast.Dict):
+                            bruts += 1
+                        elif (isinstance(sub.value, ast.Call)
+                              and getattr(sub.value.func, 'id', None)
+                              == 'sortie_completee'):
+                            complets += 1
+                self.assertEqual(
+                    bruts, 0,
+                    f"{code} : {bruts} `return {{...}}` brut(s) dans `run` — "
+                    f"ces chemins ne passent pas par le gabarit et peuvent "
+                    f"donc publier un jeu de cles different de `_erreur`.")
+                self.assertGreater(
+                    complets, 0,
+                    f'{code} : aucun `return sortie_completee(...)` dans '
+                    f'`run` — le contrat n est pas applique.')
+
+
+# =============================================================================
+#  CS-1d — LE CHEMIN DE SUCCES TIENT-IL DANS SON PROPRE GABARIT ?
+# =============================================================================
+
+class TestSuccesTientDansLeGabarit(unittest.TestCase):
+    """⚠️⚠️ CE QUE LES QUATRE CS-1c NE VOIENT PAS, ET CE QUE ÇA A COUTÉ.
+
+    `CS-1c (2)` exécute `_erreur`. `CS-1c (4)` est STRUCTUREL : il compte
+    les `return` bruts, il n'exerce pas le chemin de succès — faire
+    réussir six agents demanderait plusieurs minutes de calibration
+    chacun. **Entre les deux, le chemin nominal n'est mesuré par
+    personne**, et c'est celui qui publie.
+
+    MESURE DU 15/09/2026, PAR LE GEL, PAS PAR CETTE SUITE :
+
+      A6 construit son résultat avec `**_relais_prix` — un dict bâti
+      l.1257, né le 14/09 (`18be214`), TROIS JOURS après la mesure sur
+      laquelle le gabarit de 53 clés a été écrit. Ses cinq clés
+      (`tarif`, `portefeuille_tarife`, `comparaison_prix`,
+      `conditions_mesure`, `decision_actuaire`) étaient donc HORS
+      gabarit. `sortie_completee` a levé — exactement son rôle — et le
+      `except Exception` de `run` a converti l'alarme en `_erreur` :
+
+          a6 Excel, a6 HTML, a6 Word  ->  `<livrable absent>`
+          2 488 écarts au gel, DOUZE tests de cette suite VERTS
+
+    *Un garde-fou qui lève dans un `except` large ne protège plus : il
+    se tait.* Ce contrôle-ci refait STATIQUEMENT ce que
+    `sortie_completee` fait à l'exécution — `set(valeurs) - set(gabarit)`
+    — et il RÉSOUT les `**` étalés, que l'AST ne voit pas autrement.
+
+    ⚠️ SON ASSIETTE SE DÉCLARE : un `**expression` qu'il ne sait PAS
+    résoudre le fait ÉCHOUER, jamais passer. Une assiette muette sur ce
+    qu'elle ne voit pas est ce qui a produit ce défaut.
+    """
+
+    @staticmethod
+    def _dict_nomme(fonction, nom):
+        """Le dernier dict littéral affecté à `nom` dans cette fonction."""
+        trouve = None
+        for n in ast.walk(fonction):
+            if (isinstance(n, ast.Assign) and len(n.targets) == 1
+                    and getattr(n.targets[0], 'id', None) == nom
+                    and isinstance(n.value, ast.Dict)):
+                trouve = n.value
+        return trouve
+
+    def _etale(self, noeud, porteuse, code, ligne):
+        """Le dict que `**noeud` étale, résolu — ou l'échec, jamais le vide.
+
+        ⚠️ A6 en porte DEUX NIVEAUX : `**{... , **_relais_prix}`. Une
+        première version de ce contrôle s'arrêtait au premier, accusait
+        « `**` imbriqué » et refusait — donc rouge pour la mauvaise
+        raison. La résolution est RÉCURSIVE.
+        """
+        source = noeud
+        if isinstance(source, ast.Name):
+            source = self._dict_nomme(porteuse, source.id)
+        self.assertIsInstance(
+            source, ast.Dict,
+            f'{code}:{ligne} — `**{ast.unparse(noeud)[:40]}` n est pas un '
+            f'dict litteral resoluble dans `{porteuse.name}` : ce controle '
+            f'ne sait PAS voir ses cles, et il refuse de passer sur une '
+            f'assiette qu il ne voit pas.')
+        return source
+
+    def _cles_dun_dict(self, noeud, porteuse, code, ligne):
+        cles = set()
+        for cle, valeur in zip(noeud.keys, noeud.values):
+            if cle is None:                      # `**autre` étalé ici
+                cles |= self._cles_dun_dict(
+                    self._etale(valeur, porteuse, code, ligne),
+                    porteuse, code, ligne)
+                continue
+            self.assertTrue(
+                isinstance(cle, ast.Constant) and isinstance(cle.value, str),
+                f'{code}:{ligne} — cle non litterale, non resolue, refusee.')
+            cles.add(cle.value)
+        return cles
+
+    def _cles_dun_appel(self, appel, porteuse, code):
+        """Les clés que cet appel passera à `sortie_completee`, toutes."""
+        cles = set()
+        for kw in appel.keywords:
+            if kw.arg:
+                cles.add(kw.arg)
+                continue
+            cles |= self._cles_dun_dict(
+                self._etale(kw.value, porteuse, code, appel.lineno),
+                porteuse, code, appel.lineno)
+        return cles
+
+    def test_CS1d_aucun_appel_ne_passe_une_cle_hors_gabarit(self):
+        """`sortie_completee` LEVE sur ces clés-là. Ici on les nomme AVANT."""
+        for code in sorted(_AGENTS):
+            with self.subTest(agent=code):
+                chemin = os.path.join(_RACINE, _AGENTS[code])
+                arbre = ast.parse(pathlib.Path(chemin).read_text(
+                    encoding='utf-8'))
+                gabarit = _gabarit_du_fichier(arbre)
+                self.assertTrue(gabarit, f'{code} : aucun GABARIT_SORTIE')
+                # la fonction qui PORTE chaque appel, pour y résoudre les `**`
+                porteuses = {}
+                for n in ast.walk(arbre):
+                    if isinstance(n, ast.FunctionDef):
+                        for sub in ast.walk(n):
+                            if (isinstance(sub, ast.Call)
+                                    and getattr(sub.func, 'id', None)
+                                    == 'sortie_completee'):
+                                porteuses.setdefault(sub, n)
+                self.assertTrue(
+                    porteuses,
+                    f'{code} : aucun appel a `sortie_completee` releve — ce '
+                    f'controle ne mesure rien sur cet agent.')
+                hors = {}
+                for appel, porteuse in porteuses.items():
+                    for cle in self._cles_dun_appel(appel, porteuse, code):
+                        if cle not in gabarit:
+                            hors.setdefault(appel.lineno, []).append(cle)
+                self.assertEqual(
+                    hors, {},
+                    f'{code} : cle(s) HORS GABARIT passees a '
+                    f'`sortie_completee` — a l execution il LEVE, et le '
+                    f'`except Exception` de `run` transforme la panne en '
+                    f'sortie d echec MUETTE : '
+                    + '; '.join(f'l.{lg} -> {sorted(v)}'
+                               for lg, v in sorted(hors.items())))
 
 
 if __name__ == '__main__':

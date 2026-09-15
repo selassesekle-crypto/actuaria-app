@@ -546,15 +546,29 @@ class AgentA1Ingestion:
                 except Exception as e_xl:
                     logger.warning(f"Excel A1 échoué : {e_xl}")
 
-            return {
-                'success':      True,
-                'dataframe':    df,
-                'branche':      sous_branche,
-                'statut_rag':   statut_rag,
-                'score_qual':   score_qual,
-                'qualite':      qualite,
-                'hash_md5':     hash_md5,
-                'rapport':      rapport,
+            # ⚠️⚠️ LE CHEMIN DE SUCCES PASSAIT A COTE DU GABARIT, ET A1 ETAIT
+            # POURTANT LE SEUL AGENT CONFORME. Ses TROIS chemins d'echec
+            # appellent `sortie_completee` ; celui-ci rendait un dict BRUT
+            # dont les dix-sept cles coincidaient A LA MAIN avec le gabarit.
+            # *L'egalite tenait par vigilance, pas par construction* — et le
+            # gabarit porte lui-meme la trace de la derniere fois ou cette
+            # vigilance a manque : « Je l'avais posee sur le seul chemin de
+            # succes : les TROIS chemins d'echec rendaient alors seize cles
+            # contre dix-sept, et CS-1 est devenu rouge. »
+            #   La lecon avait ete tiree dans un sens (ajouter au gabarit) et
+            #   pas dans l'autre (faire passer le succes PAR le gabarit).
+            # ⚠️ Trouve par la sentinelle `CS-1c` du meme lot, qui etend le
+            # controle aux six agents : elle a rougi sur A1 avant de rougir
+            # sur les autres.
+            return sortie_completee(GABARIT_SORTIE, 
+                success=True,
+                dataframe=df,
+                branche=sous_branche,
+                statut_rag=statut_rag,
+                score_qual=score_qual,
+                qualite=qualite,
+                hash_md5=hash_md5,
+                rapport=rapport,
                 # ⚠️⚠️ À LA RACINE, ET C'EST LA TROISIÈME FOIS QUE JE L'APPRENDS
                 # DANS CE CHANTIER. Je l'avais posée sur `rapport`, qui voyage
                 # bien — mais A6 lit la RACINE, comme pour `qualite` ou
@@ -562,16 +576,16 @@ class AgentA1Ingestion:
                 # n'atteignait rien. *Poser une clé sur un dictionnaire qui
                 # voyage ne suffit pas ; il faut la poser là où le lecteur
                 # regarde, et seule la mesure de la SORTIE le dit.*
-                'rapport_mapping': rapport.get('rapport_mapping'),
-                'commentaire':  commentaire,
-                'audit_id':     audit_id,
-                'client_id':    client_id,
-                'erreur':       None,
-                'excel_bytes':  _excel_a1,
-                'word_bytes':   b'',
-                'pdf_bytes':    b'',
-                'audit_trail':  _audit_trail_a1,
-            }
+                rapport_mapping=rapport.get('rapport_mapping'),
+                commentaire=commentaire,
+                audit_id=audit_id,
+                client_id=client_id,
+                erreur=None,
+                excel_bytes=_excel_a1,
+                word_bytes=b'',
+                pdf_bytes=b'',
+                audit_trail=_audit_trail_a1,
+            )
 
         except Exception as e:
             logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)

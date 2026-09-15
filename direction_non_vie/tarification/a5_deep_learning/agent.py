@@ -70,6 +70,7 @@ from core.plan_tarifaire import (
     alerte_modele_ampute,
 )
 from core.sortie_console import afficher_sans_echouer
+from direction_non_vie.tarification.contrat_sortie import sortie_completee
 
 # Export Excel (audit V7 MINEUR #2) — A5 était le seul agent sans export
 # Excel. export_excel_a5 suit le même gabarit que les autres agents.
@@ -483,6 +484,83 @@ class TabNetSimple(nn.Module):
 # CLASSE PRINCIPALE : AGENT A5
 # ══════════════════════════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  LE CONTRAT DE SORTIE D'A5 — ET L'AGENT LE PLUS PAUVRE DES SIX
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ MESURE DU 11/09/2026, SUR LA CHAINE REELLE A1→A6 (pas par lecture) :
+#
+#     agent   audit_trail   word_bytes   pdf_bytes   hypotheses
+#       A1        oui          oui          oui         n/a
+#       A2        oui          oui          oui         n/a
+#       A3        oui          oui          oui         oui
+#       A4        oui          oui          oui         oui
+#       A5        NON          NON          NON         NON
+#       A6        oui          oui          oui         oui
+#
+# A5 est le seul des six a n'en publier AUCUN, et ce n'est pas anodin :
+#
+#  · `gel_livrables.livrables_d_un_resultat` ENUMERE les cles finissant par
+#    `_bytes`. L'assiette de l'instrument de non-regression compte donc UNE
+#    surface pour A5 la ou elle en compte trois ou quatre pour les autres —
+#    *l'agent Deep Learning est celui qu'on surveille le moins.*
+#  · `_sauvegarder_audit` ecrit, quand la persistance echoue : « La trace
+#    ACPR de ce run n'existe que dans le RESULTAT EN MEMOIRE ». Pour A5 c'est
+#    FAUX : le resultat ne porte pas `audit_trail`. La trace n'existe alors
+#    NULLE PART. La meme phrase est vraie chez A3, A4 et A6.
+#  · `hypotheses` est la cle que lisent A6 (`_calculer_statut_rag`) et le
+#    rapport signe (`rapport_modeles_tarif`). A5 publie ses trois hypotheses
+#    sous `validation_dl`, que SEUL son propre Excel lit.
+#
+# ⚠️⚠️ ET LE CHEMIN D'ECHEC PERDAIT SEIZE CLES DE PLUS : 28 au succes contre
+# 12. `test_contrat_sortie.CS1` n'exerce que A1 — *la sentinelle qui promet
+# « un agent rend toujours les memes cles » mesure un agent sur six.*
+#
+# ⚠️ LES FORMES SONT VIDES, PAS NEUTRES : `b''` se lit « aucun document »,
+# `{}` « rien a declarer », `None` « non mesure ». Aucun chiffre fabrique.
+GABARIT_SORTIE: dict[str, Any] = {
+    'success':                  False,
+    'dataframe':                None,
+    'branche':                  '',
+    'col_cible':                None,
+    'conditions_mesure':        None,
+    'statut_rag':               'ROUGE',
+    'modeles':                  {},
+    'metriques':                {},
+    'classement':               [],
+    'importance_tabnet':        {},
+    'graphiques':               {},
+    'validation_dl':            {},
+    'graphiques_validation':    {},
+    'rapport':                  {},
+    'commentaire':              '',
+    'audit_id':                 '',
+    'erreur':                   None,
+    'historique_cann':          [],
+    'historique_tabnet':        [],
+    'exclusions_conformite':    {},
+    'colonnes_plan_ecartees':   (),
+    'colonnes_exemptees_effet': (),
+    'controle_effet':           {'execute': False, 'motifs': {}},
+    'alertes_conformite':       {},
+    'alertes_modele':           [],
+    'diagnostic_evaluation':    None,
+    'modele_ampute':            None,
+    'excel_bytes':              b'',
+    # ⚠️ LES TROIS CLES QUE LE CHEMIN COMPLET LUI-MEME NE PUBLIAIT PAS.
+    # `word_bytes` et `pdf_bytes` restent `b''` — A5 ne produit PAS ces
+    # documents, et le dire est exactement le point : une surface declaree
+    # absente entre dans l'assiette du gel, une surface tue n'y entre pas.
+    'word_bytes':               b'',
+    'pdf_bytes':                b'',
+    'audit_trail':              {},
+    # ⚠️ `hypotheses` PORTE LE MEME OBJET QUE `validation_dl`, comme A4 le
+    # fait pour `validation_ml` : c'est la cle que lisent A6 et le rapport
+    # signe. Une hypothese ne peut pas recevoir deux verdicts — c'est le
+    # MEME dictionnaire, pas une seconde mesure.
+    'hypotheses':               {},
+}
+
+
 class AgentA5DeepLearning:
     """
     Agent A5 — Deep Learning (CANN + TabNet).
@@ -845,46 +923,89 @@ class AgentA5DeepLearning:
                 logger.warning("[PLAN INCOMPLET] %s", _al_amp['message'])
             statut_rag = plafonner_statut_si_ampute(statut_rag, _ampute)
 
-            return {
-                'success':             True,
+            # ⚠️ LE CHEMIN COMPLET PASSE PAR LE MEME GABARIT : une clé ajoutée
+            # ici sans être ajoutée au gabarit LEVE immédiatement, au lieu de
+            # creuser en silence un nouvel écart entre le succès et l'échec.
+            return sortie_completee(GABARIT_SORTIE, 
+                success=True,
                 # Exclusions de conformité tracées par MatriceX (audit V11 / I5) :
                 # une exclusion silencieuse est un défaut en soi — c'est ce silence
                 # qui a rendu le BLOQUANT B5 si coûteux (facteur central de la RC Pro
                 # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
-                'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
-                'colonnes_plan_ecartees': getattr(
+                exclusions_conformite=getattr(self, 'exclusions_conformite', {}),
+                colonnes_plan_ecartees=getattr(
                     self, 'colonnes_plan_ecartees', ()),
-                'colonnes_exemptees_effet': getattr(
+                colonnes_exemptees_effet=getattr(
                     self, 'colonnes_exemptees_effet', ()),
-                'controle_effet': getattr(self, 'controle_effet',
+                controle_effet=getattr(self, 'controle_effet',
                                           {'execute': False, 'motifs': {}}),
-                'alertes_conformite': getattr(self, 'alertes_conformite', {}),
-                'alertes_modele':      _alertes_modele,
+                alertes_conformite=getattr(self, 'alertes_conformite', {}),
+                alertes_modele=_alertes_modele,
             # ⚠️ Le diagnostic voyage avec le RESULTAT : A6 en a besoin.
-            'diagnostic_evaluation': getattr(self, '_diag_evaluation', None),
-                'modele_ampute':       _ampute,
-                'dataframe':           df,
-                'branche':             sous_branche,
-                'col_cible':           col_cible,   # cible sur laquelle CES modeles DL sont ajustes (A6 filtre dessus)
+            diagnostic_evaluation=getattr(self, '_diag_evaluation', None),
+                modele_ampute=_ampute,
+                dataframe=df,
+                branche=sous_branche,
+                col_cible=col_cible,   # cible sur laquelle CES modeles DL sont ajustes (A6 filtre dessus)
                 # ⚠️ Sur quelle decoupe, et sur quelle assiette d'apprentissage
                 # REELLE : A5 reserve une part de validation, les autres non.
-                'conditions_mesure': getattr(self, '_conditions_mesure', None),
-                'statut_rag':          statut_rag,
-                'modeles':             self.modeles,
-                'metriques':           self.metriques,
-                'classement':          classement,
-                'importance_tabnet':   importance_tabnet,
-                'graphiques':            graphiques,
-                'validation_dl':         _val_dl_,
-                'graphiques_validation': _gv_dl_,
-                'rapport':             rapport,
-                'commentaire':         commentaire,
-                'audit_id':            audit_id,
-                'erreur':              None,
-                'historique_cann':     res_cann.get('historique', []),
-                'historique_tabnet':   res_tabnet.get('historique', []),
-                'excel_bytes':         _excel_a5,
-            }
+                conditions_mesure=getattr(self, '_conditions_mesure', None),
+                statut_rag=statut_rag,
+                modeles=self.modeles,
+                metriques=self.metriques,
+                classement=classement,
+                importance_tabnet=importance_tabnet,
+                graphiques=graphiques,
+                validation_dl=_val_dl_,
+                graphiques_validation=_gv_dl_,
+                rapport=rapport,
+                commentaire=commentaire,
+                audit_id=audit_id,
+                erreur=None,
+                historique_cann=res_cann.get('historique', []),
+                historique_tabnet=res_tabnet.get('historique', []),
+                excel_bytes=_excel_a5,
+                # ⚠️⚠️ LES TROIS SURFACES DECLAREES, MEME VIDES. A5 ne produit
+                # ni Word ni PDF ; le TAIRE les faisait sortir de l'assiette
+                # de `gel_livrables`, qui enumere les clés `_bytes`. *Une
+                # surface qu'on ne declare pas est une surface que
+                # l'instrument de non-regression ne regarde pas.*
+                word_bytes=b'',
+                pdf_bytes=b'',
+                # ⚠️⚠️ LA TRACE ACPR ENTRE DANS LE RESULTAT. `_sauvegarder_audit`
+                # ecrit deja, quand la persistance echoue, « la trace ACPR de
+                # ce run n'existe que dans le resultat en memoire » : chez A5
+                # cette phrase etait FAUSSE, faute de cette cle. Le contenu
+                # est le meme que celui persiste sur disque — une seule
+                # source, deux destinations.
+                audit_trail={
+                    'agent': 'A5_DEEP_LEARNING', 'audit_id': audit_id,
+                    'timestamp': t_debut.isoformat(), 'branche': sous_branche,
+                    'statut_rag': statut_rag,
+                    'col_cible': col_cible,
+                    'seed': rapport.get('seed'),
+                    'modeles_calibres': sorted(self.metriques),
+                    'modele_retenu': (classement[0].get('modele')
+                                      if classement else None),
+                    'gini_retenu': (classement[0].get('gini_test')
+                                    if classement else None),
+                    'glm_ancre': self.metriques.get('cann', {}).get('glm_ancre'),
+                    'cible_glm_ancre': self.metriques.get('cann', {}).get(
+                        'cible_glm_ancre'),
+                    'glm_gele': self.metriques.get('cann', {}).get('glm_gele'),
+                },
+                # ⚠️⚠️ LE MEME OBJET QUE `validation_dl`, SOUS LA CLE QUE LES
+                # LECTEURS CHERCHENT. Mesuré : `rapport_modeles_tarif` lit
+                # `hypotheses` sur A3 et A4, et A6 le passe à
+                # `_calculer_statut_rag` sous `hypotheses_glm` /
+                # `hypotheses_ml`. `validation_dl` n'est lu QUE par l'Excel
+                # d'A5. *Les trois hypothèses du Deep Learning n'atteignaient
+                # ni le rapport signé ni la décision.*
+                # ⚠️ C'est le MEME dictionnaire, pas une seconde mesure — une
+                # hypothèse ne peut pas recevoir deux verdicts dans le même
+                # résultat (leçon d'A4, `validation_ml` / `hypotheses`).
+                hypotheses=_val_dl_,
+            )
 
         except Exception as e:
             logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)
@@ -3105,20 +3226,20 @@ class AgentA5DeepLearning:
         return graphiques
 
     def _erreur(self, message: str, audit_id: str) -> Dict:
-        return {
-            'success':           False,
-            'dataframe':         pd.DataFrame(),
-            'branche':           'inconnue',
-            'statut_rag':        'ROUGE',
-            'modeles':           {},
-            'metriques':         {},
-            'classement':        [],
-            'importance_tabnet': {},
-            'rapport':           {},
-            'commentaire':       f"❌ ERREUR A5 : {message}",
-            'audit_id':          audit_id,
-            'erreur':            message,
-        }
+        """Le chemin d'échec rend LES MEMES CLES que le chemin complet.
+
+        ⚠️ `sortie_completee` LEVE sur une clé hors gabarit : c'est ce qui
+        empêche ce chemin de publier une clé de plus ou de moins que
+        `GABARIT_SORTIE`, sans qu'aucune liste ne soit tenue à la main.
+        """
+        return sortie_completee(
+            GABARIT_SORTIE,
+            dataframe=pd.DataFrame(),
+            branche='inconnue',
+            commentaire=f"❌ ERREUR A5 : {message}",
+            audit_id=audit_id,
+            erreur=message,
+        )
 
 
 if __name__ == '__main__':

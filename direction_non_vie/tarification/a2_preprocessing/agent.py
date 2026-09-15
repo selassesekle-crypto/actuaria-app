@@ -446,6 +446,7 @@ DATA_DICTIONNAIRE = {
 # dérivées auto documentées — le correctif du #4 était partiel, il est complété.
 from core.derivations import sources_brutes as _sources_brutes
 from core.sortie_console import afficher_sans_echouer
+from direction_non_vie.tarification.contrat_sortie import sortie_completee
 
 # ── TRAÇABILITÉ DES INTERACTIONS — désormais PILOTÉE PAR LE PLAN (Phase 2) ───
 # Les entrées ci-dessus documentent les variables dérivées "simples" (statiques,
@@ -480,6 +481,61 @@ def _dictionnaire_avec_interactions(plan: "PlanTarifaire") -> Dict[str, Any]:
             'usage': f"GLM / ML / DL — plan '{plan.lob}'",
         })
     return dico
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  LE CONTRAT DE SORTIE — MESURE PAR EXECUTION LE 11/09/2026
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ LE CONTRAT EXISTE, LA SENTINELLE EXISTE, ET UN SEUL AGENT SUR SIX LES
+# APPLIQUE. `contrat_sortie` écrit en tête : « un agent rend TOUJOURS LES
+# MEMES CLES, en échec comme en succès ». Mesure par EXECUTION de chaque
+# `_erreur`, comparée aux clés d'un run réel :
+#
+#     agent   gabarit   clés à l'échec   clés au succès   PERDUES
+#      A1      17         (via sortie_completee)  17          0
+#      A2      AUCUN        9                     16          7
+#      A3      AUCUN       11                     38         27
+#      A4      AUCUN       13                     37         24
+#      A5      AUCUN       12                     28         16
+#      A6      AUCUN       12                     53         41
+#
+# ⚠️⚠️ ET LES QUATRE CLES DU CONTRAT — `excel_bytes`, `word_bytes`,
+# `pdf_bytes`, `audit_trail` — SONT ABSENTES DU CHEMIN D'ECHEC DE CINQ
+# AGENTS SUR SIX.
+#
+# ⚠️ POURQUOI PERSONNE NE L'A VU : `test_contrat_sortie.CS1` — la sentinelle
+# qui promet « un agent rend toujours les mêmes clés » — n'exerce QUE A1
+# (classe `TestMemesClesPartout`, méthode `_a1`, aucun autre agent
+# instancié). *Une sentinelle braquée sur un sixième de son sujet certifie
+# ce qu'elle n'a pas regardé.*
+#
+# ⚠️ CE QUE CELA COUTE, MESURE : `gel_livrables.livrables_d_un_resultat`
+# ENUMERE les clés finissant par `_bytes`. Sur un agent en échec il en
+# trouve ZERO — les surfaces signées de cet agent **sortent de l'assiette**
+# de l'instrument de non-régression, qui rapporte alors « 0 écart » sur ce
+# qu'il ne regarde plus.
+#
+# ⚠️ LES FORMES SONT VIDES, PAS NEUTRES : `b''` se lit « aucun document »,
+# `{}` « rien à déclarer », `None` « non mesuré ».
+GABARIT_SORTIE: dict[str, Any] = {
+    'success':                  False,
+    'dataframe':                None,
+    'branche':                  '',
+    'statut_rag':               'ROUGE',
+    'rapport':                  {},
+    'parametres':               {},
+    'commentaire':              '',
+    'audit_id':                 '',
+    'erreur':                   None,
+    'colonnes_plan_manquantes': None,
+    'rapport_qualite':          None,
+    'data_dictionnaire':        None,
+    'annee_reference_derivees': None,
+    'excel_bytes':              b'',
+    'word_bytes':               b'',
+    'pdf_bytes':                b'',
+    'audit_trail':              {},
+}
 
 
 class AgentA2Preprocessing:
@@ -796,21 +852,23 @@ class AgentA2Preprocessing:
                 except Exception as e_xl:
                     logger.warning(f"Excel A2 échoué : {e_xl}")
 
-            return {
-                'success':           True,
-                'dataframe':         df,
-                'branche':           sous_branche,
-                'statut_rag':        statut_rag,
-                'rapport':           rapport,
-                'parametres':        self.parametres,
-                'commentaire':       commentaire,
-                'audit_id':          audit_id,
-                'erreur':            None,
+            # ⚠️ LE CHEMIN COMPLET PASSE PAR LE MEME GABARIT : une clé ajoutée
+            # ici sans être ajoutée au gabarit LEVE immédiatement.
+            return sortie_completee(GABARIT_SORTIE, 
+                success=True,
+                dataframe=df,
+                branche=sous_branche,
+                statut_rag=statut_rag,
+                rapport=rapport,
+                parametres=self.parametres,
+                commentaire=commentaire,
+                audit_id=audit_id,
+                erreur=None,
                 # ── RAPPORT EXPLICITE : colonnes du plan NON produites ────────
                 # Visible dans le dict de retour, pas seulement en log ("ce qui
                 # n'est que dans les logs n'existe pas"). A6 le relaie jusqu'aux
                 # 3 livrables, comme rapport_qualite et alertes_modele.
-                'colonnes_plan_manquantes': stats_plan['manquantes'],
+                colonnes_plan_manquantes=stats_plan['manquantes'],
                 # ⚠️⚠️ ÉTAPE 1 DU CHANTIER `unite_exposition` — A2 PUBLIE CE
                 # QU'IL FAIT À L'EXPOSITION. Le canal existait déjà et ce
                 # module le nommait deux lignes plus haut (« comme
@@ -820,18 +878,18 @@ class AgentA2Preprocessing:
                 # ⚠️ `bloque=False` est HONNÊTE, pas complaisant : A2 ne bloque
                 # pas, et ce lot ne change aucun comportement. Le rapport dit
                 # ce qui A ÉTÉ FAIT, avec son effet agrégé.
-                'rapport_qualite': _rapport_qualite_expo,
+                rapport_qualite=_rapport_qualite_expo,
                 # Traçabilité des variables dérivées — ACPR-2022-P-01 §3.2
-                'data_dictionnaire': _dico_a2,
+                data_dictionnaire=_dico_a2,
                 # ⚠️ À la RACINE, pas seulement dans `rapport` : c'est là que
                 # A6 et les services regardent (leçon `A1-1` de ce dépôt).
-                'annee_reference_derivees': rapport.get(
+                annee_reference_derivees=rapport.get(
                     'annee_reference_derivees'),
-                'excel_bytes':       _excel_a2,
-                'word_bytes':        b'',
-                'pdf_bytes':         b'',
-                'audit_trail':       _audit_trail_a2,
-            }
+                excel_bytes=_excel_a2,
+                word_bytes=b'',
+                pdf_bytes=b'',
+                audit_trail=_audit_trail_a2,
+            )
 
         except Exception as e:
             logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)
@@ -2347,18 +2405,20 @@ class AgentA2Preprocessing:
         print(sep + "\n")
 
     def _erreur(self, message: str, audit_id: str) -> Dict:
-        """Retourne un résultat d'erreur structuré."""
-        return {
-            'success':     False,
-            'dataframe':   pd.DataFrame(),
-            'branche':     'inconnue',
-            'statut_rag':  'ROUGE',
-            'rapport':     {},
-            'parametres':  {},
-            'commentaire': f"❌ ERREUR A2 : {message}",
-            'audit_id':    audit_id,
-            'erreur':      message,
-        }
+        """Le chemin d'échec rend LES MEMES CLES que le chemin complet.
+
+        ⚠️ `sortie_completee` LEVE sur une clé hors gabarit : c'est ce qui
+        empêche ce chemin de publier une clé de plus ou de moins que
+        `GABARIT_SORTIE`, sans qu'aucune liste ne soit tenue à la main.
+        """
+        return sortie_completee(
+            GABARIT_SORTIE,
+            dataframe=pd.DataFrame(),
+            branche='inconnue',
+            commentaire=f"❌ ERREUR A2 : {message}",
+            audit_id=audit_id,
+            erreur=message,
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════════

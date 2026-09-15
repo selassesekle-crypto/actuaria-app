@@ -11,6 +11,8 @@
       "a3 PDF",
       "a3 Word",
       "a4 PDF",
+      "a5 PDF",
+      "a5 Word",
       "a6 PDF",
       "a6 Rapport equipe Excel",
       "a6 Rapport equipe HTML",
@@ -20,7 +22,7 @@
       "rapport_modeles Excel",
       "rapport_modeles PDF"
     ],
-    "nb_absentes": 15,
+    "nb_absentes": 17,
     "nb_reelles": 17
   },
   "jeu": {
@@ -49,6 +51,8 @@
     "a4 PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
     "a4 Word": "sha256:f9f024d917e8cd712dfd8da25ac84e4ede8eb532dec75bb7d959cbb06f1863b1",
     "a5 Excel": "sha256:fb243e6a17277ff9257d875436b55318f82a9a30d20f0f812229f1eee3dfb02f",
+    "a5 PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
+    "a5 Word": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
     "a6 Excel": "sha256:64b0d8df0c85a99926e68c1138fc3d31e618dedccd1caec732f01c382bf020ce",
     "a6 HTML": "sha256:c1508e4b1a73a9025e1e8aa304a352564afa7c5e3e849e2e959795c8345f5894",
     "a6 PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
@@ -60,7 +64,7 @@
     "a7 Excel": "sha256:de4be1beb212607348ed12f136e3f01c6ddce1ca4cc2ff0083eafeced22b26f7",
     "a7 HTML": "sha256:4de86eb4b9c5d5eedb6d7782c3ce039878c33b5bdf14c9ddea4b2902e07bef34",
     "a7 Word": "sha256:2fbd13a7a0316a6cdbe7eb9b127c004632eed4f9afd222da5ad8f8a17be01e5c",
-    "rapport_equipe Excel": "sha256:eafa9548d2eeac518329d89347e1c66bbb400ece8ca4c7fb63c6b5dab3390c55",
+    "rapport_equipe Excel": "sha256:83e09d72ffb7d1fd81571f756a2bf92090a2168e63f97e69f64c0e5ecba8e5f8",
     "rapport_equipe HTML": "sha256:95b769504f38e114a651bd32d3be59d6816b4677e9898c73ea8c4865403cdd4b",
     "rapport_equipe PDF": "sha256:cc62197f13e618fdf73ad1aaa4d59f86627dc1b75c52bccbbdcd0130806e31e7",
     "rapport_equipe Word": "sha256:04647eb2f142b3afb422f5efb62e4444b4bdbfcb01228bd91b9c07c383448e30",
