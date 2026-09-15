@@ -67,6 +67,10 @@ from direction_non_vie.tarification.a6_comparaison.agent import (
 from direction_non_vie.tarification.services import rapport_modeles_tarif as R
 
 _RACINE = pathlib.Path(__file__).resolve().parent
+#: ⚠️ DERIVE DU MODULE IMPORTE, jamais un chemin recopie : si l'agent
+#: demenage, ce controle le suit au lieu de lire un fichier disparu et de
+#: passer au vert sur une assiette vide.
+_A6_SRC = _RACINE / 'a6_comparaison' / 'agent.py'
 
 #: Un classement minimal, aux composantes assez contrastees pour que le
 #: profil PUISSE faire basculer le vainqueur.
@@ -300,6 +304,88 @@ class TestLaTraceNeRemplacePasLaMesure(unittest.TestCase):
         self.assertTrue(gouvernance_validee('X'))
         print("    S-12 `gouvernance_validee` ne teste qu'un nom non vide : "
               "elle ne peut pas repondre a la question de sensibilite")
+
+
+class TestA6SeLaRelaieAILuiMeme(unittest.TestCase):
+    """⚠️⚠️ LE FAIT ATTEIGNAIT SES LECTEURS, PAS SON PRODUCTEUR.
+
+    `sensibilite_profils` vivait dans le dict RENDU par A6 — donc les trois
+    services en aval le recevaient — mais **PAS dans `_tmp_a6`**, le
+    dictionnaire qu'A6 passe à SES PROPRES exportateurs (`export_excel_a6`
+    et son générateur de rapport). Mesure du 15/09/2026 : `_tmp_a6` portait
+    **34 clés**, celle-ci n'en était pas, et `tarif_excel:894` lisait donc
+    `None` sur le classeur d'A6 pendant que le rapport d'équipe, lui,
+    recevait la table.
+
+    *Le même fait, présent pour les lecteurs d'A6 et absent pour A6
+    lui-même.* Et le commentaire du site disait déjà la leçon — « si la
+    donnée ne monte pas dans le résultat, le rapport en publie une de
+    moins, EN SILENCE » — appliquée au dict final seul.
+
+    ⚠️ LE GEL BOUGE, ET C'EST ATTENDU : le classeur d'A6 gagne la table.
+    C'est un arbitrage explicite du responsable du dépôt — *une information
+    utile qui doit atteindre l'actuaire signataire.* Ce qui se vérifie
+    ici, c'est que **rien d'AUTRE** ne change.
+    """
+
+    def test_S13_la_cle_est_dans_les_DEUX_dictionnaires(self):
+        """Relevé AST des deux littéraux : celui d'A6 pour lui-même, et
+        celui qu'il rend. Une seule des deux ne suffit pas — c'était
+        exactement l'état d'avant."""
+        arbre = ast.parse(
+            pathlib.Path(_A6_SRC).read_text(encoding='utf-8'))
+        porteurs = []
+        for noeud in ast.walk(arbre):
+            if not isinstance(noeud, ast.Dict):
+                continue
+            cles = [k.value for k in noeud.keys
+                    if isinstance(k, ast.Constant)]
+            if 'sensibilite_profils' in cles and 'audit_id' in cles:
+                porteurs.append((noeud.lineno, len(cles)))
+        self.assertGreaterEqual(
+            len(porteurs), 2,
+            "`sensibilite_profils` ne figure que dans "
+            f"{len(porteurs)} dictionnaire(s) d'A6 : le classeur qu'A6 "
+            "produit lui-meme ne la porterait pas")
+        print(f"    S-13 la table est dans {len(porteurs)} dictionnaires "
+              f"d'A6 : {porteurs}")
+
+    def test_S14_elle_n_est_calculee_QU_UNE_FOIS(self):
+        """*Deux appels, c'est deux vérités possibles pour un seul fait.*
+        Le dict final la recalculait ; il lit désormais la même valeur."""
+        arbre = ast.parse(
+            pathlib.Path(_A6_SRC).read_text(encoding='utf-8'))
+        appels = [n.lineno for n in ast.walk(arbre)
+                  if isinstance(n, ast.Call)
+                  and isinstance(n.func, ast.Attribute)
+                  and n.func.attr == '_sensibilite_profils']
+        self.assertEqual(
+            len(appels), 1,
+            f'`_sensibilite_profils` est appelee {len(appels)} fois '
+            f'(l.{appels}) : deux calculs du meme fait peuvent diverger')
+
+    def test_S15_SECOND_SENS_rien_d_autre_n_entre_dans_le_dictionnaire(self):
+        """⚠️ LA CONTRE-ÉPREUVE DEMANDÉE : le dict intermédiaire gagne
+        **cette clé et rien d'autre**. Son compte était de 34 ; il doit
+        valoir exactement 35."""
+        arbre = ast.parse(
+            pathlib.Path(_A6_SRC).read_text(encoding='utf-8'))
+        for noeud in ast.walk(arbre):
+            if not isinstance(noeud, ast.Dict):
+                continue
+            cles = [k.value for k in noeud.keys
+                    if isinstance(k, ast.Constant)]
+            if 'sensibilite_tarifaire' in cles and 'audit_id' in cles \
+                    and 'success' in cles:
+                self.assertEqual(
+                    len(cles), 35,
+                    f'le dictionnaire intermediaire d A6 porte {len(cles)} '
+                    f'cles au lieu de 35 : il valait 34 avant ce lot, et '
+                    f'ce lot n en ajoute QU UNE')
+                self.assertIn('sensibilite_profils', cles)
+                return
+        self.fail('le dictionnaire intermediaire d A6 est introuvable : '
+                  'ce controle ne mesure plus rien')
 
 
 if __name__ == '__main__':

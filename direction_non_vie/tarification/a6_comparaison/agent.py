@@ -934,8 +934,28 @@ class AgentA6Comparaison:
             if _alerte_dl:
                 _alertes_modele.append(_alerte_dl)
 
+            # ⚠️⚠️ LA TABLE DE SENSIBILITÉ MONTE ICI, ET PAS SEULEMENT DANS
+            # LE DICT FINAL. Le commentaire qui accompagne ce fait plus bas
+            # dit déjà la leçon — « si la donnée ne monte pas dans le
+            # résultat, le rapport en publie une de moins, EN SILENCE » —
+            # et elle n'était appliquée qu'au dict RENDU. Or `_tmp_a6` est
+            # ce qu'A6 passe à SES PROPRES exportateurs : `export_excel_a6`
+            # et son générateur de rapport. Mesure : `_tmp_a6` portait 34
+            # clés, celle-ci n'en était pas, et `tarif_excel:894` lisait
+            # donc `None` sur le classeur d'A6 pendant que les trois
+            # services en aval, eux, recevaient la table.
+            #   *Le même fait, présent pour les lecteurs d'A6 et absent
+            #   pour A6 lui-même.*
+            # ⚠️ UNE SEULE COMPUTATION, DEUX LECTEURS. Le dict final la
+            # recalculait ; deux appels, c'est deux vérités possibles pour
+            # le même fait — ce que le relais du prix a déjà tranché
+            # quelques lignes plus bas (`_relais_prix`).
+            _sens_profils = self._sensibilite_profils(
+                classement, _nom_profil_retenu)
+
             # _tmp_a6 inclut commentaire, courbes ET audit_trail — disponibles ici
             _tmp_a6 = {
+                'sensibilite_profils': _sens_profils,
                 'success': True, 'statut_rag': statut_rag,
                 'classement': classement, 'modele_production': modele_production,
                 'backtest': backtest, 'branche': sous_branche,
@@ -1375,8 +1395,11 @@ class AgentA6Comparaison:
                 # 4.7 : le catalogue peut nommer, le rendu peut être écrit —
                 # si la donnée ne monte pas dans le résultat, le rapport en
                 # publie une de moins, EN SILENCE.
-                'sensibilite_profils': self._sensibilite_profils(
-                    classement, _nom_profil_retenu),
+                # ⚠️ LA MEME VALEUR QUE `_tmp_a6`, PAS UN SECOND APPEL.
+                # Elle est calculee une fois, avant le dict intermediaire ;
+                # deux appels donneraient deux verites possibles pour un
+                # seul fait.
+                'sensibilite_profils': _sens_profils,
                 # ⚠️⚠️ LE RELAIS DU PRIX, LES MEMES CINQ CLES QUE `_tmp_a6`.
                 # `**_relais_prix` et non cinq lignes recopiees : deux
                 # ecritures de la meme liste divergeraient au premier ajout,
