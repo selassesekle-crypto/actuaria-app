@@ -102,18 +102,41 @@ def _charger_config(config_path: str = None) -> Dict:
         './actuaria_config.json',
     ]
 
+    # ⚠️⚠️ UN FICHIER ILLISIBLE N'EST PAS UN FICHIER ABSENT. Ce `except
+    # Exception: pass` rendait les deux etats RIGOUREUSEMENT identiques --
+    # mesure du 11/09/2026 : un JSON tronque et un chemin inexistant donnent
+    # le meme dict, au meme `base_path`, sans qu'aucune trace ne les separe.
+    # *Une faute de frappe dans la config deplace SILENCIEUSEMENT tous les
+    # chemins de donnees vers `/tmp/actuaria`.*
+    # ⚠️ CE FICHIER A DEJA FERME CE DEFAUT, POUR LE MAPPING CLIENT : le
+    # `except` y pose `echec_chargement` et la docstring explique pourquoi --
+    # « deux causes opposees, un seul symptome ». L'asymetrie entre voisins
+    # est ce qui l'a fait voir ici.
+    # ⚠️ ON NE LEVE PAS : la config n'est qu'un jeu de chemins, et un run
+    # sans elle reste possible. On le DIT, au niveau ERREUR et non INFO.
+    _illisibles = []
     for chemin in chemins_possibles:
         if chemin and Path(chemin).exists():
             try:
-                with open(chemin) as f:
+                with open(chemin, encoding='utf-8') as f:
                     config = json.load(f)
                 logger.info(f"Config chargée depuis : {chemin}")
                 return config
-            except Exception:
-                pass
+            except Exception as _e_cfg:                    # noqa: BLE001
+                _illisibles.append(f'{chemin} ({type(_e_cfg).__name__})')
+                logger.error(
+                    "Config PRESENTE mais ILLISIBLE (%s) : %s — elle est "
+                    "IGNOREE, et les chemins par defaut s'appliquent. Ce "
+                    "n'est PAS la meme chose qu'une config absente.",
+                    chemin, _e_cfg)
 
     # Valeurs par défaut
-    logger.warning("Config non trouvée — valeurs par défaut utilisées")
+    if _illisibles:
+        logger.warning(
+            "Config par defaut utilisee APRES ECHEC DE LECTURE de %s",
+            ', '.join(_illisibles))
+    else:
+        logger.warning("Config non trouvée — valeurs par défaut utilisées")
     base = '/tmp/actuaria'
     return {
         'base_path':    base,

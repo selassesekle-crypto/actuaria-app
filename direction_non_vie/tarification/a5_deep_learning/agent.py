@@ -529,6 +529,12 @@ GABARIT_SORTIE: dict[str, Any] = {
     'classement':               [],
     'importance_tabnet':        {},
     'graphiques':               {},
+    # ⚠️⚠️ CONSTAT `A5-1` : les figures TENTÉES et ÉCHOUÉES, par nom et par
+    # motif. `{}` se lit « aucune figure n'a échoué », jamais « on n'a pas
+    # regardé » — les huit constructions écrivent ici, et elles écrivent
+    # TOUJOURS quand elles échouent. *Une figure qui disparaît d'un document
+    # signé sans que le document le dise est une mesure perdue en silence.*
+    'figures_absentes':         {},
     'validation_dl':            {},
     'graphiques_validation':    {},
     'rapport':                  {},
@@ -590,6 +596,20 @@ class AgentA5DeepLearning:
         self.modeles   = {}
         self.metriques = {}
         self.scalers   = {}
+        # ⚠️⚠️ CONSTAT `A5-1` — UNE FIGURE QUI ÉCHOUE NE DOIT PAS DISPARAÎTRE
+        # EN SILENCE. Les HUIT constructions de figures (`_generer_graphiques`
+        # G1..G4, `_graphiques_validation_dl` G1..G4) étaient gardées par un
+        # `except Exception: logger.warning(...)` **et rien d'autre** : le
+        # document sortait avec trois graphiques au lieu de quatre, et aucun
+        # lecteur ne pouvait savoir qu'un quatrième avait été tenté.
+        #   *Le journal n'est pas une surface signée.* C'est le même défaut
+        #   que `A1-2` (une config illisible indiscernable d'une absente) et
+        #   la même doctrine que `livrables_absents` chez A6 : **déclarer ce
+        #   qu'on ne produit pas vaut mieux que laisser un consommateur
+        #   l'inventer.**
+        # ⚠️ Elle est REMISE À ZÉRO au début de `run` : un agent réutilisé
+        # publierait sinon l'échec du run précédent.
+        self.figures_absentes: dict[str, str] = {}
 
         if not TORCH_OK:
             logger.warning(
@@ -653,6 +673,9 @@ class AgentA5DeepLearning:
         """
         t_debut      = datetime.now()
         audit_id     = f"A5_{t_debut.strftime('%Y%m%d_%H%M%S')}"
+        #: ⚠️ CE RUN-CI, ET LUI SEUL. Voir `__init__` : un agent reutilise
+        #: publierait sinon les figures manquantes du run precedent.
+        self.figures_absentes = {}
         # ⚠️⚠️ L'EXPOSITION VIENT DU PLAN SIGNE, PAS D'UN LITTERAL. Le defaut
         # `'exposition'` etait une SECONDE declaration du role que le plan
         # porte deja (`plan.exposition`), et aucun appelant de production ne
@@ -956,6 +979,10 @@ class AgentA5DeepLearning:
                 classement=classement,
                 importance_tabnet=importance_tabnet,
                 graphiques=graphiques,
+                #: ⚠️ `A5-1` : ce que les HUIT constructions ont tenté et
+                #: n'ont pas pu rendre, avec leur motif. La clé est au
+                #: gabarit, donc elle est là AUSSI sur le chemin d'échec.
+                figures_absentes=dict(self.figures_absentes),
                 validation_dl=_val_dl_,
                 graphiques_validation=_gv_dl_,
                 rapport=rapport,
@@ -2360,6 +2387,8 @@ class AgentA5DeepLearning:
 
         except Exception as e:
             logger.warning(f"G1 CANN learning curves échoué : {e}")
+            #: ⚠️ `A5-1` : l'echec QUITTE le journal.
+            self.figures_absentes['apprentissage_cann'] = f'{type(e).__name__}: {e}'
 
         # ── G2 : COURBES D'APPRENTISSAGE TABNET ──────────────────────────────
         try:
@@ -2417,6 +2446,8 @@ class AgentA5DeepLearning:
 
         except Exception as e:
             logger.warning(f"G2 TabNet learning curves échoué : {e}")
+            #: ⚠️ `A5-1` : l'echec QUITTE le journal.
+            self.figures_absentes['apprentissage_tabnet'] = f'{type(e).__name__}: {e}'
 
         # ── G3 : COMPARAISON GINI DL vs ML vs GLM ────────────────────────────
         try:
@@ -2504,6 +2535,8 @@ class AgentA5DeepLearning:
 
         except Exception as e:
             logger.warning(f"G3 comparaison Gini échoué : {e}")
+            #: ⚠️ `A5-1` : l'echec QUITTE le journal.
+            self.figures_absentes['comparaison_gini'] = f'{type(e).__name__}: {e}'
 
         # ── G4 : FEATURE IMPORTANCE TABNET ───────────────────────────────────
         try:
@@ -2560,6 +2593,8 @@ class AgentA5DeepLearning:
 
         except Exception as e:
             logger.warning(f"G4 importance TabNet échoué : {e}")
+            #: ⚠️ `A5-1` : l'echec QUITTE le journal.
+            self.figures_absentes['importance_tabnet'] = f'{type(e).__name__}: {e}'
 
         return graphiques
 
@@ -2998,6 +3033,8 @@ class AgentA5DeepLearning:
             graphiques["convergence_loss"] = fig1
         except Exception as e:
             logger.warning(f"G1 convergence : {e}")
+            #: ⚠️ `A5-1` : l'echec QUITTE le journal.
+            self.figures_absentes['convergence_loss'] = f'{type(e).__name__}: {e}'
 
         # ══════════════════════════════════════════════════════════════════════
         # G2 — DL vs GLM : UN MODÈLE NON CALIBRÉ N'EST PAS UN MODÈLE À ZÉRO
@@ -3099,6 +3136,8 @@ class AgentA5DeepLearning:
             graphiques["comparaison_dl_glm"] = fig2
         except Exception as e:
             logger.warning(f"G2 comparaison : {e}")
+            #: ⚠️ `A5-1` : l'echec QUITTE le journal.
+            self.figures_absentes['comparaison_dl_glm'] = f'{type(e).__name__}: {e}'
 
         # G3 — Jauge surapprentissage
         try:
@@ -3166,6 +3205,8 @@ class AgentA5DeepLearning:
             graphiques["jauge_surapprentissage"] = fig3
         except Exception as e:
             logger.warning(f"G3 surapprentissage : {e}")
+            #: ⚠️ `A5-1` : l'echec QUITTE le journal.
+            self.figures_absentes['jauge_surapprentissage'] = f'{type(e).__name__}: {e}'
 
         # G4 — Scorecard validation DL
         try:
@@ -3222,6 +3263,8 @@ class AgentA5DeepLearning:
             graphiques["scorecard_validation_dl"] = fig4
         except Exception as e:
             logger.warning(f"G4 scorecard DL : {e}")
+            #: ⚠️ `A5-1` : l'echec QUITTE le journal.
+            self.figures_absentes['scorecard_validation_dl'] = f'{type(e).__name__}: {e}'
 
         return graphiques
 

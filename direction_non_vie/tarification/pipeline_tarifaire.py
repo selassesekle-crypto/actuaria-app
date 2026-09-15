@@ -83,6 +83,59 @@ from core.validation_tarif import (
     publication as publication_validation,
 )
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+from direction_non_vie.tarification.contrat_sortie import sortie_completee
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  LE CONTRAT DE SORTIE DE `tarifer()` — CONSTAT `PIPE-4`
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ SA DOCSTRING PROMETTAIT TROIS CLÉS, ET SES LECTEURS EN LISENT VINGT.
+# Elle écrit, mot pour mot : « success / plan_empreinte / date_calcul sont
+# TOUJOURS présents (succès comme erreur) ». C'est exact, et c'est tout ce
+# qui l'était. Mesure du 15/09/2026, par AST sur les trois `return` :
+#
+#     l.430  refus « contrat NON TARIFABLE »    5 clés
+#     l.487  succès                            18 clés
+#     l.551  exception interne                  4 clés
+#     union 20 — le chemin le plus pauvre en PERD 16
+#
+# ⚠️ CE QUE CELA COÛTE, MESURÉ : **119 lectures** dans le dépôt portent sur
+# une clé absente des chemins d'échec, dont CINQ en production
+# (`rapport_modeles_tarif`, la table de détail du rapport signé). Ce site-là
+# est déjà juste — il lit `.get(clé)` SANS défaut et sa docstring dit « un
+# contrat NON TARIFABLE figure au détail avec ses primes à `None` » — mais
+# il l'est **par vigilance, pas par construction** : rien n'empêchait la
+# prochaine lecture de poser un `.get(clé, 0)`, et un zéro se lit comme une
+# mesure. *C'est exactement la famille (6), dans le pipeline au lieu d'un
+# agent, et c'est le même remède.*
+#
+# ⚠️ LES FORMES VIDES DISENT « NON MESURÉ », PAS « ZÉRO ». Un prix qu'on n'a
+# pas calculé vaut `None` ; `0.0` affirmerait une gratuité.
+# ⚠️ SAUF `anomalies_contrat` : sur le chemin de SUCCÈS on a bel et bien
+# regardé, et on n'a rien trouvé — ce chemin passe donc `[]` EXPLICITEMENT,
+# qui se lit « aucune anomalie ». Le gabarit, lui, garde `None` pour le
+# chemin d'exception, où le contrôle n'a pas eu lieu.
+GABARIT_TARIF: dict[str, Any] = {
+    'success':                False,
+    'erreur':                 None,
+    'anomalies_contrat':      None,
+    'frequence_annuelle':     None,
+    'cout_moyen':             None,
+    'prime_pure':             None,
+    'prime_commerciale_ht':   None,
+    'prime_ttc':              None,
+    'regime_fiscal':          None,
+    'chargements':            None,
+    'chargements_origine':    None,
+    'chargements_supposes':   None,
+    'domaines_non_declares':  None,
+    'exposition_retenue':     None,
+    'exposition_source':      None,
+    'exposition_hypothese':   None,
+    'validation':             None,
+    'validation_hypothese':   None,
+    'plan_empreinte':         '',
+    'date_calcul':            '',
+}
 
 # ⚠️ Le journal de la zone, au nom de la famille `actuaria.*` déjà en place
 # (`core/conformite_reglementaire.py`). Il n'est PAS réglé ici : régler un
@@ -427,14 +480,16 @@ class TarifNonVie:
         # plutot que de signer un prix qu'on sait faux.
         _anomalies = self.anomalies_du_contrat(contrat)
         if _anomalies:
-            return {
-                "success": False,
-                "erreur": ("contrat NON TARIFABLE — "
-                           + " · ".join(_anomalies)),
-                "anomalies_contrat": _anomalies,
-                "plan_empreinte": empreinte,
-                "date_calcul": date_calcul,
-            }
+            # ⚠️ PAR LE GABARIT : ce chemin rend les MÊMES vingt clés que le
+            # chemin complet, les non mesurées à `None`. Voir `GABARIT_TARIF`.
+            return sortie_completee(
+                GABARIT_TARIF,
+                erreur=("contrat NON TARIFABLE — "
+                        + " · ".join(_anomalies)),
+                anomalies_contrat=_anomalies,
+                plan_empreinte=empreinte,
+                date_calcul=date_calcul,
+            )
         # ⚠️⚠️ D'OÙ VIENT L'EXPOSITION — constat `G.17`, mesuré le 05/09/2026.
         # La ligne ci-dessous posait le paramètre APRÈS le contrat, donc il
         # l'écrasait ; et comme il valait `1.0` par défaut, un contrat
@@ -484,76 +539,86 @@ class TarifNonVie:
             # deux risques incomparables masquerait derrière un nombre une
             # décision que personne n'a prise.*
             _taux, _refus, _phrase_fiscale = self._taxe_du_contrat(contrat)
-            return {
-                "success": True,
-                "frequence_annuelle": round(freq, 5),
-                "cout_moyen": round(cout, 2),
+            # ⚠️ LE CHEMIN COMPLET PASSE PAR LE MEME GABARIT : une clé ajoutée
+            # ici sans être ajoutée au gabarit LEVE immédiatement, au lieu de
+            # creuser en silence un nouvel écart entre le succès et l'échec.
+            return sortie_completee(GABARIT_TARIF, 
+                success=True,
+                # ⚠️ ON A REGARDÉ, ET IL N'Y AVAIT RIEN : `[]` se lit « aucune
+                # anomalie », là où le `None` du gabarit dirait « non mesuré ».
+                anomalies_contrat=list(_anomalies),
+                frequence_annuelle=round(freq, 5),
+                cout_moyen=round(cout, 2),
                 # ⚠️⚠️ TOUJOURS PUBLIEE, SANS AUCUNE CONDITION. C'est un fait
                 # actuariel : frequence x cout moyen, plus la charge grave,
                 # porte par l'exposition. Rien a declarer pour l'obtenir.
-                "prime_pure": round(prime_pure, 2),
+                prime_pure=round(prime_pure, 2),
                 # ⚠️ `None` QUAND LE CLIENT N'A PAS DECLARE SES CHARGEMENTS, ET
                 # LA CLE RESTE. La faire disparaitre romprait le contrat de
                 # sortie ; a `None`, un appelant qui multiplie la valeur echoue
                 # BRUYAMMENT au lieu de publier un prix faux.
-                "prime_commerciale_ht": (None if pc is None else round(pc, 2)),
+                prime_commerciale_ht=(None if pc is None else round(pc, 2)),
                 # ⚠️ DEUX CAUSES DE `None`, et le document les distingue : le
                 # regime fiscal n'est pas tranche, OU les chargements ne sont
                 # pas declares. `regime_fiscal` et `chargements` le disent.
-                "prime_ttc": (None if (_refus or pc is None)
+                prime_ttc=(None if (_refus or pc is None)
                               else round(pc * (1 + _taux), 2)),
                 # ⚠️⚠️ LE TAUX APPLIQUÉ ET D'OÙ IL VIENT — jamais `None`
                 # depuis le 10/09/2026. Deux des trois sources de taux se
                 # taisaient : un TTC partait signé avec `regime_fiscal: None`.
                 # Quand la source n'est pas le registre, la phrase le DIT et
                 # nomme ce qui manque (article, entrée en vigueur, relecture).
-                "regime_fiscal": _phrase_fiscale,
+                regime_fiscal=_phrase_fiscale,
                 # ⚠️⚠️ CE QUI A ETE APPLIQUE, D'OU CA VIENT ET QUI L'A DECLARE.
                 # Un chargement decide du prix paye : un regulateur demande QUI
                 # l'a fixe. L'origine (`general`, `exception_critere`,
                 # `exception_contrat`, `non_declare`) voyage avec le prix.
-                "chargements": synthese_chargements(
+                chargements=synthese_chargements(
                     self.plan, contrat, self.table_exceptions),
-                "chargements_origine": _origine_ch,
+                chargements_origine=_origine_ch,
                 # ⚠️ Conserve sous son ancien nom : des lecteurs existants le
                 # lisent. Il dit la meme chose, par la meme source unique.
-                "chargements_supposes": phrase_chargements_non_declares(
+                chargements_supposes=phrase_chargements_non_declares(
                     self.plan),
                 # ⚠️ Constat `pipeline/C1`, residu : la porte existe, aucun
                 # plan ne la remplit — l'hypothese doit donc etre DITE.
-                "domaines_non_declares": phrase_domaines_non_declares(
+                domaines_non_declares=phrase_domaines_non_declares(
                     self.plan),
                 # ⚠️⚠️ L'EXPOSITION QUI A SERVI AU PRIX, ET D'OÙ ELLE VIENT.
                 # Une prime sans sa durée n'est pas contestable : 1 649,30 EUR
                 # pour un an et 792,68 pour six mois sont le MÊME tarif.
                 # `exposition_hypothese` est `None` quand il n'y a rien à
                 # signaler — une phrase qui s'affiche toujours ne se lit plus.
-                "exposition_retenue": float(expo_retenue),
-                "exposition_source": expo_source,
-                "exposition_hypothese": expo_phrase,
+                exposition_retenue=float(expo_retenue),
+                exposition_source=expo_source,
+                exposition_hypothese=expo_phrase,
                 # ⚠️⚠️ CE QUE VAUT LE MODÈLE QUI PRODUIT CE PRIX — lot 14.
                 # Gini de holdout (fréquence et sévérité), son intervalle de
                 # confiance et le nombre d'observations qui le fonde. *Un Gini
                 # sans son effectif ne se conteste pas.*
                 # `None` = validation NON MESURÉE, jamais « aucun défaut ».
-                "validation": (publication_validation(self.validation)
+                validation=(publication_validation(self.validation)
                                if self.validation is not None else None),
                 # ⚠️⚠️ POURQUOI IL N'Y A PAS DE VALIDATION -- constat `C-36`.
                 # `validation: None` disait deja << non mesuree >>, mais pas
                 # POURQUOI. Un Gini absent parce que la decoupe n'est pas
                 # declaree et un Gini absent parce que le portefeuille est trop
                 # petit ne demandent pas le meme geste au lecteur.
-                "validation_hypothese": phrase_decoupe(self.plan),
-                "plan_empreinte": empreinte,          # traçabilité ACPR (ex-clé 'plan')
-                "date_calcul": date_calcul,
-            }
+                validation_hypothese=phrase_decoupe(self.plan),
+                plan_empreinte=empreinte,          # traçabilité ACPR (ex-clé 'plan')
+                date_calcul=date_calcul,
+            )
         except Exception as e:
-            return {
-                "success": False,
-                "erreur": str(e),
-                "plan_empreinte": empreinte,
-                "date_calcul": date_calcul,
-            }
+            # ⚠️ ICI `anomalies_contrat` RESTE `None` : le contrôle a bien eu
+            # lieu (on est passé la garde), mais tout ce qui suit a échoué —
+            # publier `[]` ferait croire à un contrat sain dont le prix n'a
+            # pas pu sortir, ce qui n'est pas ce qu'on sait.
+            return sortie_completee(
+                GABARIT_TARIF,
+                erreur=str(e),
+                plan_empreinte=empreinte,
+                date_calcul=date_calcul,
+            )
 
     def grille(self, variable: str) -> pd.DataFrame:
         """Relativités exportables (ce que l'assureur met dans son SI).
