@@ -58,7 +58,9 @@ import io
 import pathlib
 import unittest
 import zipfile
+from typing import ClassVar
 
+from core.conformite_reglementaire import synthese_sensibilite_profils
 from direction_non_vie.tarification.a6_comparaison.agent import (
     PROFILS_PONDERATION,
     AgentA6Comparaison,
@@ -386,6 +388,119 @@ class TestA6SeLaRelaieAILuiMeme(unittest.TestCase):
                 return
         self.fail('le dictionnaire intermediaire d A6 est introuvable : '
                   'ce controle ne mesure plus rien')
+
+
+class TestLaPhraseDitLAmpleurEtNonLAlarme(unittest.TestCase):
+    """⚠️⚠️ LA PHRASE ALARMAIT SUR UN ÉCART DE 0,16 % ET TAISAIT CE QUI
+    DÉCIDE.
+
+    Elle disait « ⚠ LE MODÈLE RETENU DÉPEND DU PROFIL DE PONDÉRATION —
+    2 modèles différents sortent selon le profil ». Vrai, et doublement
+    trompeur. Mesuré le 15/09/2026 sur la cible fréquence :
+
+        3 profils sur 4 retiennent le MÊME modèle
+        le dissident ne départage que de 0,0012 — **0,16 %** du score
+        et le concurrent discrimine **+19,1 %** mieux (Gini 0,1232 contre
+        0,1034) en sur-apprenant **2,6× plus** (7,057 contre 2,726)
+
+    *Le fait qui aurait aidé l'actuaire à trancher — le compromis — était
+    le seul que la phrase ne disait pas.*
+
+    ⚠️ ET LA MAJORITÉ NE PEUT PAS S'ÉCRIRE EN DUR. Sur la cible COÛT, la
+    mesure du 29/08/2026 comptait **3 bascules sur 8 cas** (marges #1-#2 à
+    0,008 / 0,016 / 0,021). Une phrase figée serait vraie d'une cible et
+    fausse de l'autre : elle se COMPTE à chaque run.
+    """
+
+    #: ⚠️ `ClassVar` DECLARE, et ce n'est pas cosmetique : sans lui, ruff
+    #: signale une valeur mutable en attribut de classe (`RUF012`), et il a
+    #: raison -- chaque test en prend une COPIE PROFONDE avant de la
+    #: modifier. *Une fixture partagee qu'un test mute est un test qui
+    #: depend de l'ordre d'execution.*
+    _BASE: ClassVar[list] = [
+        {'profil': 'equilibre', 'modele': 'GLM_POISSON', 'score': 0.6602,
+         'marge': 0.0357, 'actif': True, 'gini': 0.1034, 'overfit': 2.726},
+        {'profil': 'performance', 'modele': 'ML_XGBOOST_TWEEDIE',
+         'score': 0.7536, 'marge': 0.0012, 'actif': False,
+         'gini': 0.1232, 'overfit': 7.057},
+        {'profil': 'auditabilite_s2', 'modele': 'GLM_POISSON',
+         'score': 0.6386, 'marge': 0.0554, 'actif': False,
+         'gini': 0.1034, 'overfit': 2.726},
+        {'profil': 'compagnie_vie', 'modele': 'GLM_POISSON',
+         'score': 0.5849, 'marge': 0.0345, 'actif': False,
+         'gini': 0.1034, 'overfit': 2.726},
+    ]
+
+    def test_S16_les_cinq_points_sont_dans_la_phrase(self):
+        """Les cinq, dans l'ordre arbitré : contrôle, majorité, marge en
+        %, compromis chiffré, pondération appliquée."""
+        t = synthese_sensibilite_profils(copy.deepcopy(self._BASE))
+        self.assertIsNotNone(t)
+        for quoi, attendu in (
+                ('① contrôle, pas alerte', 'CONTRÔLE DE ROBUSTESSE'),
+                ('② majorité comptée', '3 profils sur 4'),
+                ('③ marge en %', '0.16%'),
+                ('④ compromis, discrimination', '+19.1%'),
+                ('④ compromis, sur-apprentissage', '2.6×'),
+                ('⑤ pondération appliquée', 'pondération par défaut')):
+            self.assertIn(attendu, t, f'{quoi} manque : {t[:160]}')
+        #: ⚠️ ET L'ALARME A DISPARU : le fait reste, le ton change.
+        self.assertNotIn('⚠ LE MODÈLE RETENU DÉPEND', t)
+
+    def test_S17_la_majorite_est_COMPTEE_jamais_ecrite_en_dur(self):
+        """*Une majorité figée serait vraie d'une cible et fausse de
+        l'autre.* On change la table : le compte doit suivre."""
+        deux = copy.deepcopy(self._BASE)
+        deux[2]['modele'] = 'DL_CANN'          # 2 GLM, 1 XGB, 1 CANN
+        t = synthese_sensibilite_profils(deux)
+        self.assertIn('2 profils sur 4', t,
+                      f'la majorite n est pas recomptee : {t[:150]}')
+        self.assertNotIn('3 profils sur 4', t)
+
+    def test_S18_un_compromis_NON_MESURE_se_declare(self):
+        """Sans Gini ni overfit, la phrase le DIT au lieu d'inventer un
+        compromis. *Une absence de mesure se déclare.*"""
+        sans = [{k: v for k, v in x.items() if k not in ('gini', 'overfit')}
+                for x in copy.deepcopy(self._BASE)]
+        t = synthese_sensibilite_profils(sans)
+        self.assertIn('Compromis NON MESURÉ', t)
+        self.assertNotIn('discrimine +', t)
+
+    def test_S19_la_phrase_atteint_les_DEUX_surfaces_qui_portent_la_table(self):
+        """⚠️⚠️ LE MANQUE MESURÉ : la phrase atteignait le classeur d'A6 et
+        le rapport d'équipe, mais PAS les deux documents d'A6 qui portent
+        la TABLE. *La table sans sa phrase d'un côté, la phrase sans sa
+        table de l'autre.* Relevé AST des sites d'appel, et exigence que
+        la note ne soit plus écrite en dur — elle l'était DEUX fois, mot
+        pour mot."""
+        source = (_RACINE / 'services' / 'rapport_modeles_tarif.py').read_text(
+            encoding='utf-8')
+        arbre = ast.parse(source)
+        appels = [n.lineno for n in ast.walk(arbre)
+                  if isinstance(n, ast.Call)
+                  and getattr(n.func, 'id', '') == 'synthese_sensibilite_profils']
+        self.assertGreaterEqual(
+            len(appels), 2,
+            f'la synthese n est appelee que {len(appels)} fois dans le '
+            f'module qui rend la table en HTML ET en Word : une des deux '
+            f'surfaces porterait la table sans sa phrase')
+        self.assertNotIn(
+            'Le profil de pondération est choisi et validé par un ', source,
+            'la note est de nouveau ECRITE EN DUR : deux redactions du meme '
+            'fait divergeront au premier ajout')
+
+    def test_S20_la_table_transporte_le_compromis(self):
+        """Sans `gini` et `overfit` dans la ligne, la phrase ne PEUT pas
+        dire le compromis. Relevé au producteur, pas au consommateur."""
+        table = _agent()._sensibilite_profils(copy.deepcopy(_CLASSEMENT),
+                                              'equilibre')
+        self.assertTrue(table, 'temoin mort : table vide')
+        for ligne in table:
+            for cle in ('gini', 'overfit'):
+                self.assertIn(
+                    cle, ligne,
+                    f'la ligne de sensibilite ne porte pas `{cle}` : le '
+                    f'compromis deviendrait NON MESURABLE')
 
 
 if __name__ == '__main__':

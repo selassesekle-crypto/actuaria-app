@@ -23,6 +23,13 @@ from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
     synthese_modele_dl,
+    # ⚠️⚠️ LA PHRASE N'ATTEIGNAIT PAS LES DEUX SURFACES QUI PORTENT LA
+    # TABLE. Mesure du 15/09/2026 : `synthese_sensibilite_profils` etait
+    # appelee par `rapport_equipe_tarif` et `tarif_excel` -- donc le
+    # classeur d'A6 et le rapport d'equipe -- mais PAS ici, alors que
+    # c'est ici que le HTML et le Word d'A6 rendent la TABLE. *La table
+    # sans sa phrase d'un cote, la phrase sans sa table de l'autre.*
+    synthese_sensibilite_profils,
     # ⚠️⚠️ SA DOCSTRING DIT « A AFFICHER DANS TOUT LIVRABLE », et elle
     # n'atteignait que l'Excel A6 — 1 surface sur 6, mesurée le 12/09/2026.
     avertissement_controle_effet,
@@ -3131,15 +3138,26 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
                           nom_modele(_l.get('modele')),
                           F.nombre(_l.get('score'), 4),
                           F.nombre(_l.get('marge'), 4)])
+        # ⚠️⚠️ LA NOTE VIENT DE LA SOURCE UNIQUE, ET C'EST DOUBLE GAIN.
+        # Elle etait ECRITE EN DUR ici ET dans la fabrique Word, mot pour
+        # mot -- deux redactions du meme fait, qui divergeraient au premier
+        # ajout. Et aucune des deux ne portait ce que la synthese dit : la
+        # majorite DERIVEE, la marge en POURCENTAGE du score, et le
+        # COMPROMIS chiffre (discrimination contre sur-apprentissage).
+        # *Le rendu est fait UNE fois, par `core` ; on le relaie.*
+        # ⚠️ INSEREE BRUTE, COMME `_row` DEUX LIGNES PLUS HAUT, et c'est
+        # mesure : la phrase ne porte AUCUN caractere HTML-sensible, et les
+        # seules valeurs variables qu'elle transporte sont des noms de
+        # modele du catalogue interne (`GLM_POISSON`, `ML_XGBOOST_TWEEDIE`)
+        # et des nombres formates -- exactement ce que les cellules du
+        # tableau ci-dessus inserent deja sans echapper. *Echapper ici seul
+        # laisserait croire que les cellules voisines sont sures.*
+        # `S-19` scelle que la phrase atteint CE site et celui du Word.
         html += (
             '    </table>\n    <p style="margin-top:6px; font-size:10px; '
-            'color:' + SLATE + '; font-style:italic;">\n'
-            '      ✦ Le profil de pondération est choisi et validé par un '
-            'actuaire nommé. Ce tableau montre ce que ce choix CHANGE : '
-            'recalculé avec la même grille multicritères, il indique quel '
-            'modèle chaque profil aurait retenu, et de combien il devance le '
-            'suivant. Une marge faible signale une sélection que le profil '
-            'suffit à faire basculer.\n    </p>\n')
+            'color:' + SLATE + '; font-style:italic;">\n      ✦ '
+            + (synthese_sensibilite_profils(_sens) or '')
+            + '\n    </p>\n')
     html += _fermer_chapitre(6, avec_table=False)
     html += _ouvrir_chapitre(7, ' narration')
     html += narr_html
@@ -3849,14 +3867,14 @@ def export_word(
                    F.nombre(_l.get('score'), 4),
                    F.nombre(_l.get('marge'), 4)] for _l in _sens_w],
                  ws=[5.0, 5.5, 3.0, 3.0])
+            # ⚠️⚠️ LA MEME SOURCE QUE LE HTML, ET C'ETAIT LE DEFAUT. Cette
+            # note etait ecrite EN DUR ici, mot pour mot identique a celle
+            # du HTML : deux redactions du meme fait, qui divergeraient au
+            # premier ajout -- le motif que ce module epingle ailleurs.
+            # Et aucune des deux ne portait la majorite DERIVEE, la marge
+            # en POURCENTAGE, ni le COMPROMIS chiffre.
             p = doc.add_paragraph()
-            _run(p,
-                 "✦ Le profil de pondération est choisi et validé par un "
-                 "actuaire nommé. Ce tableau montre ce que ce choix CHANGE : "
-                 "recalculé avec la même grille multicritères, il indique "
-                 "quel modèle chaque profil aurait retenu, et de combien il "
-                 "devance le suivant. Une marge faible signale une sélection "
-                 "que le profil suffit à faire basculer.",
+            _run(p, '✦ ' + (synthese_sensibilite_profils(_sens_w) or ''),
                  sz=9, italic=True)
         _figures_du_chapitre(6)
         doc.add_page_break()

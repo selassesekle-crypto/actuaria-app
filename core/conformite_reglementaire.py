@@ -1875,17 +1875,77 @@ def synthese_sensibilite_profils(table) -> str | None:
         f"{x.get('profil')} → {x.get('modele')}"
         + (' (profil retenu)' if x.get('actif') else '')
         for x in lignes)
+    #: ⚠️ CE QUE CE RUN A APPLIQUÉ, dit dans les deux cas. Le profil se
+    #: LIT dans la table (`actif`) ; rien n'est supposé sur le câblage.
+    applique = (
+        f"Ce run applique le profil « {actif.get('profil')} », la "
+        f"pondération par défaut : aucun appelant de production n'en "
+        f"sélectionne d'autre."
+        if actif else
+        "Aucun profil n'est marqué actif dans cette table.")
     if len(modeles) == 1:
-        return (f"Sensibilité au profil de pondération : le classement NE "
-                f"dépend PAS du profil — {modeles.pop()} est retenu sous les "
-                f"{len(lignes)} profils examinés. {detail}")
-    retenu = actif.get('modele') if actif else '?'
+        return (f"Sensibilité au profil de pondération — CONTRÔLE DE "
+                f"ROBUSTESSE. {len(lignes)} pondérations légitimes ont été "
+                f"recalculées avec la grille qui décide : "
+                f"{modeles.pop()} est retenu sous les {len(lignes)}. "
+                f"La sélection NE dépend PAS de la pondération. "
+                f"{applique} {detail}")
+
+    retenu = actif.get('modele') if actif else None
+    #: ── ② COMBIEN S'ACCORDENT — DÉRIVÉ, JAMAIS ÉCRIT EN DUR ──────────
+    #: ⚠️⚠️ Sur la cible FRÉQUENCE, 3 profils sur 4 concordent ; sur la
+    #: cible COÛT, la mesure du 29/08/2026 a compté **3 bascules sur 8
+    #: cas** (marges #1-#2 à 0,008 / 0,016 / 0,021). *Une majorité écrite
+    #: en dur serait vraie d'une cible et fausse de l'autre* — donc elle
+    #: se compte ici, à chaque run.
+    compte = {}
+    for x in lignes:
+        compte.setdefault(str(x.get('modele')), []).append(x)
+    majoritaire, groupe = max(compte.items(), key=lambda kv: len(kv[1]))
+    accord = (f"{len(groupe)} profils sur {len(lignes)} retiennent "
+              f"{majoritaire}")
+
+    #: ── ③ LA MARGE DU DISSIDENT, EN % DU SCORE QU'ELLE DÉPARTAGE ─────
+    #: Une marge brute ne se lit pas : 0,0012 sur un score de 0,75 est du
+    #: bruit d'arrondi, la même sur 0,01 serait décisive.
+    dissidents = [x for grp, v in compte.items() if grp != majoritaire
+                  for x in v]
+    def _pc(x):
+        s, m = x.get('score'), x.get('marge')
+        if not isinstance(s, (int, float)) or not isinstance(m, (int, float)):
+            return f"{x.get('profil')} → {x.get('modele')}"
+        if not s:
+            return (f"{x.get('profil')} → {x.get('modele')}, marge "
+                    f"{m:.4f} (score nul, part non calculable)")
+        return (f"{x.get('profil')} → {x.get('modele')}, et il ne le "
+                f"départage que de {m:.4f} — {m / s:.2%} du score")
+    ecart = ' ; '.join(_pc(x) for x in dissidents)
+
+    #: ── ④ LE COMPROMIS RÉEL, CHIFFRÉ ─────────────────────────────────
+    #: *Sans lui, l'actuaire lit qu'il y a un choix, jamais lequel.*
+    compromis = ''
+    ref = next((x for x in groupe if x.get('actif')), groupe[0])
+    autre = dissidents[0] if dissidents else None
+    gr, ga = (ref.get('gini'), autre.get('gini') if autre else None)
+    orf, oa = (ref.get('overfit'), autre.get('overfit') if autre else None)
+    if all(isinstance(v, (int, float)) for v in (gr, ga, orf, oa)) and gr \
+            and orf:
+        compromis = (
+            f" Compromis mesuré : {autre.get('modele')} discrimine "
+            f"{(ga - gr) / abs(gr):+.1%} (Gini {ga:.4f} contre {gr:.4f}) "
+            f"et sur-apprend {oa / orf:.1f}× plus ({oa:.3f} contre "
+            f"{orf:.3f}).")
+    elif autre is not None:
+        compromis = (" Compromis NON MESURÉ : le Gini ou le ratio de "
+                     "sur-apprentissage manque sur l'un des deux modèles.")
+
     return (
-        f"⚠ LE MODÈLE RETENU DÉPEND DU PROFIL DE PONDÉRATION — "
-        f"{len(modeles)} modèles différents sortent selon le profil, sur "
-        f"{len(lignes)} profils examinés. Le profil actif retient {retenu}. "
+        f"Sensibilité au profil de pondération — CONTRÔLE DE ROBUSTESSE. "
+        f"{len(lignes)} pondérations légitimes ont été recalculées avec la "
+        f"grille qui décide ; {accord}. Le profil actif retient {retenu}. "
+        f"Écart : {ecart}.{compromis} {applique} "
         f"Le profil est choisi par un humain : sa trace dit QUI l'a assumé, "
-        f"jamais ce qu'il a changé. {detail}")
+        f"jamais ce qu'il a changé — ce tableau le dit. {detail}")
 
 
 def synthese_exemptions_effet(exemptees) -> str | None:

@@ -228,13 +228,27 @@ class TestAvertissementDLSurLaSurfaceSignee(unittest.TestCase):
         # accompagne le prix dans le document signe. C'est la SEULE section
         # qui ne se tait jamais -- un document silencieux sur la decision de
         # l'actuaire se lit comme un accord. Le compte passe de 5 a 6.
+        # ⚠️⚠️ UNE DE PLUS LE 15/09/2026, ET CE TEST EST TOMBE LE JOUR MEME,
+        # POUR LA QUATRIEME FOIS. `synthese_sensibilite_profils` est cablee
+        # ici parce que c'est le module qui rend la TABLE de sensibilite en
+        # HTML et en Word, et que la phrase n'y arrivait pas : elle
+        # atteignait le classeur d'A6 et le rapport d'equipe, jamais les
+        # deux documents qui portent pourtant le tableau qu'elle explique.
+        # *La table sans sa phrase d'un cote, la phrase sans sa table de
+        # l'autre.* La note de bas de tableau y etait en outre ECRITE EN
+        # DUR DEUX FOIS, mot pour mot ; les deux surfaces lisent desormais
+        # la source unique. Le compte passe de 6 a 7.
+        #   *Ce filet a maintenant prevu QUATRE fois le jour ou on le
+        #   ferait, et dit quatre fois quoi faire. C'est exactement ce
+        #   qu'un defaut declare doit faire.*
         self.assertEqual(
             dehors, {'synthese_chargements', 'synthese_decision',
                      'synthese_elasticite', 'synthese_modele_dl',
-                     'synthese_qualite_donnees', 'synthese_regime_fiscal'},
+                     'synthese_qualite_donnees', 'synthese_regime_fiscal',
+                     'synthese_sensibilite_profils'},
             f"L'assiette a change : synthese(s) hors du prompt = {sorted(dehors)}. "
             f"Si une autre a ete cablee, mettre a jour le releve et ce test.")
-        print("    A-6 6 syntheses cablees ; les autres restent dans le "
+        print("    A-6 7 syntheses cablees ; les autres restent dans le "
               "prompt SEUL, et c'est declare")
 
 

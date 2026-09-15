@@ -1918,6 +1918,17 @@ class AgentA6Comparaison:
                 'profil':  nom,
                 'modele':  note[0].get('modele', ''),
                 'score':   round(float(note[0].get('score_global', 0)), 4),
+                # ⚠️⚠️ LE COMPROMIS EST LA TROISIÈME MOITIÉ DE L'INFORMATION.
+                # La marge dit de COMBIEN un profil départage ; elle ne dit
+                # pas CE QU'ON ÉCHANGE en basculant. Mesure du 15/09 sur la
+                # cible fréquence : le challenger discrimine **+19,1 %**
+                # mieux (Gini 0,1232 contre 0,1034) et sur-apprend **2,6×
+                # plus** (7,057 contre 2,726). *Sans ces deux nombres,
+                # l'actuaire lit qu'il y a un choix, jamais lequel.*
+                # ⚠️ RIEN N'EST RECALCULÉ : `note[0]` est le modèle DÉJÀ
+                # scoré sous ce profil, et il porte ces deux grandeurs.
+                'gini':    note[0].get('gini_test'),
+                'overfit': note[0].get('overfit_ratio'),
                 # ⚠️ LA MARGE EST LA MOITIÉ DE L'INFORMATION. « Même vainqueur »
                 # à 0,008 d'écart et à 0,381 ne se lisent pas pareil.
                 'marge':   round(float(note[0].get('score_global', 0))
